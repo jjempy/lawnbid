@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Bash(npm install:*)",
-      "Bash(npx vite:*)"
+      "Bash(npx vite:*)",
+      "Bash(ls /home/joseph-dev/Desktop/lawnbid/*.html /home/joseph-dev/Desktop/lawnbid/public/)"
     ]
   }
 }
