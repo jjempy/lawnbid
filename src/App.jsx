@@ -1765,7 +1765,7 @@ function AuthScreen(){
         {info && <div style={{marginTop:12,padding:"10px 12px",background:"#f0fdf4",borderLeft:"3px solid #16a34a",borderRadius:"0 8px 8px 0",color:"#166534",fontSize:13,fontWeight:500}}>✓ {info}</div>}
       </Card>
       <div style={{textAlign:"center",marginTop:16}}>
-        <a href="/" style={{color:"#94a3b8",fontSize:12,fontWeight:500,textDecoration:"none"}}>← Back to winwinlawnbid.com</a>
+        <a href="https://winwinlawnbid.com" style={{color:"#94a3b8",fontSize:12,fontWeight:500,textDecoration:"none"}}>← Back to winwinlawnbid.com</a>
       </div>
       </>}
     </div>
