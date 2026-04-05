@@ -75,13 +75,13 @@ export async function upsertClient(client) {
 
 // ─── Settings ─────────────────────────────────────────────────────────────────────
 export async function loadSettings() {
-  const { data, error } = await supabase
+  const { data, error, status } = await supabase
     .from('settings')
     .select('*')
     .eq('id', 1)
-    .single()
-  // PGRST116 = no rows found — not a real error for us
-  if (error && error.code !== 'PGRST116') throw error
+    .maybeSingle()
+  // PGRST116 = no rows found; 406 = Not Acceptable (no rows on .single()). Both mean "no settings yet."
+  if (error && error.code !== 'PGRST116' && status !== 406) throw error
   return data || null
 }
 

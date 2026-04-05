@@ -277,6 +277,7 @@ const Back  = ({onClick}) => <button onClick={onClick} style={{width:40,height:4
 
 // ─── App ─────────────────────────────────────────────────────────────────────────
 export default function LawnBid() {
+  const bp = useBreakpoint();
   const [authReady,setAuthReady]= useState(false);
   const [session,  setSession]  = useState(null);
   const [ready,    setReady]    = useState(false);
@@ -464,7 +465,6 @@ export default function LawnBid() {
 
   const activeQ = quotes.find(q => q.quote_id === selQ);
   const activeC = clients.find(c => c.id === selC);
-  const bp = useBreakpoint();
   const isDesktop = bp === "desktop";
   const isTablet  = bp === "tablet";
 
