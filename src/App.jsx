@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, forwardRef } from "react";
+import { useState, useEffect, useCallback, useRef, forwardRef, createContext, useContext, useMemo } from "react";
 import supabase, {
   loadQuotes, upsertQuote, deleteQuote, updateQuoteStatus,
   loadClients, upsertClient,
@@ -14,7 +14,16 @@ const DEFAULT_SETTINGS = {
   minimum_bid: 55, complexity_default: 1.0, risk_default: 1.0,
   quote_validity_days: 30,
   company_name: "", company_phone: "", company_email: "", company_logo_base64: "",
+  plan: "free", quote_count_this_month: 0, quote_count_reset_at: new Date().toISOString(),
 };
+const PLANS = {
+  free: { name:"Free", quote_limit:10,   map:false, pdf:false, photos:false },
+  pro:  { name:"Pro",  quote_limit:null, map:true,  pdf:true,  photos:true  },
+  team: { name:"Team", quote_limit:null, map:true,  pdf:true,  photos:true  },
+};
+const PLAN_PRICE = "$19/month";
+const PlanContext = createContext(null);
+const usePlan = () => useContext(PlanContext);
 const COMPLEXITY = [
   { label: "Simple",    value: 1.0,  desc: "Open lawn, no obstacles" },
   { label: "Moderate",  value: 1.3,  desc: "Some trees, beds, tight spaces" },
@@ -407,6 +416,7 @@ export default function LawnBid() {
   const [session,  setSession]  = useState(null);
   const [bioPrompt,setBioPrompt]= useState(false);
   const [recovering,setRecovering] = useState(false);
+  const [upgradeFor,setUpgradeFor] = useState(null);
   const [ready,    setReady]    = useState(false);
   const [dbErr,    setDbErr]    = useState(null);
   const [quotes,   setQuotes]   = useState([]);
@@ -460,6 +470,35 @@ export default function LawnBid() {
     }
   }, [settings?.company_logo_base64]);
 
+  // ── Monthly quote-count reset (30-day rolling window) ──
+  useEffect(() => {
+    if (!ready || !settings?.quote_count_reset_at) return;
+    const resetAt = new Date(settings.quote_count_reset_at).getTime();
+    if (Date.now() - resetAt < 30*86400000) return;
+    const ns = { ...settings, quote_count_this_month: 0, quote_count_reset_at: new Date().toISOString() };
+    setSettings(ns);
+    dbSaveSettings(ns).catch(()=>{});
+  }, [ready, settings?.quote_count_reset_at]);
+
+  // ── Plan context value ──
+  const planValue = useMemo(() => {
+    const key = settings?.plan || "free";
+    const cfg = PLANS[key] || PLANS.free;
+    const used = settings?.quote_count_this_month || 0;
+    return {
+      plan: key,
+      planName: cfg.name,
+      canUseMap: cfg.map,
+      canExportPDF: cfg.pdf,
+      canAttachPhotos: cfg.photos,
+      quoteLimit: cfg.quote_limit,
+      quotesUsed: used,
+      quotesRemaining: cfg.quote_limit !== null ? Math.max(0, cfg.quote_limit - used) : null,
+      isAtLimit: cfg.quote_limit !== null && used >= cfg.quote_limit,
+      showUpgrade: (feature) => setUpgradeFor(feature),
+    };
+  }, [settings?.plan, settings?.quote_count_this_month]);
+
   // ── Load all data from Supabase once authenticated ──
   useEffect(() => {
     if (!session) { setReady(false); setQuotes([]); setClients([]); setSettings(DEFAULT_SETTINGS); return; }
@@ -480,6 +519,12 @@ export default function LawnBid() {
   const goHome = useCallback(() => { setScreen("home"); setFlow(null); setErrors({}); }, []);
 
   const startNew = useCallback(() => {
+    const cfg = PLANS[settings.plan || "free"] || PLANS.free;
+    const used = settings.quote_count_this_month || 0;
+    if (cfg.quote_limit !== null && used >= cfg.quote_limit) {
+      setUpgradeFor("Unlimited Quotes");
+      return;
+    }
     setFlow({
       isNew:true, parentId:null, existingId:null,
       clientId:null, clientName:"", clientPhone:"", clientEmail:"",
@@ -504,6 +549,16 @@ export default function LawnBid() {
   }, []);
 
   const handleSave = useCallback(async (rec, cliData, status) => {
+    // Gate: free plan quote limit (new quotes only)
+    if (rec.isNew) {
+      const s = settingsRef.current || {};
+      const cfg = PLANS[s.plan || "free"] || PLANS.free;
+      const used = s.quote_count_this_month || 0;
+      if (cfg.quote_limit !== null && used >= cfg.quote_limit) {
+        setUpgradeFor("Unlimited Quotes");
+        return;
+      }
+    }
     setSaving(true);
     try {
       // 1. Resolve client
@@ -566,6 +621,17 @@ export default function LawnBid() {
         return exists ? prev.map(q => q.quote_id === quoteId ? { ...q, ...record } : q)
                       : [record, ...prev];
       });
+
+      // 4. Increment free-plan monthly quote count on new quotes
+      if (rec.isNew) {
+        const s = settingsRef.current || {};
+        const cfg = PLANS[s.plan || "free"] || PLANS.free;
+        if (cfg.quote_limit !== null) {
+          const ns = { ...s, quote_count_this_month: (s.quote_count_this_month || 0) + 1 };
+          setSettings(ns);
+          dbSaveSettings(ns).catch(()=>{});
+        }
+      }
 
       setSelQ(quoteId);
       setScreen("quote-detail");
@@ -666,38 +732,46 @@ export default function LawnBid() {
     <BioEnrollModal session={session} onDone={()=>setBioPrompt(false)}/>
   );
 
+  const upgradeModal = upgradeFor && <UpgradeModal feature={upgradeFor} onClose={()=>setUpgradeFor(null)}/>;
+
   // ─── Desktop layout: sidebar + top bar ───
   if (isDesktop) {
     return (
-      <div style={{display:"flex",minHeight:"100vh",background:"#f8fafc",color:"#0f172a",fontFamily:"'Inter',system-ui,-apple-system,sans-serif"}}>
-        {bioEnrollModal}
-        <SideNav tab={tab} setTab={setTab} setScreen={setScreen}/>
-        <div style={{flex:1,display:"flex",flexDirection:"column",minWidth:0}}>
-          {dbBanner}
-          {savingBanner}
-          <TopBar title={pageTitle} onNew={startNew} showBack={screen==="quote-detail"||screen==="client-detail"||screen==="flow"} onBack={screen==="flow"?goHome:()=>setScreen(screen==="quote-detail"&&selC&&tab==="clients"?"client-detail":"home")}/>
-          <div className="lb-scroll" style={{flex:1,padding:"24px"}}>
-            <div style={{maxWidth:900,margin:"0 auto",width:"100%"}}>
-              {screenContent}
+      <PlanContext.Provider value={planValue}>
+        <div style={{display:"flex",minHeight:"100vh",background:"#f8fafc",color:"#0f172a",fontFamily:"'Inter',system-ui,-apple-system,sans-serif"}}>
+          {bioEnrollModal}
+          {upgradeModal}
+          <SideNav tab={tab} setTab={setTab} setScreen={setScreen}/>
+          <div style={{flex:1,display:"flex",flexDirection:"column",minWidth:0}}>
+            {dbBanner}
+            {savingBanner}
+            <TopBar title={pageTitle} onNew={startNew} showBack={screen==="quote-detail"||screen==="client-detail"||screen==="flow"} onBack={screen==="flow"?goHome:()=>setScreen(screen==="quote-detail"&&selC&&tab==="clients"?"client-detail":"home")}/>
+            <div className="lb-scroll" style={{flex:1,padding:"24px"}}>
+              <div style={{maxWidth:900,margin:"0 auto",width:"100%"}}>
+                {screenContent}
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      </PlanContext.Provider>
     );
   }
 
   // ─── Mobile / tablet layout: bottom nav ───
   const maxW = isTablet ? 720 : 480;
   return (
-    <div style={{maxWidth:maxW,margin:"0 auto",minHeight:"100vh",display:"flex",flexDirection:"column",fontFamily:"'Inter',system-ui,-apple-system,sans-serif",background:"#f8fafc",color:"#0f172a"}}>
-      {bioEnrollModal}
-      {dbBanner}
-      {savingBanner}
-      <div className="lb-scroll" style={{flex:1,overflowY:"auto",paddingBottom:screen==="flow"?0:"calc(56px + env(safe-area-inset-bottom) + 8px)"}}>
-        {screenContent}
+    <PlanContext.Provider value={planValue}>
+      <div style={{maxWidth:maxW,margin:"0 auto",minHeight:"100vh",display:"flex",flexDirection:"column",fontFamily:"'Inter',system-ui,-apple-system,sans-serif",background:"#f8fafc",color:"#0f172a"}}>
+        {bioEnrollModal}
+        {upgradeModal}
+        {dbBanner}
+        {savingBanner}
+        <div className="lb-scroll" style={{flex:1,overflowY:"auto",paddingBottom:screen==="flow"?0:"calc(56px + env(safe-area-inset-bottom) + 8px)"}}>
+          {screenContent}
+        </div>
+        {screen!=="flow" && <BottomNav tab={tab} screen={screen} setTab={setTab} setScreen={setScreen} bp={bp} maxW={maxW}/>}
       </div>
-      {screen!=="flow" && <BottomNav tab={tab} screen={screen} setTab={setTab} setScreen={setScreen} bp={bp} maxW={maxW}/>}
-    </div>
+    </PlanContext.Provider>
   );
 }
 
@@ -755,6 +829,31 @@ function BottomNav({tab,screen,setTab,setScreen,bp,maxW}){
 }
 
 // ─── Biometric enrollment modal ───
+// ─── Upgrade modal (plan gate) ───
+function UpgradeModal({feature,onClose}){
+  return (
+    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.6)",zIndex:450,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
+      <div onClick={e=>e.stopPropagation()} style={{background:"#ffffff",borderRadius:16,padding:24,width:"100%",maxWidth:400,boxSizing:"border-box",boxShadow:"0 10px 40px rgba(0,0,0,.25)"}}>
+        <div style={{display:"flex",justifyContent:"center",marginBottom:12}}>
+          <div style={{width:56,height:56,borderRadius:"50%",background:"#dcfce7",display:"flex",alignItems:"center",justifyContent:"center"}}>
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#15803d" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="12 3 20 8 20 16 12 21 4 16 4 8 12 3"/><line x1="12" y1="12" x2="12" y2="21"/><polyline points="4 8 12 12 20 8"/></svg>
+          </div>
+        </div>
+        <div style={{fontSize:18,fontWeight:800,color:"#0f172a",textAlign:"center",marginBottom:4,letterSpacing:-.2}}>{feature}</div>
+        <div style={{fontSize:13,color:"#64748b",textAlign:"center",lineHeight:1.5,marginBottom:16}}>Upgrade to Pro for unlimited quotes, satellite map measurement, PDF exports, and photo attachments.</div>
+        <div style={{display:"flex",alignItems:"baseline",justifyContent:"center",gap:4,marginBottom:18}}>
+          <span style={{fontSize:28,fontWeight:900,color:"#0f172a",letterSpacing:-.5}}>$19</span>
+          <span style={{fontSize:13,color:"#64748b",fontWeight:500}}>/month</span>
+        </div>
+        <Btn onClick={()=>{window.location.href="/upgrade";}} style={{width:"100%"}}>Upgrade to Pro</Btn>
+        <div style={{textAlign:"center",marginTop:10}}>
+          <button type="button" onClick={onClose} style={{background:"none",border:"none",color:"#64748b",fontSize:13,fontWeight:600,cursor:"pointer",padding:"8px 12px",minHeight:32,fontFamily:"inherit"}}>Maybe later</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function BioEnrollModal({session,onDone}){
   const [busy,setBusy]=useState(false);
   const [err,setErr]=useState("");
@@ -1049,6 +1148,7 @@ function ClientDetail({bp,client,quotes,onBack,onViewQuote}){
 
 // ─── Quote Detail ─────────────────────────────────────────────────────────────
 function QuoteDetail({bp,quote,allQuotes,settings,onBack,onEdit,onDuplicate,onDelete,onAccepted}){
+  const {canExportPDF,showUpgrade} = usePlan();
   const [confirmDel,setConfirmDel]=useState(false);
   const [copied,setCopied]=useState(false);
   const [lightbox,setLightbox]=useState(null);
@@ -1156,7 +1256,10 @@ function QuoteDetail({bp,quote,allQuotes,settings,onBack,onEdit,onDuplicate,onDe
   const actions = (
     <div style={{display:"flex",flexDirection:"column",gap:8}}>
       <Btn onClick={share} style={{width:"100%"}}>{copied?"✓ Copied!":"📤 Resend Quote"}</Btn>
-      <Btn variant="outline" onClick={downloadPDF} style={{width:"100%"}}>⬇ Download PDF</Btn>
+      {canExportPDF
+        ? <Btn variant="outline" onClick={downloadPDF} style={{width:"100%"}}>⬇ Download PDF</Btn>
+        : <Btn variant="outline" onClick={()=>showUpgrade("PDF Quote Export")} style={{width:"100%",opacity:.7,display:"inline-flex",alignItems:"center",justifyContent:"center",gap:8}}><LockIcon size={14} color="#15803d"/>Download PDF — Pro</Btn>
+      }
       {quote.status==="sent"&&<Btn variant="outline" onClick={onAccepted} style={{width:"100%"}}>✅ Mark as Accepted</Btn>}
       <Btn variant="warning" onClick={onEdit} style={{width:"100%"}}>✏️ {isSent?"Edit (creates V2 quote)":"Edit Quote"}</Btn>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
@@ -1281,6 +1384,29 @@ function BiometricRow(){
   );
 }
 
+function PlanBadge(){
+  const {plan,planName,quoteLimit,quotesUsed,showUpgrade} = usePlan();
+  if (plan === "free") {
+    return (
+      <Card style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap",padding:"14px 18px",marginBottom:12}}>
+        <div style={{minWidth:0}}>
+          <div style={{fontSize:14,fontWeight:700,color:"#0f172a"}}>Free Plan</div>
+          <div style={{fontSize:12,color:"#64748b",fontWeight:500,marginTop:2}}>{quotesUsed} of {quoteLimit} quotes used this month</div>
+        </div>
+        <button onClick={()=>showUpgrade("Upgrade to Pro")} style={{height:36,minHeight:36,padding:"0 14px",borderRadius:10,border:"1.5px solid #15803d",background:"#15803d",color:"#ffffff",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap"}}>Upgrade to Pro →</button>
+      </Card>
+    );
+  }
+  return (
+    <Card style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,padding:"14px 18px",marginBottom:12}}>
+      <div style={{minWidth:0}}>
+        <div style={{fontSize:14,fontWeight:700,color:"#0f172a"}}>{planName} Plan</div>
+        <div style={{fontSize:12,color:"#15803d",fontWeight:600,marginTop:2}}>Unlimited quotes ✓</div>
+      </div>
+    </Card>
+  );
+}
+
 function SettingsScreen({bp,settings,onSave,onLogout}){
   const [loc,setLoc]=useState(settings);
   const [tip,setTip]=useState(null);
@@ -1360,6 +1486,7 @@ function SettingsScreen({bp,settings,onSave,onLogout}){
   if (isDesktop) {
     return (
       <div>
+        <PlanBadge/>
         <div style={{display:"flex",justifyContent:"flex-end",marginBottom:12}}>
           <button onClick={reset} style={{background:"none",border:"none",color:"#dc2626",fontSize:13,fontWeight:700,cursor:"pointer",padding:"8px 12px",minHeight:36}}>↺ Reset Defaults</button>
         </div>
@@ -1374,6 +1501,7 @@ function SettingsScreen({bp,settings,onSave,onLogout}){
 
   return(
     <div style={{padding:16}}>
+      <PlanBadge/>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
         <div style={{fontSize:26,fontWeight:900,color:"#0f172a"}}>Settings</div>
         <button onClick={reset} style={{background:"none",border:"none",color:"#dc2626",fontSize:13,fontWeight:700,cursor:"pointer",minHeight:36,padding:"6px 0"}}>↺ Reset Defaults</button>
@@ -1386,6 +1514,11 @@ function SettingsScreen({bp,settings,onSave,onLogout}){
 }
 
 // ─── Auth Screen ──────────────────────────────────────────────────────────────
+const LockIcon = ({size=14,color="#94a3b8"}) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{flexShrink:0}}>
+    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+  </svg>
+);
 const Fingerprint = ({size=48,color="#15803d",strokeWidth=1.5}) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
     <path d="M12 10a2 2 0 0 0-2 2c0 1.02-.1 2.51-.26 4M12 10a2 2 0 0 1 2 2c0 3.5.66 7 2 7M12 10c-2.76 0-5 2.24-5 5 0 1.7-.09 3.37-.26 5M12 10c2.76 0 5 2.24 5 5 0 1.18.13 2.28.3 3.29M8.5 7.16A6.97 6.97 0 0 1 12 6c3.87 0 7 3.13 7 7M5.07 10.5A7 7 0 0 1 5 10a7 7 0 0 1 1.07-3.74"/>
@@ -1762,7 +1895,8 @@ function S1({flow,set,errors,clients}){
 
 function S2({bp,flow,set,errors,area,perim}){
   const twoCol = bp !== "mobile";
-  const [mTab,setMTab] = useState("map");
+  const {canUseMap,showUpgrade} = usePlan();
+  const [mTab,setMTab] = useState(canUseMap?"map":"manual");
   const [mapConfirmed,setMapConfirmed] = useState(false);
   const applyMapMeasurements = ({areaSqft, perimFt}) => {
     set("areaVal", String(areaSqft));
@@ -1805,16 +1939,30 @@ function S2({bp,flow,set,errors,area,perim}){
     <div>
       {flow.clientId&&flow.areaVal&&<div style={{background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:12,padding:"10px 14px",marginBottom:12,fontSize:13,color:"#166534"}}>📐 Measurements pre-filled from last quote. Adjust if area has changed.</div>}
       <div style={{display:"flex",gap:6,marginBottom:12,background:"#f1f5f9",borderRadius:12,padding:4}}>
-        {[["map","🗺 Map"],["manual","✏️ Manual"]].map(([k,lbl])=>{
+        {[["map","🗺 Map",true],["manual","✏️ Manual",true]].map(([k,lbl])=>{
           const active = mTab===k;
+          const locked = k==="map" && !canUseMap;
           return (
-            <button key={k} onClick={()=>setMTab(k)} style={{flex:1,height:40,minHeight:40,border:"none",borderRadius:9,background:active?"#ffffff":"transparent",color:active?"#0f172a":"#64748b",fontWeight:active?700:600,fontSize:13,cursor:"pointer",fontFamily:"inherit",boxShadow:active?"0 1px 3px rgba(0,0,0,.08)":"none"}}>{lbl}</button>
+            <button key={k} onClick={()=>{ if(locked){ setMTab("map"); } else setMTab(k); }} style={{flex:1,height:40,minHeight:40,border:"none",borderRadius:9,background:active?"#ffffff":"transparent",color:active?"#0f172a":"#64748b",fontWeight:active?700:600,fontSize:13,cursor:"pointer",fontFamily:"inherit",boxShadow:active?"0 1px 3px rgba(0,0,0,.08)":"none",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:6}}>
+              {locked && <LockIcon size={13} color={active?"#94a3b8":"#94a3b8"}/>}{lbl}
+            </button>
           );
         })}
       </div>
-      {mTab==="map"
-        ? <MapMeasure bp={bp} address={flow.address} confirmed={mapConfirmed} setConfirmed={setMapConfirmed} onConfirm={applyMapMeasurements} onSwitchManual={()=>setMTab("manual")}/>
-        : manualBlock}
+      {mTab==="map" && !canUseMap && (
+        <Card>
+          <div style={{display:"flex",alignItems:"flex-start",gap:12}}>
+            <div style={{width:36,height:36,borderRadius:"50%",background:"#f1f5f9",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><LockIcon size={18} color="#64748b"/></div>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:14,fontWeight:700,color:"#0f172a",marginBottom:4}}>Satellite map is a Pro feature.</div>
+              <div style={{fontSize:13,color:"#64748b",lineHeight:1.5,marginBottom:12}}>Upgrade to draw property boundaries automatically.</div>
+              <Btn onClick={()=>showUpgrade("Satellite Map Measurement")} style={{height:40,minHeight:40,padding:"0 16px",fontSize:13,borderRadius:12}}>Upgrade to Pro</Btn>
+            </div>
+          </div>
+        </Card>
+      )}
+      {mTab==="map" && canUseMap && <MapMeasure bp={bp} address={flow.address} confirmed={mapConfirmed} setConfirmed={setMapConfirmed} onConfirm={applyMapMeasurements} onSwitchManual={()=>setMTab("manual")}/>}
+      {mTab==="manual" && manualBlock}
     </div>
   );
 }
@@ -2173,6 +2321,7 @@ function S3({bp,flow,set,area,perim,calc,time,settings}){
 }
 
 function S4({bp,flow,set,setFlow,area,perim,calc,time,onSend,saving}){
+  const {canAttachPhotos} = usePlan();
   const [uploading,setUploading]=useState(false);
   const attachments = flow.attachments || [];
 
@@ -2243,7 +2392,12 @@ function S4({bp,flow,set,setFlow,area,perim,calc,time,onSend,saving}){
         <Lbl>Notes (optional)</Lbl>
         <textarea value={flow.notes} onChange={e=>set("notes",e.target.value)} placeholder="Add notes for this job…" style={{width:"100%",minHeight:80,border:"1.5px solid #e2e8f0",borderRadius:12,padding:"12px 14px",fontSize:14,fontFamily:"inherit",resize:"vertical",boxSizing:"border-box",outline:"none",color:"#0f172a"}}/>
       </Card>
-      <Card>
+      {!canAttachPhotos && (
+        <div style={{fontSize:12,color:"#64748b",fontWeight:500,marginBottom:12,display:"flex",alignItems:"center",gap:6,padding:"0 4px"}}>
+          <LockIcon size={12} color="#94a3b8"/> Photo attachments available on Pro
+        </div>
+      )}
+      {canAttachPhotos && <Card>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
           <Lbl style={{marginBottom:0}}>Attachments</Lbl>
           <div style={{fontSize:11,color:"#94a3b8",fontWeight:600}}>{attachments.length} / {MAX_ATTACHMENTS}</div>
@@ -2276,7 +2430,7 @@ function S4({bp,flow,set,setFlow,area,perim,calc,time,onSend,saving}){
             })}
           </div>
         )}
-      </Card>
+      </Card>}
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",background:"#ffffff",borderRadius:16,padding:"14px 18px",marginBottom:12,boxShadow:CARD_SHADOW}}>
         <div><div style={{fontWeight:600,fontSize:14,color:"#0f172a"}}>Save to client list</div><div style={{fontSize:12,color:"#64748b",marginTop:2}}>Remembers address & measurements</div></div>
         <div onClick={()=>set("saveClient",!flow.saveClient)} style={{width:44,height:26,borderRadius:13,background:flow.saveClient?"#15803d":"#cbd5e1",cursor:"pointer",position:"relative",transition:"background .2s",flexShrink:0}}>

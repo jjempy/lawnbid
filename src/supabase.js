@@ -1,3 +1,7 @@
+// To manually upgrade a user to Pro, run in Supabase SQL Editor:
+// UPDATE settings SET plan = 'pro' WHERE user_id = 'paste-user-id-here';
+// To find a user's ID: SELECT id, email FROM auth.users;
+
 import { createClient } from '@supabase/supabase-js'
 
 // ─── Client ───────────────────────────────────────────────────────────────────────
