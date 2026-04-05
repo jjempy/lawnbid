@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback, useRef, forwardRef } from "react";
-import jsPDF from "jspdf";
 import supabase, {
   loadQuotes, upsertQuote, deleteQuote, updateQuoteStatus,
   loadClients, upsertClient,
@@ -225,7 +224,8 @@ function calcTime(area, perim, crew, cx) {
     crew_times:[1,2,3,4].map(n=>({n, t:(n>=2?Math.max(mh,th):mh+th)*cx})) };
 }
 
-function generateQuotePDF(quote, settings, calc, time) {
+async function generateQuotePDF(quote, settings, calc, time) {
+  const { default: jsPDF } = await import("jspdf");
   const doc = new jsPDF({ unit: "pt", format: "letter" });
   const W = doc.internal.pageSize.getWidth();
   const M = 48;                       // page margin
@@ -1067,8 +1067,8 @@ function QuoteDetail({bp,quote,allQuotes,settings,onBack,onEdit,onDuplicate,onDe
     if(navigator.share){navigator.share({title,text:txt}).catch(()=>{});}
     else{navigator.clipboard?.writeText(txt);setCopied(true);setTimeout(()=>setCopied(false),2000);}
   };
-  const downloadPDF=()=>{
-    try { generateQuotePDF(quote, settings, calc, time); }
+  const downloadPDF=async()=>{
+    try { await generateQuotePDF(quote, settings, calc, time); }
     catch(e){ alert("Could not generate PDF: "+(e.message||"Unknown error")); }
   };
 
