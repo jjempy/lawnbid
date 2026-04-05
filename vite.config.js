@@ -1,6 +1,6 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
-import { copyFileSync, existsSync } from 'fs'
+import { copyFileSync, existsSync, mkdirSync, renameSync } from 'fs'
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -9,17 +9,19 @@ export default defineConfig({
     {
       name: 'copy-files',
       closeBundle() {
-        // Step 1: Preserve Vite's built index.html as dist/app.html (the React entry)
+        // Move Vite's React-app output from dist/index.html → dist/app/index.html
+        // so Cloudflare Pages serves it naturally at URL /app/ (and /app via canonical redirect).
         if (existsSync('dist/index.html')) {
-          copyFileSync('dist/index.html', 'dist/app.html')
-          console.log('✓ dist/index.html → dist/app.html (React app)')
+          mkdirSync('dist/app', { recursive: true })
+          renameSync('dist/index.html', 'dist/app/index.html')
+          console.log('✓ dist/index.html → dist/app/index.html (React app)')
         }
-        // Step 2: Overwrite dist/index.html with the landing page so / serves landing
+        // Put the landing page at dist/index.html so / serves landing.
         if (existsSync('public/landing.html')) {
-          copyFileSync('public/landing.html', 'dist/landing.html')
-          console.log('✓ landing.html copied')
           copyFileSync('public/landing.html', 'dist/index.html')
           console.log('✓ landing.html → dist/index.html (root)')
+          copyFileSync('public/landing.html', 'dist/landing.html')
+          console.log('✓ landing.html copied (backup)')
         }
         if (existsSync('public/_redirects')) {
           copyFileSync('public/_redirects', 'dist/_redirects')
