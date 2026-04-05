@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
+import jsPDF from "jspdf";
 import supabase, {
   loadQuotes, upsertQuote, deleteQuote, updateQuoteStatus,
   loadClients, upsertClient,
@@ -11,7 +12,8 @@ const APP_VERSION = "1.0.0";
 const DEFAULT_SETTINGS = {
   mow_rate: 110, trim_rate: 18, equipment_cost: 12.35, hourly_rate: 22.80,
   minimum_bid: 55, complexity_default: 1.0, risk_default: 1.0,
-  company_name: "", company_phone: "", company_email: "",
+  quote_validity_days: 30,
+  company_name: "", company_phone: "", company_email: "", company_logo_base64: "",
 };
 const COMPLEXITY = [
   { label: "Simple",    value: 1.0,  desc: "Open lawn, no obstacles" },
@@ -45,6 +47,8 @@ const $$ = v => `$${(+(v||0)).toLocaleString("en-US",{minimumFractionDigits:2,ma
 const fmtT = h => { if(!h||h<=0) return "—"; const hr=Math.floor(h),m=Math.round((h-hr)*60); return hr===0?`${m}m`:m===0?`${hr}h`:`${hr}h ${m}m`; };
 const fmtD = iso => new Date(iso).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"});
 const fmtTS= iso => new Date(iso).toLocaleString("en-US",{month:"short",day:"numeric",year:"numeric",hour:"numeric",minute:"2-digit"});
+const isExpired = iso => iso && new Date(iso) < new Date();
+const addDays = (iso, days) => new Date(new Date(iso).getTime() + (days||30)*86400000).toISOString();
 
 function calcQ(area, perim, cx, risk, disc, s, ov=null) {
   if(!area||!perim||area<=0||perim<=0) return null;
@@ -71,6 +75,135 @@ function calcTime(area, perim, crew, cx) {
   const wall=crew>=2?Math.max(mh,th):mh+th, adj=wall*cx, pct=Math.min(100,(adj/8)*100);
   return { mh, th, wall, adj, pct,
     crew_times:[1,2,3,4].map(n=>({n, t:(n>=2?Math.max(mh,th):mh+th)*cx})) };
+}
+
+function generateQuotePDF(quote, settings, calc, time) {
+  const doc = new jsPDF({ unit: "pt", format: "letter" });
+  const W = doc.internal.pageSize.getWidth();
+  const M = 48;                       // page margin
+  const PRIMARY = [21,128,61];        // #15803d
+  const DARK = [15,23,42];            // #0f172a
+  const MUTED = [100,116,139];        // #64748b
+  const LINE  = [226,232,240];        // #e2e8f0
+  const expiryISO = quote.expiry_date || addDays(quote.created_at, settings.quote_validity_days || 30);
+  const expiryStr = fmtD(expiryISO);
+  let y = M;
+
+  // ── Header: logo + company block ──
+  const logoSize = 60;
+  if (settings.company_logo_base64) {
+    try {
+      const fmt = /^data:image\/(png|jpeg|jpg|webp)/i.exec(settings.company_logo_base64)?.[1]?.toUpperCase() || "PNG";
+      doc.addImage(settings.company_logo_base64, fmt==="JPG"?"JPEG":fmt, M, y, logoSize, logoSize);
+    } catch(_) { /* ignore bad image */ }
+  }
+  const textX = settings.company_logo_base64 ? M + logoSize + 16 : M;
+  doc.setFont("helvetica","bold"); doc.setFontSize(20); doc.setTextColor(...DARK);
+  doc.text(settings.company_name || "LawnBid", textX, y + 22);
+  doc.setFont("helvetica","normal"); doc.setFontSize(10); doc.setTextColor(...MUTED);
+  const contact = [settings.company_phone, settings.company_email].filter(Boolean).join("  ·  ");
+  if (contact) doc.text(contact, textX, y + 40);
+  // Right side: QUOTE label
+  doc.setFont("helvetica","bold"); doc.setFontSize(22); doc.setTextColor(...PRIMARY);
+  doc.text("QUOTE", W - M, y + 22, { align: "right" });
+  doc.setFont("helvetica","normal"); doc.setFontSize(10); doc.setTextColor(...MUTED);
+  doc.text(`#${quote.quote_id}`, W - M, y + 40, { align: "right" });
+
+  y += logoSize + 14;
+  doc.setDrawColor(...LINE); doc.setLineWidth(0.8);
+  doc.line(M, y, W - M, y);
+  y += 22;
+
+  // ── Meta row: dates ──
+  doc.setFont("helvetica","bold"); doc.setFontSize(8); doc.setTextColor(...MUTED);
+  doc.text("DATE ISSUED", M, y);
+  doc.text("EXPIRES", M + 180, y);
+  doc.text("QUOTE ID", M + 340, y);
+  doc.setFont("helvetica","normal"); doc.setFontSize(11); doc.setTextColor(...DARK);
+  doc.text(fmtD(quote.created_at), M, y + 14);
+  doc.text(expiryStr, M + 180, y + 14);
+  doc.text(quote.quote_id, M + 340, y + 14);
+  y += 34;
+
+  // ── Client box ──
+  doc.setDrawColor(...LINE); doc.setFillColor(248,250,252);
+  doc.roundedRect(M, y, W - M*2, 76, 6, 6, "FD");
+  doc.setFont("helvetica","bold"); doc.setFontSize(8); doc.setTextColor(...MUTED);
+  doc.text("BILL TO", M + 14, y + 18);
+  doc.setFont("helvetica","bold"); doc.setFontSize(12); doc.setTextColor(...DARK);
+  doc.text(quote.client_name || "—", M + 14, y + 34);
+  doc.setFont("helvetica","normal"); doc.setFontSize(10); doc.setTextColor(...MUTED);
+  if (quote.client_phone) doc.text(quote.client_phone, M + 14, y + 50);
+  doc.text(quote.address || "", M + 14, y + 66, { maxWidth: W - M*2 - 28 });
+  y += 96;
+
+  // ── Service & measurements ──
+  doc.setFont("helvetica","bold"); doc.setFontSize(8); doc.setTextColor(...MUTED);
+  doc.text("SERVICE", M, y);
+  doc.setFont("helvetica","normal"); doc.setFontSize(11); doc.setTextColor(...DARK);
+  doc.text("Lawn Mowing, Trimming & Edging", M, y + 14);
+  y += 32;
+
+  doc.setFont("helvetica","bold"); doc.setFontSize(8); doc.setTextColor(...MUTED);
+  doc.text("AREA", M, y);
+  doc.text("PERIMETER", M + 180, y);
+  doc.text("EST. TIME", M + 340, y);
+  doc.setFont("helvetica","normal"); doc.setFontSize(11); doc.setTextColor(...DARK);
+  doc.text(`${Math.round(quote.area_sqft).toLocaleString()} sqft`, M, y + 14);
+  doc.text(`${Math.round(quote.linear_ft).toLocaleString()} ft`, M + 180, y + 14);
+  doc.text(time ? fmtT(time.adj) : "—", M + 340, y + 14);
+  y += 34;
+
+  // ── Line item table ──
+  doc.setDrawColor(...LINE); doc.line(M, y, W - M, y); y += 14;
+  doc.setFont("helvetica","bold"); doc.setFontSize(8); doc.setTextColor(...MUTED);
+  doc.text("DESCRIPTION", M, y);
+  doc.text("AMOUNT", W - M, y, { align: "right" });
+  y += 10;
+  doc.line(M, y, W - M, y); y += 14;
+
+  doc.setFont("helvetica","normal"); doc.setFontSize(10); doc.setTextColor(...DARK);
+  (calc?.bd || []).forEach(r => {
+    if (r.subtotal) {
+      doc.setDrawColor(...LINE); doc.line(M, y - 4, W - M, y - 4);
+      doc.setFont("helvetica","bold"); doc.setTextColor(...DARK);
+    } else if (r.modifier) {
+      doc.setFont("helvetica","normal"); doc.setTextColor(...MUTED);
+    } else {
+      doc.setFont("helvetica","normal"); doc.setTextColor(...DARK);
+    }
+    doc.text(r.label, M, y);
+    const amt = `${r.modifier && r.value>0 ? "+" : ""}${$$(r.value)}`;
+    doc.text(amt, W - M, y, { align: "right" });
+    y += 18;
+  });
+
+  y += 6;
+  doc.setDrawColor(...DARK); doc.setLineWidth(1.2); doc.line(M, y, W - M, y); y += 26;
+  doc.setFont("helvetica","bold"); doc.setFontSize(14); doc.setTextColor(...DARK);
+  doc.text("TOTAL", M, y);
+  doc.setFontSize(22); doc.setTextColor(...PRIMARY);
+  doc.text($$(quote.final_price), W - M, y + 2, { align: "right" });
+  y += 36;
+
+  // ── Notes ──
+  if (quote.notes) {
+    doc.setFont("helvetica","bold"); doc.setFontSize(8); doc.setTextColor(...MUTED);
+    doc.text("NOTES", M, y); y += 14;
+    doc.setFont("helvetica","normal"); doc.setFontSize(10); doc.setTextColor(...DARK);
+    const lines = doc.splitTextToSize(quote.notes, W - M*2);
+    doc.text(lines, M, y); y += lines.length * 14 + 10;
+  }
+
+  // ── Footer ──
+  const footerY = doc.internal.pageSize.getHeight() - M;
+  doc.setDrawColor(...LINE); doc.line(M, footerY - 24, W - M, footerY - 24);
+  doc.setFont("helvetica","normal"); doc.setFontSize(9); doc.setTextColor(...MUTED);
+  const footerText = `Quote valid until ${expiryStr}. To accept${settings.company_phone?` reply or call ${settings.company_phone}`:" please reply"}.`;
+  doc.text(footerText, M, footerY - 8, { maxWidth: W - M*2 });
+
+  const safeName = (quote.client_name || "client").replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "");
+  doc.save(`LawnBid-${quote.quote_id}-${safeName}.pdf`);
 }
 
 function quoteText(q, s) {
@@ -127,6 +260,8 @@ export default function LawnBid() {
   const [step,     setStep]     = useState(1);
   const [errors,   setErrors]   = useState({});
   const [saving,   setSaving]   = useState(false);
+  const settingsRef = useRef(settings);
+  useEffect(() => { settingsRef.current = settings; }, [settings]);
 
   // ── Auth: check existing session and listen for changes ──
   useEffect(() => {
@@ -229,6 +364,7 @@ export default function LawnBid() {
         parent_id:   rec.parentId || null,
         notes:       rec.notes,
         sent_at:     status === "sent" ? now : (rec.sentAt || null),
+        expiry_date: rec.isNew ? addDays(now, settingsRef.current.quote_validity_days || 30) : undefined,
       };
 
       // Remove undefined fields
@@ -375,13 +511,16 @@ function HomeScreen({quotes,onNew,onView}){
           <div style={{fontWeight:700,fontSize:16}}>{quotes.length===0?"No quotes yet":"No quotes match this filter"}</div>
           {quotes.length===0&&<div style={{fontSize:13,marginTop:6}}>Tap + New Quote to get started</div>}
         </div>
-      ):shown.map(q=>(
+      ):shown.map(q=>{
+        const expired = isExpired(q.expiry_date) && q.status!=="accepted";
+        return (
         <Card key={q.quote_id} style={{cursor:"pointer",padding:"16px 18px",marginBottom:8,borderLeft:`3px solid ${STATUS_COLOR[q.status]||"#e2e8f0"}`}} onClick={()=>onView(q.quote_id)}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:12}}>
             <div style={{flex:1,minWidth:0}}>
-              <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:2}}>
+              <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:2,flexWrap:"wrap"}}>
                 <div style={{fontWeight:600,fontSize:15,color:"#0f172a",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",letterSpacing:-.1}}>{q.client_name||"No client"}</div>
                 {q.parent_id&&<span style={{fontSize:10,background:"#e0f2fe",color:"#0369a1",padding:"1px 5px",borderRadius:4,fontWeight:700,flexShrink:0}}>V2</span>}
+                {expired&&<span style={{fontSize:10,background:"#fee2e2",color:"#dc2626",padding:"1px 6px",borderRadius:4,fontWeight:700,flexShrink:0,letterSpacing:.4}}>EXPIRED</span>}
               </div>
               <div style={{fontSize:13,color:"#64748b",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontWeight:400}}>{q.address}</div>
               <div style={{display:"flex",alignItems:"center",gap:8,marginTop:6}}>
@@ -394,7 +533,7 @@ function HomeScreen({quotes,onNew,onView}){
             </div>
           </div>
         </Card>
-      ))}
+      );})}
     </div>
   );
 }
@@ -510,6 +649,10 @@ function QuoteDetail({quote,allQuotes,settings,onBack,onEdit,onDuplicate,onDelet
     if(navigator.share){navigator.share({text:txt}).catch(()=>{});}
     else{navigator.clipboard?.writeText(txt);setCopied(true);setTimeout(()=>setCopied(false),2000);}
   };
+  const downloadPDF=()=>{
+    try { generateQuotePDF(quote, settings, calc, time); }
+    catch(e){ alert("Could not generate PDF: "+(e.message||"Unknown error")); }
+  };
 
   return(
     <div>
@@ -555,7 +698,7 @@ function QuoteDetail({quote,allQuotes,settings,onBack,onEdit,onDuplicate,onDelet
         <Card>
           <Lbl>Job Details</Lbl>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-            {[{l:"Address",v:quote.address,full:true},{l:"Area",v:`${Math.round(quote.area_sqft).toLocaleString()} sqft (${(quote.area_sqft/43560).toFixed(3)} ac)`},{l:"Perimeter",v:`${Math.round(quote.linear_ft).toLocaleString()} ft`},{l:"Crew",v:`${quote.crew_size} worker${quote.crew_size>1?"s":""}`},{l:"Complexity",v:COMPLEXITY.find(o=>o.value===quote.complexity)?.label},{l:"Risk",v:RISK.find(o=>o.value===quote.risk)?.label},{l:"Discount",v:(quote.discount_pct||0)>0?`${quote.discount_pct}%`:"None"},{l:"Created",v:fmtTS(quote.created_at),full:true},{l:"Sent",v:quote.sent_at?fmtTS(quote.sent_at):"Not sent",full:true}]
+            {[{l:"Address",v:quote.address,full:true},{l:"Area",v:`${Math.round(quote.area_sqft).toLocaleString()} sqft (${(quote.area_sqft/43560).toFixed(3)} ac)`},{l:"Perimeter",v:`${Math.round(quote.linear_ft).toLocaleString()} ft`},{l:"Crew",v:`${quote.crew_size} worker${quote.crew_size>1?"s":""}`},{l:"Complexity",v:COMPLEXITY.find(o=>o.value===quote.complexity)?.label},{l:"Risk",v:RISK.find(o=>o.value===quote.risk)?.label},{l:"Discount",v:(quote.discount_pct||0)>0?`${quote.discount_pct}%`:"None"},{l:"Created",v:fmtTS(quote.created_at),full:true},{l:"Sent",v:quote.sent_at?fmtTS(quote.sent_at):"Not sent",full:true},{l:"Expires",v:quote.expiry_date?`${fmtD(quote.expiry_date)}${isExpired(quote.expiry_date)?" (expired)":""}`:"—",full:true}]
               .map(({l,v,full})=>(
                 <div key={l} style={{gridColumn:full?"1 / -1":"auto"}}>
                   <div style={{fontSize:10,fontWeight:700,color:"#94a3b8",textTransform:"uppercase"}}>{l}</div>
@@ -580,6 +723,7 @@ function QuoteDetail({quote,allQuotes,settings,onBack,onEdit,onDuplicate,onDelet
         {quote.notes&&<Card><Lbl>Notes</Lbl><div style={{fontSize:14,color:"#334155",lineHeight:1.5}}>{quote.notes}</div></Card>}
         <div style={{display:"flex",flexDirection:"column",gap:8}}>
           <Btn onClick={share} style={{width:"100%"}}>{copied?"✓ Copied!":"📤 Resend Quote"}</Btn>
+          <Btn variant="outline" onClick={downloadPDF} style={{width:"100%"}}>⬇ Download PDF</Btn>
           {quote.status==="sent"&&<Btn variant="outline" onClick={onAccepted} style={{width:"100%"}}>✅ Mark as Accepted</Btn>}
           <Btn variant="warning" onClick={onEdit} style={{width:"100%"}}>✏️ {isSent?"Edit (creates V2 quote)":"Edit Quote"}</Btn>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
@@ -601,8 +745,15 @@ function SettingsScreen({settings,onSave,onLogout}){
   const set=(k,v)=>setLoc(s=>({...s,[k]:v}));
   const save=()=>{onSave(loc);setSaved(true);setTimeout(()=>setSaved(false),2000);};
   const reset=()=>{if(confirm("Reset formula settings to defaults?")){const ns={...loc,...DEFAULT_SETTINGS};setLoc(ns);onSave(ns);}};
-  const TIPS={mow_rate:"Dollar value of mowing 20,000 sqft (≈½ acre) in 1 hr.",trim_rate:"Cost to trim 3,000 linear feet in 1 hr. Most crews do 2,500–4,000 ft/hr.",equipment_cost:"Hourly cost to run your equipment — fuel, maintenance, depreciation.",hourly_rate:"True cost per worker per hour: wages + payroll taxes + benefits.",minimum_bid:"No quote goes below this. Covers drive time, mobilization, admin."};
-  const FIELDS=[{key:"mow_rate",label:"Mow Rate ($/20k sqft)"},{key:"trim_rate",label:"Trim Rate ($/3k linear ft)"},{key:"equipment_cost",label:"Equipment Cost ($/hr)"},{key:"hourly_rate",label:"Hourly Rate ($/worker/hr)"},{key:"minimum_bid",label:"Minimum Bid ($)"}];
+  const TIPS={mow_rate:"Dollar value of mowing 20,000 sqft (≈½ acre) in 1 hr.",trim_rate:"Cost to trim 3,000 linear feet in 1 hr. Most crews do 2,500–4,000 ft/hr.",equipment_cost:"Hourly cost to run your equipment — fuel, maintenance, depreciation.",hourly_rate:"True cost per worker per hour: wages + payroll taxes + benefits.",minimum_bid:"No quote goes below this. Covers drive time, mobilization, admin.",quote_validity_days:"How many days a new quote is valid before it is marked expired."};
+  const FIELDS=[{key:"mow_rate",label:"Mow Rate ($/20k sqft)"},{key:"trim_rate",label:"Trim Rate ($/3k linear ft)"},{key:"equipment_cost",label:"Equipment Cost ($/hr)"},{key:"hourly_rate",label:"Hourly Rate ($/worker/hr)"},{key:"minimum_bid",label:"Minimum Bid ($)"},{key:"quote_validity_days",label:"Quote Valid For (days)"}];
+  const onLogo=async e=>{
+    const f=e.target.files?.[0]; if(!f) return;
+    if(!/^image\/(png|jpe?g|webp)$/i.test(f.type)){ alert("Please choose a PNG, JPG, or WebP image."); return; }
+    const reader=new FileReader();
+    reader.onload=()=>set("company_logo_base64", reader.result);
+    reader.readAsDataURL(f);
+  };
   return(
     <div style={{padding:16}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
@@ -632,6 +783,22 @@ function SettingsScreen({settings,onSave,onLogout}){
       </Card>
       <Card>
         <Lbl>Business Info</Lbl>
+        <div style={{marginBottom:14}}>
+          <div style={{fontSize:13,fontWeight:600,color:"#334155",marginBottom:8}}>Company Logo</div>
+          <div style={{display:"flex",alignItems:"center",gap:14}}>
+            {loc.company_logo_base64
+              ? <img src={loc.company_logo_base64} alt="Logo" style={{width:64,height:64,borderRadius:"50%",objectFit:"cover",border:"1.5px solid #e2e8f0"}}/>
+              : <div style={{width:64,height:64,borderRadius:"50%",background:"#f1f5f9",border:"1.5px dashed #cbd5e1",display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,color:"#94a3b8"}}>🏢</div>
+            }
+            <div style={{display:"flex",flexDirection:"column",gap:6}}>
+              <label style={{height:36,minHeight:36,padding:"0 14px",borderRadius:12,border:"1.5px solid #15803d",background:"#ffffff",color:"#15803d",fontSize:13,fontWeight:600,cursor:"pointer",display:"inline-flex",alignItems:"center",justifyContent:"center",fontFamily:"inherit"}}>
+                {loc.company_logo_base64?"Replace Logo":"Upload Logo"}
+                <input type="file" accept="image/png,image/jpeg,image/webp" onChange={onLogo} style={{display:"none"}}/>
+              </label>
+              {loc.company_logo_base64 && <button onClick={()=>set("company_logo_base64","")} style={{background:"none",border:"none",color:"#dc2626",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit",textAlign:"left",padding:0}}>Remove</button>}
+            </div>
+          </div>
+        </div>
         {[["company_name","Company Name","text","Your Company"],["company_phone","Phone","tel","(555) 000-0000"],["company_email","Email","email","you@example.com"]].map(([k,lbl,t,ph])=>(
           <div key={k} style={{marginBottom:12}}>
             <div style={{fontSize:13,fontWeight:600,color:"#334155",marginBottom:4}}>{lbl}</div>
