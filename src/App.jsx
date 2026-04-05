@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import jsPDF from "jspdf";
-import { Loader } from "@googlemaps/js-api-loader";
 import supabase, {
   loadQuotes, upsertQuote, deleteQuote, updateQuoteStatus,
   loadClients, upsertClient,
@@ -39,13 +38,27 @@ const PERIM_UNITS = [
   { label: "yards",     value: "yd", conv: v => v * 3 },
   { label: "miles",     value: "mi", conv: v => v * 5280 },
 ];
-// ─── Google Maps loader (single shared promise) ───
-const mapsLoader = new Loader({
-  apiKey: import.meta.env.VITE_GOOGLE_MAPS_KEY,
-  version: "weekly",
-  libraries: ["geometry","places"],
-});
-const mapsReady = mapsLoader.load().catch(err => { console.error("Google Maps failed to load:", err); throw err; });
+// ─── Google Maps loader (bootstrap script injection, single shared promise) ───
+const mapsReady = (() => {
+  if (typeof window === "undefined") return Promise.reject(new Error("no window"));
+  if (window.google?.maps) return Promise.resolve(window.google);
+  return new Promise((resolve, reject) => {
+    const existing = document.querySelector('script[data-lb-maps]');
+    if (existing) {
+      existing.addEventListener("load", () => resolve(window.google));
+      existing.addEventListener("error", reject);
+      return;
+    }
+    window.__lb_gm_cb = () => resolve(window.google);
+    const script = document.createElement("script");
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${import.meta.env.VITE_GOOGLE_MAPS_KEY}&libraries=geometry,places&callback=__lb_gm_cb&loading=async`;
+    script.async = true;
+    script.defer = true;
+    script.setAttribute("data-lb-maps", "1");
+    script.onerror = reject;
+    document.head.appendChild(script);
+  });
+})().catch(err => { console.error("Google Maps failed to load:", err); throw err; });
 
 const MAX_ATTACHMENTS = 5;
 const MAX_FILE_BYTES = 10 * 1024 * 1024; // 10MB
@@ -348,7 +361,7 @@ export default function LawnBid() {
         if (s) setSettings(prev => ({ ...prev, ...s }));
         setReady(true);
       } catch (e) {
-        setDbErr(e.message || "Could not connect to database.");
+        setDbErr(dbErrorMessage(e));
         setReady(true);
       }
     })();
@@ -529,7 +542,7 @@ export default function LawnBid() {
 
   const dbBanner = dbErr && (
     <div style={{background:"#fef2f2",borderBottom:"2px solid #fca5a5",padding:"10px 16px",fontSize:13,color:"#dc2626",fontWeight:600,textAlign:"center"}}>
-      ⚠ Database error: {dbErr} — Check your .env.local credentials.
+      ⚠ {dbErr}
     </div>
   );
   const savingBanner = saving && (
