@@ -89,19 +89,26 @@ function quoteText(q, s) {
 }
 
 // ─── Shared UI ──────────────────────────────────────────────────────────────────
-const Card  = ({children,style={},onClick,...p}) => <div onClick={onClick} style={{background:"#fff",borderRadius:12,padding:16,marginBottom:12,boxShadow:"0 1px 4px rgba(0,0,0,.08)",...style}} {...p}>{children}</div>;
-const Lbl   = ({children,style={}}) => <div style={{fontSize:11,fontWeight:700,color:"#888",letterSpacing:1,textTransform:"uppercase",marginBottom:8,...style}}>{children}</div>;
-const Inp   = ({style={},...p}) => <input style={{width:"100%",padding:"10px 12px",border:"1.5px solid #e0e0e0",borderRadius:8,fontSize:16,outline:"none",boxSizing:"border-box",fontFamily:"inherit",...style}} {...p}/>;
-const Sel   = ({style={},...p}) => <select style={{padding:"10px 8px",border:"1.5px solid #e0e0e0",borderRadius:8,fontSize:14,background:"#fff",outline:"none",fontFamily:"inherit",...style}} {...p}/>;
+const CARD_SHADOW = "0 1px 3px rgba(0,0,0,.06), 0 1px 2px rgba(0,0,0,.04)";
+const Card  = ({children,style={},onClick,...p}) => <div onClick={onClick} style={{background:"#ffffff",borderRadius:16,padding:20,marginBottom:12,boxShadow:CARD_SHADOW,...style}} {...p}>{children}</div>;
+const Lbl   = ({children,style={}}) => <div style={{fontSize:11,fontWeight:700,color:"#64748b",letterSpacing:1,textTransform:"uppercase",marginBottom:10,...style}}>{children}</div>;
+const Inp   = ({style={},...p}) => <input style={{width:"100%",height:48,padding:"0 14px",border:"1.5px solid #e2e8f0",borderRadius:12,fontSize:16,fontWeight:500,color:"#0f172a",background:"#ffffff",outline:"none",boxSizing:"border-box",fontFamily:"inherit",...style}} {...p}/>;
+const Sel   = ({style={},...p}) => <select style={{height:48,padding:"0 10px",border:"1.5px solid #e2e8f0",borderRadius:12,fontSize:14,fontWeight:500,color:"#0f172a",background:"#ffffff",outline:"none",fontFamily:"inherit",...style}} {...p}/>;
 const Btn   = ({children,variant="primary",style={},...p}) => {
-  const vs={primary:{background:"#16a34a",color:"#fff"},secondary:{background:"#f3f4f6",color:"#374151"},outline:{background:"#fff",color:"#16a34a",border:"2px solid #16a34a"},danger:{background:"#fee2e2",color:"#dc2626",border:"none"},warning:{background:"#fffbeb",color:"#92400e",border:"2px solid #fcd34d"}};
-  return <button style={{padding:"12px 18px",borderRadius:10,border:"none",fontSize:15,fontWeight:700,cursor:p.disabled?"not-allowed":"pointer",opacity:p.disabled?.6:1,fontFamily:"inherit",...vs[variant],...style}} {...p}>{children}</button>;
+  const vs={
+    primary:{background:"#15803d",color:"#ffffff",border:"none"},
+    secondary:{background:"#f1f5f9",color:"#0f172a",border:"none"},
+    outline:{background:"#ffffff",color:"#15803d",border:"1.5px solid #15803d"},
+    danger:{background:"#ffffff",color:"#dc2626",border:"1.5px solid #fecaca"},
+    warning:{background:"#ffffff",color:"#b45309",border:"1.5px solid #fcd34d"},
+  };
+  return <button style={{height:48,minHeight:48,padding:"0 20px",borderRadius:16,fontSize:15,fontWeight:600,cursor:p.disabled?"not-allowed":"pointer",opacity:p.disabled?.55:1,fontFamily:"inherit",letterSpacing:-.1,...vs[variant],...style}} {...p}>{children}</button>;
 };
-const Chip  = ({label,active,onClick,style={}}) => <button onClick={onClick} style={{padding:"8px 12px",borderRadius:20,border:"2px solid",borderColor:active?"#16a34a":"#e0e0e0",background:active?"#16a34a":"#fff",color:active?"#fff":"#555",fontSize:13,fontWeight:600,cursor:"pointer",whiteSpace:"nowrap",fontFamily:"inherit",flexShrink:0,...style}}>{label}</button>;
-const Badge = ({status}) => <span style={{padding:"3px 9px",borderRadius:12,fontSize:11,fontWeight:700,background:STATUS_BG[status]||"#f5f5f5",color:STATUS_COLOR[status]||"#888",textTransform:"uppercase",letterSpacing:.5,border:`1px solid ${STATUS_COLOR[status]||"#ddd"}`}}>{status}</span>;
-const ErrMsg= ({msg}) => msg?<div style={{color:"#dc2626",fontSize:12,marginTop:4,fontWeight:500}}>⚠ {msg}</div>:null;
-const QID   = ({id}) => <span style={{fontFamily:"monospace",fontSize:11,background:"#f3f4f6",color:"#555",padding:"2px 7px",borderRadius:6,letterSpacing:.5}}>{id}</span>;
-const Back  = ({onClick}) => <button onClick={onClick} style={{background:"none",border:"none",fontSize:24,cursor:"pointer",color:"#16a34a",fontFamily:"inherit",lineHeight:1,padding:0}}>‹</button>;
+const Chip  = ({label,active,onClick,style={}}) => <button onClick={onClick} style={{height:36,minHeight:36,padding:"0 16px",borderRadius:18,border:active?"1.5px solid #15803d":"1.5px solid #e2e8f0",background:active?"#15803d":"#ffffff",color:active?"#ffffff":"#374151",fontSize:13,fontWeight:600,cursor:"pointer",whiteSpace:"nowrap",fontFamily:"inherit",flexShrink:0,display:"inline-flex",alignItems:"center",...style}}>{label}</button>;
+const Badge = ({status}) => <span style={{padding:"3px 9px",borderRadius:999,fontSize:10,fontWeight:700,background:STATUS_BG[status]||"#f1f5f9",color:STATUS_COLOR[status]||"#64748b",textTransform:"uppercase",letterSpacing:.6}}>{status}</span>;
+const ErrMsg= ({msg}) => msg?<div style={{color:"#dc2626",fontSize:12,marginTop:6,fontWeight:500}}>⚠ {msg}</div>:null;
+const QID   = ({id}) => <span style={{fontFamily:"ui-monospace, SFMono-Regular, Menlo, monospace",fontSize:11,background:"#f1f5f9",color:"#475569",padding:"2px 7px",borderRadius:6,letterSpacing:.3,fontWeight:600}}>{id}</span>;
+const Back  = ({onClick}) => <button onClick={onClick} style={{width:40,height:40,minHeight:40,display:"inline-flex",alignItems:"center",justifyContent:"center",background:"none",border:"none",fontSize:26,cursor:"pointer",color:"#15803d",fontFamily:"inherit",lineHeight:1,padding:0,marginLeft:-8}}>‹</button>;
 
 // ─── App ─────────────────────────────────────────────────────────────────────────
 export default function LawnBid() {
@@ -280,7 +287,7 @@ export default function LawnBid() {
     <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"100vh",fontFamily:"system-ui",gap:12}}>
       <div style={{fontSize:48}}>🌿</div>
       <div style={{fontSize:20,fontWeight:900,color:"#16a34a"}}>LawnBid</div>
-      <div style={{fontSize:13,color:"#888"}}>Connecting to database…</div>
+      <div style={{fontSize:13,color:"#64748b"}}>Connecting to database…</div>
     </div>
   );
 
@@ -288,7 +295,7 @@ export default function LawnBid() {
   const activeC = clients.find(c => c.id === selC);
 
   return (
-    <div style={{maxWidth:480,margin:"0 auto",minHeight:"100vh",display:"flex",flexDirection:"column",fontFamily:"system-ui,-apple-system,sans-serif",background:"#f4f4f5"}}>
+    <div style={{maxWidth:480,margin:"0 auto",minHeight:"100vh",display:"flex",flexDirection:"column",fontFamily:"'Inter',system-ui,-apple-system,sans-serif",background:"#f8fafc",color:"#0f172a"}}>
       {/* DB error banner */}
       {dbErr && (
         <div style={{background:"#fef2f2",borderBottom:"2px solid #fca5a5",padding:"10px 16px",fontSize:13,color:"#dc2626",fontWeight:600,textAlign:"center"}}>
@@ -301,7 +308,7 @@ export default function LawnBid() {
         </div>
       )}
 
-      <div style={{flex:1,overflowY:"auto",paddingBottom:screen==="flow"?0:64}}>
+      <div style={{flex:1,overflowY:"auto",paddingBottom:screen==="flow"?0:"calc(56px + env(safe-area-inset-bottom) + 8px)"}}>
         {screen==="flow" ? (
           <QuoteFlow step={step} setStep={setStep} flow={flow} setFlow={setFlow}
             errors={errors} setErrors={setErrors} settings={settings}
@@ -327,12 +334,14 @@ export default function LawnBid() {
       </div>
 
       {screen!=="flow" && (
-        <div style={{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:480,background:"#fff",borderTop:"1px solid #e5e7eb",display:"flex",zIndex:100}}>
-          {[["quotes","📋","Quotes"],["clients","👥","Clients"],["settings","⚙️","Settings"]].map(([t,icon,lbl])=>(
-            <button key={t} onClick={()=>{setTab(t);setScreen("home");}} style={{flex:1,padding:"10px 0 8px",border:"none",background:"none",cursor:"pointer",fontSize:10,fontWeight:700,color:tab===t&&screen==="home"?"#16a34a":"#9ca3af",textTransform:"uppercase",letterSpacing:.5,fontFamily:"inherit"}}>
-              <div style={{fontSize:20,marginBottom:2}}>{icon}</div>{lbl}
+        <div style={{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:480,background:"#ffffff",borderTop:"1px solid #e2e8f0",display:"flex",zIndex:100,paddingBottom:"env(safe-area-inset-bottom)"}}>
+          {[["quotes","📋","Quotes"],["clients","👥","Clients"],["settings","⚙️","Settings"]].map(([t,icon,lbl])=>{
+            const active = tab===t && screen==="home";
+            return (
+            <button key={t} onClick={()=>{setTab(t);setScreen("home");}} style={{flex:1,height:56,minHeight:56,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:2,border:"none",background:"none",cursor:"pointer",fontSize:10,fontWeight:700,color:active?"#15803d":"#94a3b8",textTransform:"uppercase",letterSpacing:.5,fontFamily:"inherit"}}>
+              <div style={{fontSize:20,lineHeight:1,filter:active?"none":"grayscale(1) opacity(.7)"}}>{icon}</div>{lbl}
             </button>
-          ))}
+          );})}
         </div>
       )}
     </div>
@@ -349,39 +358,39 @@ function HomeScreen({quotes,onNew,onView}){
         <div style={{display:"flex",alignItems:"center",gap:10}}>
           <img src="/logo.png" alt="LawnBid" style={{width:40,height:40,borderRadius:"50%",objectFit:"cover"}}/>
           <div>
-            <div style={{fontSize:26,fontWeight:900,color:"#111"}}>LawnBid</div>
-            <div style={{fontSize:12,color:"#888"}}>{quotes.length} quote{quotes.length!==1?"s":""} in database</div>
+            <div style={{fontSize:26,fontWeight:900,color:"#0f172a"}}>LawnBid</div>
+            <div style={{fontSize:12,color:"#64748b"}}>{quotes.length} quote{quotes.length!==1?"s":""} in database</div>
           </div>
         </div>
-        <Btn onClick={onNew} style={{padding:"10px 16px",fontSize:14}}>+ New Quote</Btn>
+        <Btn onClick={onNew} style={{height:40,minHeight:40,padding:"0 14px",fontSize:13,borderRadius:12}}>+ New Quote</Btn>
       </div>
-      <div style={{display:"flex",gap:6,margin:"14px 0",overflowX:"auto",paddingBottom:4}}>
+      <div style={{display:"flex",gap:6,margin:"12px 0 8px",overflowX:"auto",paddingBottom:4}}>
         {["all","draft","sent","accepted"].map(f=>(
           <Chip key={f} label={f==="all"?`All (${quotes.length})`:`${f[0].toUpperCase()+f.slice(1)} (${quotes.filter(q=>q.status===f).length})`} active={filter===f} onClick={()=>setFilter(f)}/>
         ))}
       </div>
       {shown.length===0?(
-        <div style={{textAlign:"center",padding:"60px 20px",color:"#888"}}>
+        <div style={{textAlign:"center",padding:"60px 20px",color:"#64748b"}}>
           <div style={{fontSize:48,marginBottom:12}}>📋</div>
           <div style={{fontWeight:700,fontSize:16}}>{quotes.length===0?"No quotes yet":"No quotes match this filter"}</div>
           {quotes.length===0&&<div style={{fontSize:13,marginTop:6}}>Tap + New Quote to get started</div>}
         </div>
       ):shown.map(q=>(
-        <Card key={q.quote_id} style={{cursor:"pointer"}} onClick={()=>onView(q.quote_id)}>
+        <Card key={q.quote_id} style={{cursor:"pointer",padding:"16px 18px",marginBottom:8,borderLeft:`3px solid ${STATUS_COLOR[q.status]||"#e2e8f0"}`}} onClick={()=>onView(q.quote_id)}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:12}}>
             <div style={{flex:1,minWidth:0}}>
               <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:2}}>
-                <div style={{fontWeight:700,fontSize:15,color:"#111",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{q.client_name||"No client"}</div>
+                <div style={{fontWeight:600,fontSize:15,color:"#0f172a",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",letterSpacing:-.1}}>{q.client_name||"No client"}</div>
                 {q.parent_id&&<span style={{fontSize:10,background:"#e0f2fe",color:"#0369a1",padding:"1px 5px",borderRadius:4,fontWeight:700,flexShrink:0}}>V2</span>}
               </div>
-              <div style={{fontSize:12,color:"#666",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{q.address}</div>
-              <div style={{display:"flex",alignItems:"center",gap:6,marginTop:5}}>
-                <QID id={q.quote_id}/><span style={{fontSize:11,color:"#999"}}>{fmtD(q.created_at)}</span>
+              <div style={{fontSize:13,color:"#64748b",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontWeight:400}}>{q.address}</div>
+              <div style={{display:"flex",alignItems:"center",gap:8,marginTop:6}}>
+                <QID id={q.quote_id}/><span style={{fontSize:11,color:"#94a3b8",fontWeight:500}}>{fmtD(q.created_at)}</span>
               </div>
             </div>
             <div style={{textAlign:"right",flexShrink:0}}>
-              <div style={{fontSize:22,fontWeight:900,color:"#16a34a"}}>{$$(q.final_price)}</div>
-              <div style={{marginTop:4}}><Badge status={q.status}/></div>
+              <div style={{fontSize:20,fontWeight:900,color:"#0f172a",letterSpacing:-.5}}>{$$(q.final_price)}</div>
+              <div style={{marginTop:4,textTransform:"uppercase",fontSize:10,fontWeight:700,letterSpacing:.6,color:STATUS_COLOR[q.status]||"#64748b"}}>{q.status}</div>
             </div>
           </div>
         </Card>
@@ -396,10 +405,10 @@ function ClientsScreen({clients,quotes,onView}){
   const shown=clients.filter(c=>c.name?.toLowerCase().includes(search.toLowerCase())||c.phone?.includes(search)).sort((a,b)=>a.name?.localeCompare(b.name));
   return(
     <div style={{padding:16}}>
-      <div style={{fontSize:26,fontWeight:900,color:"#111",marginBottom:14}}>Clients</div>
+      <div style={{fontSize:26,fontWeight:900,color:"#0f172a",marginBottom:14}}>Clients</div>
       <Inp placeholder="Search name or phone…" value={search} onChange={e=>setSearch(e.target.value)} style={{marginBottom:14}}/>
       {shown.length===0?(
-        <div style={{textAlign:"center",padding:"60px 20px",color:"#888"}}>
+        <div style={{textAlign:"center",padding:"60px 20px",color:"#64748b"}}>
           <div style={{fontSize:48,marginBottom:12}}>👥</div>
           <div style={{fontWeight:700}}>{clients.length===0?"No clients yet":"No results"}</div>
           <div style={{fontSize:13,marginTop:6}}>Clients are saved automatically when you send a quote</div>
@@ -412,14 +421,14 @@ function ClientsScreen({clients,quotes,onView}){
             <div style={{display:"flex",justifyContent:"space-between",gap:12}}>
               <div style={{minWidth:0,flex:1}}>
                 <div style={{fontWeight:700,fontSize:16}}>{c.name}</div>
-                <div style={{fontSize:13,color:"#666"}}>{c.phone}</div>
-                {c.default_address&&<div style={{fontSize:12,color:"#999",marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.default_address}</div>}
-                <div style={{fontSize:11,color:"#aaa",marginTop:4}}>{cqs.length} quote{cqs.length!==1?"s":""}</div>
+                <div style={{fontSize:13,color:"#64748b"}}>{c.phone}</div>
+                {c.default_address&&<div style={{fontSize:12,color:"#94a3b8",marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.default_address}</div>}
+                <div style={{fontSize:11,color:"#94a3b8",marginTop:4}}>{cqs.length} quote{cqs.length!==1?"s":""}</div>
               </div>
               <div style={{textAlign:"right",flexShrink:0}}>
-                {last&&<div style={{fontSize:18,fontWeight:900,color:"#16a34a"}}>{$$(last.final_price)}</div>}
-                {last&&<div style={{fontSize:11,color:"#999",marginTop:2}}>{fmtD(last.created_at)}</div>}
-                {cqs.length>1&&<div style={{fontSize:11,color:"#888",marginTop:2}}>Total: {$$(total)}</div>}
+                {last&&<div style={{fontSize:18,fontWeight:900,color:"#0f172a",letterSpacing:-.3}}>{$$(last.final_price)}</div>}
+                {last&&<div style={{fontSize:11,color:"#94a3b8",marginTop:2}}>{fmtD(last.created_at)}</div>}
+                {cqs.length>1&&<div style={{fontSize:11,color:"#64748b",marginTop:2}}>Total: {$$(total)}</div>}
               </div>
             </div>
           </Card>
@@ -435,7 +444,7 @@ function ClientDetail({client,quotes,onBack,onViewQuote}){
   const total=quotes.reduce((s,q)=>s+(q.final_price||0),0);
   return(
     <div>
-      <div style={{background:"#fff",padding:"12px 16px",borderBottom:"1px solid #e5e7eb",display:"flex",alignItems:"center",gap:12,position:"sticky",top:0,zIndex:10}}>
+      <div style={{background:"#fff",padding:"12px 16px",borderBottom:"1px solid #e2e8f0",display:"flex",alignItems:"center",gap:12,position:"sticky",top:0,zIndex:10}}>
         <Back onClick={onBack}/><div style={{fontWeight:700,fontSize:16}}>{client.name}</div>
       </div>
       <div style={{padding:16}}>
@@ -443,24 +452,24 @@ function ClientDetail({client,quotes,onBack,onViewQuote}){
           <Lbl>Contact</Lbl>
           <div style={{fontWeight:700,fontSize:18,marginBottom:4}}>{client.name}</div>
           {client.phone&&<a href={`tel:${client.phone}`} style={{display:"block",fontSize:15,color:"#16a34a",textDecoration:"none",marginBottom:4}}>📞 {client.phone}</a>}
-          {client.email&&<div style={{fontSize:14,color:"#666",marginBottom:4}}>✉ {client.email}</div>}
-          {client.default_address&&<div style={{fontSize:13,color:"#888"}}>📍 {client.default_address}</div>}
+          {client.email&&<div style={{fontSize:14,color:"#64748b",marginBottom:4}}>✉ {client.email}</div>}
+          {client.default_address&&<div style={{fontSize:13,color:"#64748b"}}>📍 {client.default_address}</div>}
         </Card>
         {client.last_area_sqft&&(
-          <Card style={{background:"#f0fdf4",border:"1px solid #bbf7d0"}}>
+          <Card>
             <Lbl>Last Job Measurements</Lbl>
-            <div style={{display:"flex",gap:24}}>
-              <div><div style={{fontSize:10,color:"#166534",textTransform:"uppercase",fontWeight:700}}>Area</div><div style={{fontSize:20,fontWeight:800,color:"#16a34a"}}>{Math.round(client.last_area_sqft).toLocaleString()} sqft</div><div style={{fontSize:11,color:"#4ade80"}}>{(client.last_area_sqft/43560).toFixed(3)} acres</div></div>
-              <div><div style={{fontSize:10,color:"#166534",textTransform:"uppercase",fontWeight:700}}>Perimeter</div><div style={{fontSize:20,fontWeight:800,color:"#16a34a"}}>{Math.round(client.last_linear_ft||0).toLocaleString()} ft</div></div>
+            <div style={{display:"flex",gap:32}}>
+              <div><div style={{fontSize:10,color:"#94a3b8",textTransform:"uppercase",fontWeight:700,letterSpacing:1}}>Area</div><div style={{fontSize:20,fontWeight:800,color:"#0f172a",letterSpacing:-.3,marginTop:2}}>{Math.round(client.last_area_sqft).toLocaleString()} sqft</div><div style={{fontSize:11,color:"#64748b",fontWeight:500,marginTop:2}}>{(client.last_area_sqft/43560).toFixed(3)} acres</div></div>
+              <div><div style={{fontSize:10,color:"#94a3b8",textTransform:"uppercase",fontWeight:700,letterSpacing:1}}>Perimeter</div><div style={{fontSize:20,fontWeight:800,color:"#0f172a",letterSpacing:-.3,marginTop:2}}>{Math.round(client.last_linear_ft||0).toLocaleString()} ft</div></div>
             </div>
           </Card>
         )}
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
           <div style={{fontWeight:700,fontSize:16}}>Quote History</div>
-          <div style={{fontSize:13,color:"#888"}}>{quotes.length} quote{quotes.length!==1?"s":""} · {$$(total)} total</div>
+          <div style={{fontSize:13,color:"#64748b"}}>{quotes.length} quote{quotes.length!==1?"s":""} · {$$(total)} total</div>
         </div>
         {sorted.length===0?(
-          <div style={{textAlign:"center",padding:40,color:"#888",fontSize:14}}>No quotes for this client yet</div>
+          <div style={{textAlign:"center",padding:40,color:"#64748b",fontSize:14}}>No quotes for this client yet</div>
         ):sorted.map(q=>(
           <Card key={q.quote_id} style={{cursor:"pointer"}} onClick={()=>onViewQuote(q.quote_id)}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:12}}>
@@ -470,13 +479,13 @@ function ClientDetail({client,quotes,onBack,onViewQuote}){
                   {q.parent_id&&<span style={{fontSize:10,background:"#e0f2fe",color:"#0369a1",padding:"1px 5px",borderRadius:4,fontWeight:700}}>V2</span>}
                   <Badge status={q.status}/>
                 </div>
-                <div style={{fontSize:12,color:"#666"}}>{fmtTS(q.created_at)}</div>
-                <div style={{fontSize:12,color:"#999",marginTop:2}}>
+                <div style={{fontSize:12,color:"#64748b"}}>{fmtTS(q.created_at)}</div>
+                <div style={{fontSize:12,color:"#94a3b8",marginTop:2}}>
                   {Math.round(q.area_sqft).toLocaleString()} sqft · {q.crew_size} crew · {COMPLEXITY.find(o=>o.value===q.complexity)?.label} · {RISK.find(o=>o.value===q.risk)?.label}
                 </div>
                 {q.parent_id&&<div style={{fontSize:11,color:"#94a3b8",marginTop:2}}>Revision of {q.parent_id}</div>}
               </div>
-              <div style={{textAlign:"right",flexShrink:0}}><div style={{fontSize:20,fontWeight:900,color:"#16a34a"}}>{$$(q.final_price)}</div></div>
+              <div style={{textAlign:"right",flexShrink:0}}><div style={{fontSize:20,fontWeight:900,color:"#0f172a",letterSpacing:-.4}}>{$$(q.final_price)}</div></div>
             </div>
           </Card>
         ))}
@@ -504,7 +513,7 @@ function QuoteDetail({quote,allQuotes,settings,onBack,onEdit,onDuplicate,onDelet
 
   return(
     <div>
-      <div style={{background:"#fff",padding:"12px 16px",borderBottom:"1px solid #e5e7eb",display:"flex",alignItems:"center",gap:12,position:"sticky",top:0,zIndex:10}}>
+      <div style={{background:"#fff",padding:"12px 16px",borderBottom:"1px solid #e2e8f0",display:"flex",alignItems:"center",gap:12,position:"sticky",top:0,zIndex:10}}>
         <Back onClick={onBack}/>
         <div style={{flex:1,minWidth:0}}>
           <div style={{fontWeight:700,fontSize:15,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{quote.client_name||"Quote"}</div>
@@ -519,28 +528,28 @@ function QuoteDetail({quote,allQuotes,settings,onBack,onEdit,onDuplicate,onDelet
         {ratesChanged&&<div style={{background:"#fffbeb",border:"1px solid #fde68a",borderRadius:10,padding:"10px 14px",marginBottom:12,fontSize:12,color:"#92400e"}}>ℹ Rates changed since sent. Showing rates used at time of quoting.</div>}
         {isSent&&<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:10,padding:"10px 14px",marginBottom:12,fontSize:13,color:"#1d4ed8"}}>✏️ <strong>Editing a sent quote creates a new V2</strong> — original preserved.</div>}
         {versions.length>0&&(
-          <Card style={{background:"#f8fafc",border:"1px solid #e2e8f0"}}>
+          <Card>
             <Lbl>Quote Thread</Lbl>
-            {versions.sort((a,b)=>new Date(a.created_at)-new Date(b.created_at)).map(v=>(
-              <div key={v.quote_id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 0",borderBottom:"1px solid #e2e8f0"}}>
-                <div style={{display:"flex",alignItems:"center",gap:6}}><QID id={v.quote_id}/><Badge status={v.status}/></div>
-                <div style={{fontSize:13,fontWeight:700,color:"#16a34a"}}>{$$(v.final_price)}</div>
+            {versions.sort((a,b)=>new Date(a.created_at)-new Date(b.created_at)).map((v,i,arr)=>(
+              <div key={v.quote_id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 0",borderBottom:i<arr.length-1?"1px solid #e2e8f0":"none"}}>
+                <div style={{display:"flex",alignItems:"center",gap:8}}><QID id={v.quote_id}/><Badge status={v.status}/></div>
+                <div style={{fontSize:14,fontWeight:700,color:"#0f172a"}}>{$$(v.final_price)}</div>
               </div>
             ))}
           </Card>
         )}
-        <Card style={{background:"#111",textAlign:"center",padding:24}}>
-          <div style={{fontSize:56,fontWeight:900,color:"#4ade80",letterSpacing:-2,lineHeight:1}}>{$$(quote.final_price)}</div>
-          <div style={{fontSize:13,color:"#6b7280",marginTop:6}}>Mowing · Trimming · Edging</div>
-          {time&&<div style={{fontSize:14,color:"#4ade80",marginTop:4,fontWeight:700}}>Est. {fmtT(time.adj)}</div>}
-          <div style={{marginTop:8,fontSize:11,color:"#555"}}>Sent: {quote.sent_at?fmtTS(quote.sent_at):"Not yet sent"}</div>
+        <Card style={{background:"#0f172a",textAlign:"center",padding:28,boxShadow:"0 4px 16px rgba(15,23,42,.12)"}}>
+          <div style={{fontSize:52,fontWeight:900,color:"#ffffff",letterSpacing:-2,lineHeight:1}}>{$$(quote.final_price)}</div>
+          <div style={{fontSize:12,color:"#94a3b8",marginTop:8,fontWeight:500,textTransform:"uppercase",letterSpacing:1}}>Mowing · Trimming · Edging</div>
+          {time&&<div style={{fontSize:13,color:"#4ade80",marginTop:8,fontWeight:700}}>Est. {fmtT(time.adj)}</div>}
+          <div style={{marginTop:10,fontSize:11,color:"#64748b",fontWeight:500}}>Sent: {quote.sent_at?fmtTS(quote.sent_at):"Not yet sent"}</div>
         </Card>
         {quote.client_name&&(
           <Card>
             <Lbl>Client</Lbl>
             <div style={{fontWeight:700,fontSize:16,marginBottom:4}}>{quote.client_name}</div>
             {quote.client_phone&&<a href={`tel:${quote.client_phone}`} style={{display:"block",fontSize:14,color:"#16a34a",textDecoration:"none",marginBottom:2}}>📞 {quote.client_phone}</a>}
-            {quote.client_email&&<div style={{fontSize:14,color:"#666"}}>✉ {quote.client_email}</div>}
+            {quote.client_email&&<div style={{fontSize:14,color:"#64748b"}}>✉ {quote.client_email}</div>}
           </Card>
         )}
         <Card>
@@ -549,8 +558,8 @@ function QuoteDetail({quote,allQuotes,settings,onBack,onEdit,onDuplicate,onDelet
             {[{l:"Address",v:quote.address,full:true},{l:"Area",v:`${Math.round(quote.area_sqft).toLocaleString()} sqft (${(quote.area_sqft/43560).toFixed(3)} ac)`},{l:"Perimeter",v:`${Math.round(quote.linear_ft).toLocaleString()} ft`},{l:"Crew",v:`${quote.crew_size} worker${quote.crew_size>1?"s":""}`},{l:"Complexity",v:COMPLEXITY.find(o=>o.value===quote.complexity)?.label},{l:"Risk",v:RISK.find(o=>o.value===quote.risk)?.label},{l:"Discount",v:(quote.discount_pct||0)>0?`${quote.discount_pct}%`:"None"},{l:"Created",v:fmtTS(quote.created_at),full:true},{l:"Sent",v:quote.sent_at?fmtTS(quote.sent_at):"Not sent",full:true}]
               .map(({l,v,full})=>(
                 <div key={l} style={{gridColumn:full?"1 / -1":"auto"}}>
-                  <div style={{fontSize:10,fontWeight:700,color:"#9ca3af",textTransform:"uppercase"}}>{l}</div>
-                  <div style={{fontSize:13,fontWeight:600,color:"#111",marginTop:2}}>{v}</div>
+                  <div style={{fontSize:10,fontWeight:700,color:"#94a3b8",textTransform:"uppercase"}}>{l}</div>
+                  <div style={{fontSize:13,fontWeight:600,color:"#0f172a",marginTop:2}}>{v}</div>
                 </div>
               ))}
           </div>
@@ -559,16 +568,16 @@ function QuoteDetail({quote,allQuotes,settings,onBack,onEdit,onDuplicate,onDelet
           <Card>
             <Lbl>Formula Breakdown</Lbl>
             {calc.bd.map((r,i)=>(
-              <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",padding:"5px 0",borderBottom:r.subtotal?"1.5px solid #e0e0e0":"1px solid #f5f5f5",fontWeight:r.subtotal?700:400,color:r.subtotal?"#111":r.modifier?"#888":"#444"}}>
-                <div><div style={{fontSize:13}}>{r.label}</div>{r.note&&<div style={{fontSize:10,color:"#bbb"}}>{r.note}</div>}</div>
+              <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",padding:"5px 0",borderBottom:r.subtotal?"1.5px solid #e2e8f0":"1px solid #f1f5f9",fontWeight:r.subtotal?700:400,color:r.subtotal?"#0f172a":r.modifier?"#64748b":"#334155"}}>
+                <div><div style={{fontSize:13}}>{r.label}</div>{r.note&&<div style={{fontSize:10,color:"#cbd5e1"}}>{r.note}</div>}</div>
                 <div style={{fontSize:13,fontWeight:600}}>{r.modifier&&r.value>0?"+":""}{$$(r.value)}</div>
               </div>
             ))}
             <div style={{display:"flex",justifyContent:"space-between",marginTop:10,fontSize:18,fontWeight:900,color:"#16a34a"}}><span>FINAL BID</span><span>{$$(quote.final_price)}</span></div>
-            {quote.mow_rate_used&&<div style={{marginTop:10,padding:"8px 10px",background:"#f8fafc",borderRadius:8,fontSize:11,color:"#888"}}>Rates at quoting time: mow ${quote.mow_rate_used}/20k · trim ${quote.trim_rate_used}/3k · equip ${quote.equipment_cost_used}/hr</div>}
+            {quote.mow_rate_used&&<div style={{marginTop:10,padding:"8px 10px",background:"#f8fafc",borderRadius:8,fontSize:11,color:"#64748b"}}>Rates at quoting time: mow ${quote.mow_rate_used}/20k · trim ${quote.trim_rate_used}/3k · equip ${quote.equipment_cost_used}/hr</div>}
           </Card>
         )}
-        {quote.notes&&<Card><Lbl>Notes</Lbl><div style={{fontSize:14,color:"#444",lineHeight:1.5}}>{quote.notes}</div></Card>}
+        {quote.notes&&<Card><Lbl>Notes</Lbl><div style={{fontSize:14,color:"#334155",lineHeight:1.5}}>{quote.notes}</div></Card>}
         <div style={{display:"flex",flexDirection:"column",gap:8}}>
           <Btn onClick={share} style={{width:"100%"}}>{copied?"✓ Copied!":"📤 Resend Quote"}</Btn>
           {quote.status==="sent"&&<Btn variant="outline" onClick={onAccepted} style={{width:"100%"}}>✅ Mark as Accepted</Btn>}
@@ -597,7 +606,7 @@ function SettingsScreen({settings,onSave,onLogout}){
   return(
     <div style={{padding:16}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
-        <div style={{fontSize:26,fontWeight:900,color:"#111"}}>Settings</div>
+        <div style={{fontSize:26,fontWeight:900,color:"#0f172a"}}>Settings</div>
         <button onClick={reset} style={{background:"none",border:"none",color:"#dc2626",fontSize:13,fontWeight:700,cursor:"pointer"}}>↺ Reset Defaults</button>
       </div>
       <Card>
@@ -605,8 +614,8 @@ function SettingsScreen({settings,onSave,onLogout}){
         {FIELDS.map(({key,label})=>(
           <div key={key} style={{marginBottom:14}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
-              <span style={{fontSize:13,fontWeight:600,color:"#444"}}>{label}</span>
-              <button onClick={()=>setTip(tip===key?null:key)} style={{width:20,height:20,borderRadius:"50%",border:"1.5px solid #d1d5db",background:"none",fontSize:10,cursor:"pointer",color:"#666",fontFamily:"inherit"}}>?</button>
+              <span style={{fontSize:13,fontWeight:600,color:"#334155"}}>{label}</span>
+              <button onClick={()=>setTip(tip===key?null:key)} style={{width:20,height:20,borderRadius:"50%",border:"1.5px solid #d1d5db",background:"none",fontSize:10,cursor:"pointer",color:"#64748b",fontFamily:"inherit"}}>?</button>
             </div>
             {tip===key&&<div style={{background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:8,padding:"8px 12px",fontSize:12,color:"#166534",marginBottom:6}}>{TIPS[key]}</div>}
             <Inp type="number" value={loc[key]} onChange={e=>set(key,parseFloat(e.target.value)||0)}/>
@@ -625,14 +634,14 @@ function SettingsScreen({settings,onSave,onLogout}){
         <Lbl>Business Info</Lbl>
         {[["company_name","Company Name","text","Your Company"],["company_phone","Phone","tel","(555) 000-0000"],["company_email","Email","email","you@example.com"]].map(([k,lbl,t,ph])=>(
           <div key={k} style={{marginBottom:12}}>
-            <div style={{fontSize:13,fontWeight:600,color:"#444",marginBottom:4}}>{lbl}</div>
+            <div style={{fontSize:13,fontWeight:600,color:"#334155",marginBottom:4}}>{lbl}</div>
             <Inp type={t} value={loc[k]||""} onChange={e=>set(k,e.target.value)} placeholder={ph}/>
           </div>
         ))}
       </Card>
       <Btn onClick={save} style={{width:"100%"}}>{saved?"✓ Saved to database!":"Save Settings"}</Btn>
       <Btn variant="danger" onClick={onLogout} style={{width:"100%",marginTop:10}}>Log Out</Btn>
-      <div style={{textAlign:"center",fontSize:11,color:"#9ca3af",marginTop:20}}>LawnBid v{APP_VERSION} · Built for lawn care professionals</div>
+      <div style={{textAlign:"center",fontSize:11,color:"#94a3b8",marginTop:20}}>LawnBid v{APP_VERSION} · Built for lawn care professionals</div>
     </div>
   );
 }
@@ -660,19 +669,19 @@ function AuthScreen(){
   };
 
   return(
-    <div style={{maxWidth:480,margin:"0 auto",minHeight:"100vh",display:"flex",flexDirection:"column",justifyContent:"center",padding:"24px",fontFamily:"system-ui,-apple-system,sans-serif",background:"#f4f4f5",boxSizing:"border-box"}}>
+    <div style={{maxWidth:480,margin:"0 auto",minHeight:"100vh",display:"flex",flexDirection:"column",justifyContent:"center",padding:"24px",fontFamily:"'Inter',system-ui,-apple-system,sans-serif",background:"#f8fafc",boxSizing:"border-box",color:"#0f172a"}}>
       <div style={{textAlign:"center",marginBottom:28}}>
-        <img src="/logo.png" alt="LawnBid" style={{width:72,height:72,borderRadius:"50%",objectFit:"cover",marginBottom:10}}/>
-        <div style={{fontSize:30,fontWeight:900,color:"#16a34a",letterSpacing:-.5}}>LawnBid</div>
-        <div style={{fontSize:13,color:"#888",marginTop:4}}>Sign in to your account</div>
+        <img src="/logo.png" alt="LawnBid" style={{width:72,height:72,borderRadius:"50%",objectFit:"cover",marginBottom:12}}/>
+        <div style={{fontSize:32,fontWeight:900,color:"#0f172a",letterSpacing:-.8}}>LawnBid</div>
+        <div style={{fontSize:13,color:"#64748b",marginTop:4,fontWeight:500}}>Sign in to your account</div>
       </div>
       <Card>
         <div style={{marginBottom:12}}>
-          <div style={{fontSize:13,fontWeight:600,color:"#444",marginBottom:4}}>Email</div>
+          <div style={{fontSize:13,fontWeight:600,color:"#334155",marginBottom:4}}>Email</div>
           <Inp type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="you@example.com" autoComplete="email"/>
         </div>
         <div style={{marginBottom:12}}>
-          <div style={{fontSize:13,fontWeight:600,color:"#444",marginBottom:4}}>Password</div>
+          <div style={{fontSize:13,fontWeight:600,color:"#334155",marginBottom:4}}>Password</div>
           <Inp type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="••••••••" autoComplete="current-password"/>
         </div>
         <div style={{display:"flex",gap:8,marginTop:8}}>
@@ -737,7 +746,7 @@ function QuoteFlow({step,setStep,flow,setFlow,errors,setErrors,settings,clients,
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.6)",zIndex:200,display:"flex",alignItems:"flex-end"}}>
           <div style={{background:"#fff",borderRadius:"16px 16px 0 0",padding:20,width:"100%",maxWidth:480,margin:"0 auto",boxSizing:"border-box"}}>
             <div style={{fontWeight:700,fontSize:17,marginBottom:12}}>📤 Ready to Send</div>
-            <textarea readOnly value={sharePay.txt} style={{width:"100%",height:200,border:"1.5px solid #e0e0e0",borderRadius:8,padding:10,fontSize:12,fontFamily:"monospace",boxSizing:"border-box",resize:"none"}}/>
+            <textarea readOnly value={sharePay.txt} style={{width:"100%",height:200,border:"1.5px solid #e2e8f0",borderRadius:8,padding:10,fontSize:12,fontFamily:"monospace",boxSizing:"border-box",resize:"none"}}/>
             <div style={{display:"flex",gap:8,marginTop:12}}>
               <Btn style={{flex:1}} onClick={()=>{navigator.clipboard?.writeText(sharePay.txt);setCopied(true);setTimeout(()=>setCopied(false),2000);}}>{copied?"✓ Copied!":"Copy"}</Btn>
               <Btn variant="secondary" style={{flex:1}} onClick={()=>{const{rec,cli}=sharePay;setSharePay(null);onSave(rec,cli,"sent");}}>Done ›</Btn>
@@ -745,15 +754,15 @@ function QuoteFlow({step,setStep,flow,setFlow,errors,setErrors,settings,clients,
           </div>
         </div>
       )}
-      <div style={{background:"#fff",padding:"12px 16px",borderBottom:"1px solid #e5e7eb",display:"flex",alignItems:"center",gap:12,position:"sticky",top:0,zIndex:10}}>
+      <div style={{background:"#fff",padding:"12px 16px",borderBottom:"1px solid #e2e8f0",display:"flex",alignItems:"center",gap:12,position:"sticky",top:0,zIndex:10}}>
         <button onClick={step===1?onCancel:()=>setStep(s=>s-1)} style={{background:"none",border:"none",fontSize:24,cursor:"pointer",color:"#16a34a",fontFamily:"inherit",lineHeight:1}}>‹</button>
         <div style={{flex:1}}>
           <div style={{fontWeight:700,fontSize:15}}>{flow.parentId?"New V2 Quote":"New Quote"} — Step {step} of 4</div>
-          <div style={{fontSize:12,color:"#888"}}>{STEPS[step-1]}{flow.parentId?` · Revision of ${flow.parentId}`:""}</div>
+          <div style={{fontSize:12,color:"#64748b"}}>{STEPS[step-1]}{flow.parentId?` · Revision of ${flow.parentId}`:""}</div>
         </div>
-        <button onClick={onCancel} style={{background:"none",border:"none",fontSize:12,color:"#aaa",cursor:"pointer",fontFamily:"inherit"}}>✕</button>
+        <button onClick={onCancel} style={{background:"none",border:"none",fontSize:12,color:"#94a3b8",cursor:"pointer",fontFamily:"inherit"}}>✕</button>
       </div>
-      <div style={{height:4,background:"#f0f0f0"}}><div style={{height:"100%",background:"#16a34a",width:`${step*25}%`,transition:"width .3s"}}/></div>
+      <div style={{height:3,background:"#f1f5f9"}}><div style={{height:"100%",background:"#15803d",width:`${step*25}%`,transition:"width .3s"}}/></div>
       <div style={{padding:16}}>
         {step===1&&<S1 flow={flow} set={set} errors={errors} clients={clients}/>}
         {step===2&&<S2 flow={flow} set={set} errors={errors} area={area} perim={perim}/>}
@@ -774,15 +783,15 @@ function S1({flow,set,errors,clients}){
       <Card>
         <Lbl>Client Information</Lbl>
         <div style={{marginBottom:12,position:"relative"}}>
-          <div style={{fontSize:13,fontWeight:600,color:"#444",marginBottom:4}}>Client Name *</div>
+          <div style={{fontSize:13,fontWeight:600,color:"#334155",marginBottom:4}}>Client Name *</div>
           <Inp value={flow.clientName} onChange={e=>onName(e.target.value)} onBlur={()=>setTimeout(()=>setSugg([]),150)} placeholder="Name or search existing client"/>
           <ErrMsg msg={errors.clientName}/>
           {sugg.length>0&&(
-            <div style={{position:"absolute",top:"100%",left:0,right:0,background:"#fff",border:"1.5px solid #e0e0e0",borderRadius:8,boxShadow:"0 4px 12px rgba(0,0,0,.12)",zIndex:50,marginTop:2}}>
+            <div style={{position:"absolute",top:"100%",left:0,right:0,background:"#fff",border:"1.5px solid #e2e8f0",borderRadius:8,boxShadow:"0 4px 12px rgba(0,0,0,.12)",zIndex:50,marginTop:2}}>
               {sugg.map(c=>(
-                <div key={c.id} onMouseDown={()=>pick(c)} style={{padding:"10px 14px",cursor:"pointer",borderBottom:"1px solid #f5f5f5"}}>
+                <div key={c.id} onMouseDown={()=>pick(c)} style={{padding:"10px 14px",cursor:"pointer",borderBottom:"1px solid #f1f5f9"}}>
                   <div style={{fontWeight:600}}>{c.name}</div>
-                  <div style={{fontSize:12,color:"#888"}}>{c.phone}{c.default_address?" · "+c.default_address:""}</div>
+                  <div style={{fontSize:12,color:"#64748b"}}>{c.phone}{c.default_address?" · "+c.default_address:""}</div>
                 </div>
               ))}
             </div>
@@ -790,12 +799,12 @@ function S1({flow,set,errors,clients}){
         </div>
         {flow.clientId&&<div style={{background:"#f0fdf4",borderRadius:8,padding:"6px 10px",fontSize:12,color:"#166534",marginBottom:10}}>✓ Existing client — measurements pre-filled from last quote</div>}
         <div style={{marginBottom:12}}>
-          <div style={{fontSize:13,fontWeight:600,color:"#444",marginBottom:4}}>Phone *</div>
+          <div style={{fontSize:13,fontWeight:600,color:"#334155",marginBottom:4}}>Phone *</div>
           <Inp type="tel" value={flow.clientPhone} onChange={e=>set("clientPhone",e.target.value)} placeholder="(555) 000-0000"/>
           <ErrMsg msg={errors.clientPhone}/>
         </div>
         <div>
-          <div style={{fontSize:13,fontWeight:600,color:"#444",marginBottom:4}}>Email (optional)</div>
+          <div style={{fontSize:13,fontWeight:600,color:"#334155",marginBottom:4}}>Email (optional)</div>
           <Inp type="email" value={flow.clientEmail} onChange={e=>set("clientEmail",e.target.value)} placeholder="client@email.com"/>
         </div>
       </Card>
@@ -820,7 +829,7 @@ function S2({flow,set,errors,area,perim}){
           <Sel value={flow.areaUnit} onChange={e=>set("areaUnit",e.target.value)}>{AREA_UNITS.map(u=><option key={u.value} value={u.value}>{u.label}</option>)}</Sel>
         </div>
         {area>0&&flow.areaUnit!=="sqft"&&<div style={{fontSize:12,color:"#16a34a",marginBottom:2}}>= {area.toLocaleString(undefined,{maximumFractionDigits:0})} sq ft</div>}
-        {area>0&&<div style={{fontSize:12,color:"#888"}}>{(area/43560).toFixed(4)} acres</div>}
+        {area>0&&<div style={{fontSize:12,color:"#64748b"}}>{(area/43560).toFixed(4)} acres</div>}
         <ErrMsg msg={errors.area}/>
       </Card>
       <Card>
@@ -831,7 +840,7 @@ function S2({flow,set,errors,area,perim}){
         </div>
         {perim>0&&flow.perimUnit!=="ft"&&<div style={{fontSize:12,color:"#16a34a",marginBottom:2}}>= {perim.toLocaleString(undefined,{maximumFractionDigits:0})} linear ft</div>}
         <ErrMsg msg={errors.perim}/>
-        <div style={{fontSize:11,color:"#999",marginTop:6}}>💡 Perimeter drives your trimming price. Rough guide: perimeter ≈ 4 × √area</div>
+        <div style={{fontSize:11,color:"#94a3b8",marginTop:6}}>💡 Perimeter drives your trimming price. Rough guide: perimeter ≈ 4 × √area</div>
       </Card>
     </div>
   );
@@ -843,44 +852,44 @@ function S3({flow,set,area,perim,calc,time,settings}){
     <div>
       <div style={{background:"#f0fdf4",borderRadius:10,padding:"10px 14px",marginBottom:12,fontSize:13}}>
         <div style={{fontWeight:700}}>📍 {flow.address}</div>
-        <div style={{color:"#555",marginTop:2}}>{Math.round(area).toLocaleString()} sqft · {Math.round(perim).toLocaleString()} ft perimeter</div>
+        <div style={{color:"#475569",marginTop:2}}>{Math.round(area).toLocaleString()} sqft · {Math.round(perim).toLocaleString()} ft perimeter</div>
       </div>
       <Card><Lbl>Crew Size</Lbl><div style={{display:"flex",gap:6}}>{[1,2,3,4,5].map(n=><Chip key={n} label={String(n)} active={flow.crew===n} onClick={()=>set("crew",n)}/>)}</div></Card>
       <Card>
         <Lbl>Job Complexity</Lbl>
         <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:8}}>{COMPLEXITY.map(o=><Chip key={o.value} label={`${o.label} (${o.value}×)`} active={flow.cx===o.value} onClick={()=>set("cx",o.value)}/>)}</div>
-        <div style={{fontSize:12,color:"#666"}}>{COMPLEXITY.find(o=>o.value===flow.cx)?.desc}</div>
+        <div style={{fontSize:12,color:"#64748b"}}>{COMPLEXITY.find(o=>o.value===flow.cx)?.desc}</div>
       </Card>
       <Card>
         <Lbl>Site Risk</Lbl>
         <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:8}}>{RISK.map(o=><Chip key={o.value} label={`${o.label} (${o.value}×)`} active={flow.risk===o.value} onClick={()=>set("risk",o.value)}/>)}</div>
-        <div style={{fontSize:12,color:"#666"}}>{RISK.find(o=>o.value===flow.risk)?.desc}</div>
+        <div style={{fontSize:12,color:"#64748b"}}>{RISK.find(o=>o.value===flow.risk)?.desc}</div>
       </Card>
       {time&&(
-        <Card style={{background:"#f0fdf4",border:"1px solid #bbf7d0"}}>
+        <Card>
           <Lbl>⏱ Time Estimate</Lbl>
           <div style={{display:"flex",alignItems:"flex-end",gap:10,marginBottom:6}}>
-            <div style={{fontSize:48,fontWeight:900,color:"#16a34a",lineHeight:1}}>{fmtT(time.adj)}</div>
-            {flow.cx>1&&<div style={{fontSize:12,color:"#f59e0b",paddingBottom:6}}>+{fmtT(time.adj-time.wall)} complexity</div>}
+            <div style={{fontSize:42,fontWeight:900,color:"#0f172a",lineHeight:1,letterSpacing:-1}}>{fmtT(time.adj)}</div>
+            {flow.cx>1&&<div style={{fontSize:12,color:"#b45309",paddingBottom:6,fontWeight:600}}>+{fmtT(time.adj-time.wall)} complexity</div>}
           </div>
-          <div style={{fontSize:12,color:"#166534",marginBottom:12}}>{flow.crew>=2?`${flow.crew}-person crew — mow & trim in parallel`:"Solo — mow then trim sequentially"}</div>
+          <div style={{fontSize:13,color:"#64748b",marginBottom:16,fontWeight:500}}>{flow.crew>=2?`${flow.crew}-person crew — mow & trim in parallel`:"Solo — mow then trim sequentially"}</div>
           {[{label:"Mowing",hrs:time.mh,note:`${Math.round(area).toLocaleString()} sqft ÷ 20,000`},{label:"Trimming",hrs:time.th,note:`${Math.round(perim).toLocaleString()} ft ÷ 3,000`}].map(ph=>(
-            <div key={ph.label} style={{marginBottom:10}}>
-              <div style={{display:"flex",justifyContent:"space-between",fontSize:13,marginBottom:3}}><span style={{color:"#374151"}}>{ph.label}</span><span style={{fontWeight:700}}>{fmtT(ph.hrs)}</span></div>
-              <div style={{background:"#d1fae5",borderRadius:4,height:5}}><div style={{background:"#16a34a",height:"100%",borderRadius:4,width:`${Math.min(100,(ph.hrs/(time.mh+time.th))*100)}%`}}/></div>
-              <div style={{fontSize:10,color:"#6b7280",marginTop:2}}>{ph.note}</div>
+            <div key={ph.label} style={{marginBottom:12}}>
+              <div style={{display:"flex",justifyContent:"space-between",fontSize:13,marginBottom:4}}><span style={{color:"#334155",fontWeight:500}}>{ph.label}</span><span style={{fontWeight:700,color:"#0f172a"}}>{fmtT(ph.hrs)}</span></div>
+              <div style={{background:"#f1f5f9",borderRadius:4,height:6}}><div style={{background:"#15803d",height:"100%",borderRadius:4,width:`${Math.min(100,(ph.hrs/(time.mh+time.th))*100)}%`}}/></div>
+              <div style={{fontSize:10,color:"#94a3b8",marginTop:4,fontWeight:500}}>{ph.note}</div>
             </div>
           ))}
-          <div style={{marginBottom:14}}>
-            <div style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:4}}><span style={{color:"#374151"}}>% of 8-hr workday</span><span style={{fontWeight:700}}>{Math.round(time.pct)}%</span></div>
-            <div style={{background:"#d1fae5",borderRadius:4,height:8}}><div style={{background:time.pct>80?"#dc2626":time.pct>50?"#f59e0b":"#16a34a",height:"100%",borderRadius:4,width:`${time.pct}%`,transition:"all .3s"}}/></div>
+          <div style={{marginTop:4,marginBottom:16}}>
+            <div style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:4}}><span style={{color:"#334155",fontWeight:500}}>% of 8-hr workday</span><span style={{fontWeight:700,color:"#0f172a"}}>{Math.round(time.pct)}%</span></div>
+            <div style={{background:"#f1f5f9",borderRadius:4,height:8}}><div style={{background:time.pct>80?"#dc2626":time.pct>50?"#b45309":"#15803d",height:"100%",borderRadius:4,width:`${time.pct}%`,transition:"all .3s"}}/></div>
           </div>
-          <div style={{fontSize:11,fontWeight:700,color:"#166534",textTransform:"uppercase",letterSpacing:.5,marginBottom:6}}>Crew Impact</div>
+          <div style={{fontSize:11,fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:1,marginBottom:8}}>Crew Impact</div>
           <div style={{display:"flex",gap:6}}>
             {time.crew_times.map(({n,t})=>(
-              <div key={n} style={{flex:1,textAlign:"center",padding:"8px 4px",borderRadius:8,background:n===flow.crew?"#16a34a":"#d1fae5",color:n===flow.crew?"#fff":"#166534"}}>
-                <div style={{fontSize:10,fontWeight:600}}>{n} crew</div>
-                <div style={{fontSize:13,fontWeight:800}}>{fmtT(t)}</div>
+              <div key={n} style={{flex:1,textAlign:"center",padding:"10px 4px",borderRadius:12,background:n===flow.crew?"#15803d":"#f1f5f9",color:n===flow.crew?"#ffffff":"#475569"}}>
+                <div style={{fontSize:10,fontWeight:600,letterSpacing:.2}}>{n} crew</div>
+                <div style={{fontSize:13,fontWeight:800,marginTop:2}}>{fmtT(t)}</div>
               </div>
             ))}
           </div>
@@ -891,34 +900,34 @@ function S3({flow,set,area,perim,calc,time,settings}){
         <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
           {[0,5,10,15,20].map(p=><Chip key={p} label={p===0?"None":`${p}%`} active={flow.disc===p&&!flow.customDisc} onClick={()=>{set("disc",p);set("customDisc","");}}/>)}
           <div style={{display:"flex",alignItems:"center",gap:4}}>
-            <Inp type="number" min="0" max="100" placeholder="—" value={flow.customDisc} onChange={e=>{set("customDisc",e.target.value);set("disc",parseFloat(e.target.value)||0);}} style={{width:52,padding:8,fontSize:13,textAlign:"center"}}/>
-            <span style={{fontSize:13,color:"#666"}}>%</span>
+            <Inp type="number" min="0" max="100" placeholder="—" value={flow.customDisc} onChange={e=>{set("customDisc",e.target.value);set("disc",parseFloat(e.target.value)||0);}} style={{width:60,height:36,padding:"0 8px",fontSize:13,textAlign:"center",borderRadius:10}}/>
+            <span style={{fontSize:13,color:"#64748b"}}>%</span>
           </div>
         </div>
       </Card>
       {calc&&(
-        <Card style={{background:"#111",color:"#fff"}}>
-          <Lbl style={{color:"#555"}}>Calculated Bid</Lbl>
-          {flow.disc>0&&<div style={{fontSize:18,color:"#4b5563",textDecoration:"line-through",marginBottom:4}}>{$$(calc.fl)}</div>}
+        <Card style={{background:"#0f172a",color:"#ffffff",padding:24,boxShadow:"0 4px 16px rgba(15,23,42,.12)"}}>
+          <Lbl style={{color:"#64748b"}}>Calculated Bid</Lbl>
+          {flow.disc>0&&<div style={{fontSize:18,color:"#475569",textDecoration:"line-through",marginBottom:4,fontWeight:600}}>{$$(calc.fl)}</div>}
           {editing?(
             <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
               <span style={{fontSize:36,color:"#4ade80",fontWeight:900}}>$</span>
-              <input type="number" defaultValue={calc.disp.toFixed(2)} onChange={e=>set("override",e.target.value)} autoFocus style={{fontSize:42,fontWeight:900,background:"transparent",border:"none",borderBottom:"2px solid #4ade80",color:"#4ade80",outline:"none",width:"100%",fontFamily:"inherit"}}/>
+              <input type="number" defaultValue={calc.disp.toFixed(2)} onChange={e=>set("override",e.target.value)} autoFocus style={{fontSize:42,fontWeight:900,background:"transparent",border:"none",borderBottom:"2px solid #4ade80",color:"#ffffff",outline:"none",width:"100%",fontFamily:"inherit"}}/>
             </div>
           ):(
-            <div onClick={()=>setEditing(true)} style={{fontSize:52,fontWeight:900,color:"#4ade80",letterSpacing:-2,cursor:"pointer",lineHeight:1,marginBottom:4}}>{$$(calc.disp)}</div>
+            <div onClick={()=>setEditing(true)} style={{fontSize:52,fontWeight:900,color:"#ffffff",letterSpacing:-2,cursor:"pointer",lineHeight:1,marginBottom:4}}>{$$(calc.disp)}</div>
           )}
-          {editing?<button onClick={()=>{setEditing(false);set("override",null);}} style={{fontSize:12,color:"#4ade80",background:"none",border:"none",cursor:"pointer",marginBottom:12,fontFamily:"inherit"}}>← reset to formula</button>:<div style={{fontSize:12,color:"#555",marginBottom:12}}>Tap price to override</div>}
-          {calc.minA&&<div style={{fontSize:12,color:"#f59e0b",marginBottom:12}}>⚠ Minimum bid applied (formula: {$$(calc.ar)})</div>}
-          <div style={{borderTop:"1px solid #333",paddingTop:12}}>
-            <Lbl style={{color:"#555"}}>Breakdown</Lbl>
+          {editing?<button onClick={()=>{setEditing(false);set("override",null);}} style={{fontSize:12,color:"#4ade80",background:"none",border:"none",cursor:"pointer",marginBottom:14,fontFamily:"inherit",fontWeight:600,padding:0}}>← reset to formula</button>:<div style={{fontSize:12,color:"#64748b",marginBottom:14,fontWeight:500}}>Tap price to override</div>}
+          {calc.minA&&<div style={{fontSize:12,color:"#fbbf24",marginBottom:12,fontWeight:500}}>⚠ Minimum bid applied (formula: {$$(calc.ar)})</div>}
+          <div style={{borderTop:"1px solid #1e293b",paddingTop:14}}>
+            <Lbl style={{color:"#64748b"}}>Breakdown</Lbl>
             {calc.bd.map((r,i)=>(
-              <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",padding:"5px 0",borderBottom:r.subtotal?"1px solid #444":"1px solid #1c1c1c",color:r.subtotal?"#fff":r.modifier?"#9ca3af":"#d1d5db",fontWeight:r.subtotal?700:400}}>
-                <div><div style={{fontSize:13}}>{r.label}</div>{r.note&&<div style={{fontSize:10,color:"#555"}}>{r.note}</div>}</div>
+              <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",padding:"6px 0",borderBottom:r.subtotal?"1px solid #334155":"1px solid #1e293b",color:r.subtotal?"#ffffff":r.modifier?"#94a3b8":"#cbd5e1",fontWeight:r.subtotal?700:500}}>
+                <div><div style={{fontSize:13}}>{r.label}</div>{r.note&&<div style={{fontSize:10,color:"#64748b",marginTop:1}}>{r.note}</div>}</div>
                 <div style={{fontSize:13,fontWeight:600}}>{r.modifier&&r.value>0?"+":""}{$$(r.value)}</div>
               </div>
             ))}
-            <div style={{display:"flex",justifyContent:"space-between",marginTop:10,fontSize:18,fontWeight:900,color:"#4ade80"}}><span>FINAL BID</span><span>{$$(calc.disp)}</span></div>
+            <div style={{display:"flex",justifyContent:"space-between",marginTop:12,fontSize:16,fontWeight:900,color:"#4ade80",letterSpacing:.3}}><span>FINAL BID</span><span>{$$(calc.disp)}</span></div>
           </div>
         </Card>
       )}
@@ -932,33 +941,33 @@ function S4({flow,set,area,perim,calc,time,onSend,saving}){
       <Card>
         <Lbl>Client</Lbl>
         <div style={{fontWeight:700,fontSize:16}}>{flow.clientName}</div>
-        <div style={{fontSize:14,color:"#666",marginTop:2}}>{flow.clientPhone}</div>
-        {flow.clientEmail&&<div style={{fontSize:14,color:"#666"}}>{flow.clientEmail}</div>}
+        <div style={{fontSize:14,color:"#64748b",marginTop:2}}>{flow.clientPhone}</div>
+        {flow.clientEmail&&<div style={{fontSize:14,color:"#64748b"}}>{flow.clientEmail}</div>}
       </Card>
-      <Card style={{background:"#f9fafb"}}>
+      <Card>
         <Lbl>Quote Summary</Lbl>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:16}}>
           {[{l:"Address",v:flow.address,full:true},{l:"Area",v:`${Math.round(area).toLocaleString()} sqft`},{l:"Perimeter",v:`${Math.round(perim).toLocaleString()} ft`},{l:"Crew",v:`${flow.crew} worker${flow.crew>1?"s":""}`},{l:"Complexity",v:COMPLEXITY.find(o=>o.value===flow.cx)?.label},{l:"Risk",v:RISK.find(o=>o.value===flow.risk)?.label},{l:"Est. Time",v:time?fmtT(time.adj):"—"},{l:"Discount",v:flow.disc>0?`${flow.disc}%`:"None"}]
             .map(({l,v,full})=>(
               <div key={l} style={{gridColumn:full?"1 / -1":"auto"}}>
-                <div style={{fontSize:10,fontWeight:700,color:"#9ca3af",textTransform:"uppercase"}}>{l}</div>
-                <div style={{fontSize:13,fontWeight:600,color:"#111",marginTop:2}}>{v}</div>
+                <div style={{fontSize:10,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:1}}>{l}</div>
+                <div style={{fontSize:14,fontWeight:600,color:"#0f172a",marginTop:3}}>{v}</div>
               </div>
             ))}
         </div>
-        <div style={{borderTop:"2px solid #e5e7eb",paddingTop:12,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-          <span style={{fontWeight:700,fontSize:16}}>Total</span>
-          <span style={{fontSize:32,fontWeight:900,color:"#16a34a"}}>{calc?$$(calc.disp):"—"}</span>
+        <div style={{borderTop:"1px solid #e2e8f0",paddingTop:14,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <span style={{fontWeight:700,fontSize:15,color:"#0f172a"}}>Total</span>
+          <span style={{fontSize:32,fontWeight:900,color:"#0f172a",letterSpacing:-.8}}>{calc?$$(calc.disp):"—"}</span>
         </div>
       </Card>
       <Card>
         <Lbl>Notes (optional)</Lbl>
-        <textarea value={flow.notes} onChange={e=>set("notes",e.target.value)} placeholder="Add notes for this job…" style={{width:"100%",minHeight:80,border:"1.5px solid #e0e0e0",borderRadius:8,padding:"10px 12px",fontSize:14,fontFamily:"inherit",resize:"vertical",boxSizing:"border-box",outline:"none"}}/>
+        <textarea value={flow.notes} onChange={e=>set("notes",e.target.value)} placeholder="Add notes for this job…" style={{width:"100%",minHeight:80,border:"1.5px solid #e2e8f0",borderRadius:12,padding:"12px 14px",fontSize:14,fontFamily:"inherit",resize:"vertical",boxSizing:"border-box",outline:"none",color:"#0f172a"}}/>
       </Card>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",background:"#fff",borderRadius:12,padding:"12px 16px",marginBottom:12,boxShadow:"0 1px 4px rgba(0,0,0,.08)"}}>
-        <div><div style={{fontWeight:600}}>Save to client list</div><div style={{fontSize:12,color:"#666"}}>Remembers address & measurements</div></div>
-        <div onClick={()=>set("saveClient",!flow.saveClient)} style={{width:44,height:26,borderRadius:13,background:flow.saveClient?"#16a34a":"#d1d5db",cursor:"pointer",position:"relative",transition:"background .2s",flexShrink:0}}>
-          <div style={{width:22,height:22,background:"#fff",borderRadius:"50%",position:"absolute",top:2,left:flow.saveClient?20:2,transition:"left .2s",boxShadow:"0 1px 3px rgba(0,0,0,.2)"}}/>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",background:"#ffffff",borderRadius:16,padding:"14px 18px",marginBottom:12,boxShadow:CARD_SHADOW}}>
+        <div><div style={{fontWeight:600,fontSize:14,color:"#0f172a"}}>Save to client list</div><div style={{fontSize:12,color:"#64748b",marginTop:2}}>Remembers address & measurements</div></div>
+        <div onClick={()=>set("saveClient",!flow.saveClient)} style={{width:44,height:26,borderRadius:13,background:flow.saveClient?"#15803d":"#cbd5e1",cursor:"pointer",position:"relative",transition:"background .2s",flexShrink:0}}>
+          <div style={{width:22,height:22,background:"#ffffff",borderRadius:"50%",position:"absolute",top:2,left:flow.saveClient?20:2,transition:"left .2s",boxShadow:"0 1px 3px rgba(0,0,0,.2)"}}/>
         </div>
       </div>
       <Btn onClick={()=>onSend("sent")} disabled={saving} style={{width:"100%",marginBottom:10,fontSize:16}}>{saving?"Saving to database…":"📤 Send Quote"}</Btn>
