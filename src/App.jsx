@@ -1822,7 +1822,7 @@ function QuoteFlow({bp,step,setStep,flow,setFlow,errors,setErrors,settings,clien
       )}
       <div style={{padding:isDesktop?0:16}}>
         {step===1&&<S1 flow={flow} set={set} errors={errors} clients={clients}/>}
-        {step===2&&<S2 bp={bp} flow={flow} set={set} errors={errors} area={area} perim={perim}/>}
+        {step===2&&<S2 bp={bp} flow={flow} set={set} errors={errors} area={area} perim={perim} onAdvance={()=>setStep(3)}/>}
         {step===3&&<S3 bp={bp} flow={flow} set={set} area={area} perim={perim} calc={calc} time={time} settings={settings}/>}
         {step===4&&<S4 bp={bp} flow={flow} set={set} setFlow={setFlow} area={area} perim={perim} calc={calc} time={time} onSend={handleSend} saving={saving}/>}
         {step<4&&<Btn onClick={next} style={{width:"100%",marginTop:8}}>Next →</Btn>}
@@ -1893,7 +1893,7 @@ function S1({flow,set,errors,clients}){
   );
 }
 
-function S2({bp,flow,set,errors,area,perim}){
+function S2({bp,flow,set,errors,area,perim,onAdvance}){
   const twoCol = bp !== "mobile";
   const {canUseMap,showUpgrade} = usePlan();
   const [mTab,setMTab] = useState(canUseMap?"map":"manual");
@@ -1961,19 +1961,22 @@ function S2({bp,flow,set,errors,area,perim}){
           </div>
         </Card>
       )}
-      {mTab==="map" && canUseMap && <MapMeasure bp={bp} address={flow.address} confirmed={mapConfirmed} setConfirmed={setMapConfirmed} onConfirm={applyMapMeasurements} onSwitchManual={()=>setMTab("manual")}/>}
+      {mTab==="map" && canUseMap && <MapMeasure bp={bp} address={flow.address} confirmed={mapConfirmed} setConfirmed={setMapConfirmed} onConfirm={applyMapMeasurements} onSwitchManual={()=>setMTab("manual")} onAdvance={onAdvance}/>}
       {mTab==="manual" && manualBlock}
     </div>
   );
 }
 
-function MapMeasure({bp,address,confirmed,setConfirmed,onConfirm,onSwitchManual}){
+function MapMeasure({bp,address,confirmed,setConfirmed,onConfirm,onSwitchManual,onAdvance}){
   const isDesktop = bp==="desktop";
+  const isTouchDevice = typeof window !== "undefined" && (("ontouchstart" in window) || (navigator.maxTouchPoints||0) > 0);
+  const closeThresholdPx = isTouchDevice ? 40 : 25;
   const mapDivRef = useRef(null);
   const searchInputRef = useRef(null);
   const mapRef = useRef(null);
   const geocoderRef = useRef(null);
   const markersRef = useRef([]);
+  const firstRingRef = useRef(null);
   const polylineRef = useRef(null);
   const polygonsRef = useRef([]);
   const pointsRef = useRef([]);
@@ -1984,9 +1987,10 @@ function MapMeasure({bp,address,confirmed,setConfirmed,onConfirm,onSwitchManual}
   const [pointCount,setPointCount] = useState(0);
   const [polyCount,setPolyCount] = useState(0);
   const [totals,setTotals] = useState({area:0,perim:0});
-  const [hintVisible,setHintVisible] = useState(true);
-  const [tooltipVisible,setTooltipVisible] = useState(false);
-  const [justConfirmedTotals,setJustConfirmedTotals] = useState(null);
+  const [showTutorial,setShowTutorial] = useState(() => {
+    try { return localStorage.getItem("lb_map_tutorial_seen") !== "true"; } catch { return true; }
+  });
+  const [successOverlay,setSuccessOverlay] = useState(false);
 
   const recalc = () => {
     const g = window.google; if (!g) return;
@@ -2006,9 +2010,17 @@ function MapMeasure({bp,address,confirmed,setConfirmed,onConfirm,onSwitchManual}
   const addPoint = (latLng) => {
     const g = window.google;
     pointsRef.current.push(latLng);
+    const isFirst = pointsRef.current.length === 1;
+    // First point gets a halo ring so the user can see where to tap back to close
+    if (isFirst) {
+      firstRingRef.current = new g.maps.Marker({
+        position: latLng, map: mapRef.current, clickable: false, zIndex: 1,
+        icon: { path: g.maps.SymbolPath.CIRCLE, scale:14, fillColor:"#15803d", fillOpacity:0.15, strokeColor:"#15803d", strokeWeight:2 },
+      });
+    }
     const marker = new g.maps.Marker({
-      position: latLng, map: mapRef.current, clickable: false,
-      icon: { path: g.maps.SymbolPath.CIRCLE, scale:6, fillColor:"#15803d", fillOpacity:1, strokeColor:"#ffffff", strokeWeight:2 },
+      position: latLng, map: mapRef.current, clickable: false, zIndex: 2,
+      icon: { path: g.maps.SymbolPath.CIRCLE, scale:isFirst?8:6, fillColor:"#15803d", fillOpacity:1, strokeColor:"#ffffff", strokeWeight:isFirst?3:2 },
     });
     markersRef.current.push(marker);
     if (!polylineRef.current) {
@@ -2020,10 +2032,6 @@ function MapMeasure({bp,address,confirmed,setConfirmed,onConfirm,onSwitchManual}
       polylineRef.current.setPath(pointsRef.current);
     }
     setPointCount(pointsRef.current.length);
-    if (isDesktop && pointsRef.current.length === 1) {
-      setTooltipVisible(true);
-      setTimeout(()=>setTooltipVisible(false), 5000);
-    }
     recalc();
   };
 
@@ -2033,6 +2041,7 @@ function MapMeasure({bp,address,confirmed,setConfirmed,onConfirm,onSwitchManual}
     if (polylineRef.current){ polylineRef.current.setMap(null); polylineRef.current = null; }
     markersRef.current.forEach(m => m.setMap(null));
     markersRef.current = [];
+    if (firstRingRef.current){ firstRingRef.current.setMap(null); firstRingRef.current = null; }
     const poly = new g.maps.Polygon({
       paths: pointsRef.current, map: mapRef.current, clickable: false,
       strokeColor:"#15803d", strokeWeight:2, fillColor:"#16a34a", fillOpacity:0.25,
@@ -2048,6 +2057,7 @@ function MapMeasure({bp,address,confirmed,setConfirmed,onConfirm,onSwitchManual}
     if (pointsRef.current.length > 0) {
       pointsRef.current.pop();
       const m = markersRef.current.pop(); if (m) m.setMap(null);
+      if (pointsRef.current.length === 0 && firstRingRef.current){ firstRingRef.current.setMap(null); firstRingRef.current = null; }
       if (polylineRef.current) {
         if (pointsRef.current.length === 0){ polylineRef.current.setMap(null); polylineRef.current = null; }
         else polylineRef.current.setPath(pointsRef.current);
@@ -2066,18 +2076,20 @@ function MapMeasure({bp,address,confirmed,setConfirmed,onConfirm,onSwitchManual}
       if (!window.confirm("Clear all measurements?")) return;
     }
     markersRef.current.forEach(m => m.setMap(null)); markersRef.current = [];
+    if (firstRingRef.current){ firstRingRef.current.setMap(null); firstRingRef.current = null; }
     if (polylineRef.current){ polylineRef.current.setMap(null); polylineRef.current = null; }
     polygonsRef.current.forEach(p => p.setMap(null)); polygonsRef.current = [];
     pointsRef.current = [];
     setPointCount(0); setPolyCount(0); setTotals({area:0,perim:0});
-    setConfirmed(false); setJustConfirmedTotals(null);
+    setConfirmed(false);
   };
 
   const confirmNow = () => {
     if (polygonsRef.current.length === 0) return;
     onConfirm({ areaSqft: totals.area, perimFt: totals.perim });
-    setJustConfirmedTotals({...totals});
     setConfirmed(true);
+    setSuccessOverlay(true);
+    setTimeout(() => { setSuccessOverlay(false); onAdvance?.(); }, 1500);
   };
 
   const handleClick = (e) => {
@@ -2087,11 +2099,16 @@ function MapMeasure({bp,address,confirmed,setConfirmed,onConfirm,onSwitchManual}
       const first = pointsRef.current[0];
       const zoom = mapRef.current.getZoom();
       const mpp = 156543.03392 * Math.cos(first.lat() * Math.PI / 180) / Math.pow(2, zoom);
-      const threshold = 25 * mpp;
+      const threshold = closeThresholdPx * mpp;
       const dist = g.maps.geometry.spherical.computeDistanceBetween(e.latLng, first);
       if (dist < threshold) { closePolygon(); return; }
     }
     addPoint(e.latLng);
+  };
+
+  const dismissTutorial = () => {
+    try { localStorage.setItem("lb_map_tutorial_seen", "true"); } catch {}
+    setShowTutorial(false);
   };
 
   useEffect(() => {
@@ -2125,7 +2142,6 @@ function MapMeasure({bp,address,confirmed,setConfirmed,onConfirm,onSwitchManual}
           });
         }
         setMapState("ready");
-        setTimeout(()=>setHintVisible(false), 3000);
       };
       if (!address?.trim()) { setMapState("geocode-fail"); return; }
       geocoderRef.current = new google.maps.Geocoder();
@@ -2144,12 +2160,21 @@ function MapMeasure({bp,address,confirmed,setConfirmed,onConfirm,onSwitchManual}
 
   const mapHeight = isDesktop ? "calc(100vh - 240px)" : "max(300px, calc(100dvh - 300px))";
   const totalPointsPlaced = pointCount + polygonsRef.current.reduce((s,p)=>s+p.getPath().getLength(),0);
-  const canConfirm = polyCount > 0;
   const tbBtnHeight = isDesktop ? 40 : 48;
 
   if (mapState === "api-fail") {
     return <Card><div style={{fontSize:14,color:"#92400e",fontWeight:500}}>Map unavailable — using manual entry</div></Card>;
   }
+
+  const instructionText = polyCount > 0 && pointCount === 0
+    ? "✓ Shape closed — tap + Add Area or Use These Measurements"
+    : pointCount >= 3
+    ? "Tap near your first point to close the shape — or tap Close Shape"
+    : pointCount >= 1
+    ? "Keep tapping to trace the lawn edge"
+    : "Tap anywhere on your lawn to start dropping points";
+  const canClose = pointCount >= 3;
+  const drawingSomething = pointCount > 0 || polyCount > 0;
 
   return (
     <Card style={{padding:0,overflow:"hidden"}}>
@@ -2171,45 +2196,73 @@ function MapMeasure({bp,address,confirmed,setConfirmed,onConfirm,onSwitchManual}
             <Btn onClick={onSwitchManual}>Switch to Manual</Btn>
           </div>
         )}
-        {mapState==="ready" && hintVisible && (
-          <div style={{position:"absolute",top:64,left:"50%",transform:"translateX(-50%)",zIndex:5,background:"rgba(15,23,42,.85)",color:"#ffffff",padding:"8px 14px",borderRadius:10,fontSize:13,fontWeight:500,transition:"opacity .4s",pointerEvents:"none",whiteSpace:"nowrap"}}>Tap to place points around your lawn area</div>
+        {/* Persistent instruction pill */}
+        {mapState==="ready" && !confirmed && (
+          <div style={{position:"absolute",top:60,left:10,right:10,zIndex:4,display:"flex",justifyContent:"center",pointerEvents:"none"}}>
+            <div style={{background:"#ffffff",color:"#15803d",padding:"8px 14px",borderRadius:999,fontSize:13,fontWeight:600,boxShadow:"0 2px 10px rgba(0,0,0,.15)",maxWidth:"100%",textAlign:"center",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{instructionText}</div>
+          </div>
         )}
-        {mapState==="ready" && tooltipVisible && (
-          <div style={{position:"absolute",top:110,left:"50%",transform:"translateX(-50%)",zIndex:5,background:"#ffffff",color:"#0f172a",padding:"8px 14px",borderRadius:10,fontSize:12,fontWeight:500,boxShadow:"0 2px 10px rgba(0,0,0,.2)",pointerEvents:"none",whiteSpace:"nowrap"}}>💡 Click near the starting point to close the polygon</div>
-        )}
-        {mapState==="ready" && (
-          <div style={{position:"absolute",left:10,right:10,bottom:10,background:"#ffffff",borderRadius:12,padding:"10px 14px",boxShadow:"0 2px 10px rgba(0,0,0,.15)",fontSize:14,fontWeight:500,color:"#334155",display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
-            <div>
-              {totalPointsPlaced < 3 ? (
-                <div style={{color:"#94a3b8",fontSize:13,fontWeight:500}}>Area: — · Perimeter: —</div>
-              ) : (
-                <>
-                  <div><span style={{color:"#64748b"}}>Area:</span> <span style={{color:"#15803d",fontWeight:700}}>{totals.area.toLocaleString()} sqft</span> <span style={{color:"#94a3b8",fontSize:12}}>({(totals.area/43560).toFixed(2)} acres)</span></div>
-                  <div><span style={{color:"#64748b"}}>Perimeter:</span> <span style={{color:"#15803d",fontWeight:700}}>{totals.perim.toLocaleString()} ft</span></div>
-                </>
-              )}
+        {/* Tutorial onboarding overlay */}
+        {mapState==="ready" && showTutorial && (
+          <div style={{position:"absolute",inset:0,background:"rgba(15,23,42,.8)",zIndex:10,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:24,textAlign:"center"}}>
+            <div style={{width:64,height:64,borderRadius:"50%",background:"rgba(220,252,231,.15)",border:"2px solid #4ade80",display:"flex",alignItems:"center",justifyContent:"center",marginBottom:16}}>
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#4ade80" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 11.24V7.5a2.5 2.5 0 0 1 5 0v3.74"/><path d="M16 12a5 5 0 0 0-10 0v6a4 4 0 0 0 4 4h2a4 4 0 0 0 4-4v-1"/><path d="M15 12v-1.5a2.5 2.5 0 1 1 5 0V14"/></svg>
             </div>
-            {pointCount>=3 && !confirmed && (
-              <button onClick={closePolygon} style={{height:36,minHeight:36,padding:"0 12px",borderRadius:10,border:"1.5px solid #15803d",background:"#15803d",color:"#ffffff",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap",flexShrink:0}}>Close & Measure</button>
-            )}
+            <div style={{fontSize:20,fontWeight:800,color:"#ffffff",marginBottom:16,letterSpacing:-.3}}>Measure your lawn in 3 steps</div>
+            <div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:24,maxWidth:320,width:"100%"}}>
+              {[["1.","Tap to drop points around the lawn edge"],["2.","Close the shape by tapping near your first point"],["3.","Tap \"Use These Measurements\" to continue"]].map(([n,t])=>(
+                <div key={n} style={{display:"flex",alignItems:"flex-start",gap:12,background:"rgba(255,255,255,.08)",padding:"10px 14px",borderRadius:10,textAlign:"left"}}>
+                  <span style={{fontSize:14,fontWeight:800,color:"#4ade80",flexShrink:0,width:18}}>{n}</span>
+                  <span style={{fontSize:13,color:"#e2e8f0",fontWeight:500,lineHeight:1.5}}>{t}</span>
+                </div>
+              ))}
+            </div>
+            <Btn onClick={dismissTutorial} style={{width:"100%",maxWidth:320}}>Got it — Start Drawing</Btn>
+          </div>
+        )}
+        {/* Success overlay */}
+        {successOverlay && (
+          <div style={{position:"absolute",inset:0,background:"rgba(15,23,42,.85)",zIndex:12,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:24,textAlign:"center"}}>
+            <div style={{width:80,height:80,borderRadius:"50%",background:"#dcfce7",display:"flex",alignItems:"center",justifyContent:"center",marginBottom:16,animation:"lb-fade-in .25s ease-out"}}>
+              <svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="#15803d" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+            </div>
+            <div style={{fontSize:16,fontWeight:700,color:"#ffffff",maxWidth:280,lineHeight:1.4}}>Measurements locked in — continue to build your quote</div>
           </div>
         )}
       </div>
-      <div style={{padding:12,display:"flex",gap:8}}>
-        <Btn variant="secondary" onClick={undoPoint} disabled={pointCount===0 && polyCount===0} style={{flex:1,height:tbBtnHeight,minHeight:tbBtnHeight,padding:"0 10px",fontSize:13}}>↩ Undo Point</Btn>
-        <Btn variant="secondary" onClick={()=>clearAll(false)} disabled={pointCount===0 && polyCount===0} style={{flex:1,height:tbBtnHeight,minHeight:tbBtnHeight,padding:"0 10px",fontSize:13}}>✕ Clear All</Btn>
-        {confirmed ? (
-          <Btn variant="outline" onClick={()=>clearAll(true)} style={{flex:"1.4",height:tbBtnHeight,minHeight:tbBtnHeight,padding:"0 10px",fontSize:13}}>↻ Redraw</Btn>
-        ) : (
-          <Btn onClick={confirmNow} disabled={!canConfirm} style={{flex:"1.4",height:tbBtnHeight,minHeight:tbBtnHeight,padding:"0 10px",fontSize:13}}>✓ Use These</Btn>
-        )}
-      </div>
-      {confirmed && justConfirmedTotals && (
-        <div style={{padding:"10px 14px",background:"#f0fdf4",borderTop:"1px solid #bbf7d0",color:"#166534",fontSize:13,fontWeight:600,display:"flex",alignItems:"center",gap:8}}>
-          <span style={{fontSize:15}}>✓</span>
-          <span>Measurements set — {justConfirmedTotals.area.toLocaleString()} sqft · {justConfirmedTotals.perim.toLocaleString()} ft</span>
+
+      {/* Prominent measurement readout card */}
+      {mapState==="ready" && (
+        <div style={{padding:"14px 16px",borderTop:"1px solid #e2e8f0",background:"#ffffff"}}>
+          {totalPointsPlaced < 3 ? (
+            <div style={{fontSize:13,color:"#94a3b8",fontWeight:500,textAlign:"center",padding:"6px 0"}}>Drop at least 3 points to see measurements</div>
+          ) : (
+            <div style={{display:"flex",flexDirection:"column",gap:10}}>
+              <div>
+                <div style={{fontSize:14,fontWeight:700,color:"#0f172a",letterSpacing:-.1}}>📐 Area: <span style={{color:"#15803d"}}>{totals.area.toLocaleString()} sqft</span> <span style={{color:"#64748b",fontSize:13,fontWeight:500}}>({(totals.area/43560).toFixed(2)} acres)</span></div>
+                <div style={{fontSize:11,color:"#94a3b8",fontWeight:500,marginTop:2,paddingLeft:22}}>This drives your mowing price</div>
+              </div>
+              <div>
+                <div style={{fontSize:14,fontWeight:700,color:"#0f172a",letterSpacing:-.1}}>📏 Perimeter: <span style={{color:"#15803d"}}>{totals.perim.toLocaleString()} ft</span></div>
+                <div style={{fontSize:11,color:"#94a3b8",fontWeight:500,marginTop:2,paddingLeft:22}}>This drives your trimming price</div>
+              </div>
+            </div>
+          )}
         </div>
       )}
+
+      {/* Toolbar */}
+      <div style={{padding:12,display:"flex",gap:8,flexWrap:"wrap"}}>
+        <Btn variant="secondary" onClick={undoPoint} disabled={!drawingSomething || confirmed} style={{flex:1,minWidth:0,height:tbBtnHeight,minHeight:tbBtnHeight,padding:"0 10px",fontSize:13}}>↩ Undo</Btn>
+        {!confirmed && canClose && <Btn onClick={closePolygon} style={{flex:"1.3",minWidth:0,height:tbBtnHeight,minHeight:tbBtnHeight,padding:"0 10px",fontSize:13}}>Close Shape</Btn>}
+        {!confirmed && polyCount>0 && pointCount===0 && <Btn variant="outline" onClick={()=>mapDivRef.current?.scrollIntoView({behavior:"smooth",block:"nearest"})} style={{flex:"1.3",minWidth:0,height:tbBtnHeight,minHeight:tbBtnHeight,padding:"0 10px",fontSize:13}}>+ Add Area</Btn>}
+        <Btn variant="secondary" onClick={()=>clearAll(false)} disabled={!drawingSomething} style={{flex:1,minWidth:0,height:tbBtnHeight,minHeight:tbBtnHeight,padding:"0 10px",fontSize:13}}>✕ Clear</Btn>
+        {confirmed
+          ? <Btn variant="outline" onClick={()=>clearAll(true)} style={{flex:"1.3",minWidth:0,height:tbBtnHeight,minHeight:tbBtnHeight,padding:"0 10px",fontSize:13}}>↻ Redraw</Btn>
+          : <Btn onClick={confirmNow} disabled={polyCount===0} style={{flex:"1.6",minWidth:0,height:tbBtnHeight,minHeight:tbBtnHeight,padding:"0 10px",fontSize:13}}>✓ Use These Measurements</Btn>
+        }
+      </div>
+
       <div style={{padding:"8px 14px 12px",fontSize:11,color:"#94a3b8",fontWeight:500,lineHeight:1.4}}>Satellite imagery may not reflect recent construction. Verify new structures on site.</div>
     </Card>
   );
