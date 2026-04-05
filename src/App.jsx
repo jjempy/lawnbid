@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import jsPDF from "jspdf";
+import { Loader } from "@googlemaps/js-api-loader";
 import supabase, {
   loadQuotes, upsertQuote, deleteQuote, updateQuoteStatus,
   loadClients, upsertClient,
@@ -38,6 +39,14 @@ const PERIM_UNITS = [
   { label: "yards",     value: "yd", conv: v => v * 3 },
   { label: "miles",     value: "mi", conv: v => v * 5280 },
 ];
+// ─── Google Maps loader (single shared promise) ───
+const mapsLoader = new Loader({
+  apiKey: import.meta.env.VITE_GOOGLE_MAPS_KEY,
+  version: "weekly",
+  libraries: ["geometry","places"],
+});
+const mapsReady = mapsLoader.load().catch(err => { console.error("Google Maps failed to load:", err); throw err; });
+
 const MAX_ATTACHMENTS = 5;
 const MAX_FILE_BYTES = 10 * 1024 * 1024; // 10MB
 const ALLOWED_EXT = ["jpg","jpeg","png","pdf","txt","heic"];
@@ -1277,6 +1286,14 @@ function S1({flow,set,errors,clients}){
 
 function S2({bp,flow,set,errors,area,perim}){
   const twoCol = bp !== "mobile";
+  const [mTab,setMTab] = useState("map");
+  const [mapConfirmed,setMapConfirmed] = useState(false);
+  const applyMapMeasurements = ({areaSqft, perimFt}) => {
+    set("areaVal", String(areaSqft));
+    set("areaUnit", "sqft");
+    set("perimVal", String(perimFt));
+    set("perimUnit", "ft");
+  };
   const areaCard = (
     <Card>
       <Lbl>Lawn Area</Lbl>
@@ -1301,17 +1318,269 @@ function S2({bp,flow,set,errors,area,perim}){
       <div style={{fontSize:11,color:"#94a3b8",marginTop:6}}>💡 Perimeter drives your trimming price. Rough guide: perimeter ≈ 4 × √area</div>
     </Card>
   );
+  const manualBlock = twoCol ? (
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+      <div style={{minWidth:0}}>{areaCard}</div>
+      <div style={{minWidth:0}}>{perimCard}</div>
+    </div>
+  ) : (<>{areaCard}{perimCard}</>);
+
   return(
     <div>
       {flow.clientId&&flow.areaVal&&<div style={{background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:12,padding:"10px 14px",marginBottom:12,fontSize:13,color:"#166534"}}>📐 Measurements pre-filled from last quote. Adjust if area has changed.</div>}
-      <div style={{background:"#fffbeb",border:"1px solid #fde68a",borderRadius:12,padding:"10px 14px",marginBottom:12,fontSize:13,color:"#92400e"}}>🗺 Satellite map measurement coming in V2. Enter dimensions manually below.</div>
-      {twoCol ? (
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-          <div style={{minWidth:0}}>{areaCard}</div>
-          <div style={{minWidth:0}}>{perimCard}</div>
-        </div>
-      ) : (<>{areaCard}{perimCard}</>)}
+      <div style={{display:"flex",gap:6,marginBottom:12,background:"#f1f5f9",borderRadius:12,padding:4}}>
+        {[["map","🗺 Map"],["manual","✏️ Manual"]].map(([k,lbl])=>{
+          const active = mTab===k;
+          return (
+            <button key={k} onClick={()=>setMTab(k)} style={{flex:1,height:40,minHeight:40,border:"none",borderRadius:9,background:active?"#ffffff":"transparent",color:active?"#0f172a":"#64748b",fontWeight:active?700:600,fontSize:13,cursor:"pointer",fontFamily:"inherit",boxShadow:active?"0 1px 3px rgba(0,0,0,.08)":"none"}}>{lbl}</button>
+          );
+        })}
+      </div>
+      {mTab==="map"
+        ? <MapMeasure bp={bp} address={flow.address} confirmed={mapConfirmed} setConfirmed={setMapConfirmed} onConfirm={applyMapMeasurements} onSwitchManual={()=>setMTab("manual")}/>
+        : manualBlock}
     </div>
+  );
+}
+
+function MapMeasure({bp,address,confirmed,setConfirmed,onConfirm,onSwitchManual}){
+  const isDesktop = bp==="desktop";
+  const mapDivRef = useRef(null);
+  const searchInputRef = useRef(null);
+  const mapRef = useRef(null);
+  const geocoderRef = useRef(null);
+  const markersRef = useRef([]);
+  const polylineRef = useRef(null);
+  const polygonsRef = useRef([]);
+  const pointsRef = useRef([]);
+  const confirmedRef = useRef(confirmed);
+  confirmedRef.current = confirmed;
+
+  const [mapState,setMapState] = useState("loading"); // loading | ready | geocode-fail | api-fail
+  const [pointCount,setPointCount] = useState(0);
+  const [polyCount,setPolyCount] = useState(0);
+  const [totals,setTotals] = useState({area:0,perim:0});
+  const [hintVisible,setHintVisible] = useState(true);
+  const [tooltipVisible,setTooltipVisible] = useState(false);
+  const [justConfirmedTotals,setJustConfirmedTotals] = useState(null);
+
+  const recalc = () => {
+    const g = window.google; if (!g) return;
+    let areaM2=0, perimM=0;
+    const addFromArr = arr => {
+      if (arr.length < 3) return;
+      areaM2 += g.maps.geometry.spherical.computeArea(arr);
+      for (let i=0;i<arr.length;i++){
+        perimM += g.maps.geometry.spherical.computeDistanceBetween(arr[i], arr[(i+1)%arr.length]);
+      }
+    };
+    polygonsRef.current.forEach(p => addFromArr(p.getPath().getArray()));
+    addFromArr(pointsRef.current);
+    setTotals({ area: Math.round(areaM2*10.7639), perim: Math.round(perimM*3.28084) });
+  };
+
+  const addPoint = (latLng) => {
+    const g = window.google;
+    pointsRef.current.push(latLng);
+    const marker = new g.maps.Marker({
+      position: latLng, map: mapRef.current, clickable: false,
+      icon: { path: g.maps.SymbolPath.CIRCLE, scale:6, fillColor:"#15803d", fillOpacity:1, strokeColor:"#ffffff", strokeWeight:2 },
+    });
+    markersRef.current.push(marker);
+    if (!polylineRef.current) {
+      polylineRef.current = new g.maps.Polyline({
+        path: pointsRef.current, map: mapRef.current, clickable: false,
+        strokeColor:"#15803d", strokeWeight:2, strokeOpacity:0.9,
+      });
+    } else {
+      polylineRef.current.setPath(pointsRef.current);
+    }
+    setPointCount(pointsRef.current.length);
+    if (isDesktop && pointsRef.current.length === 1) {
+      setTooltipVisible(true);
+      setTimeout(()=>setTooltipVisible(false), 5000);
+    }
+    recalc();
+  };
+
+  const closePolygon = () => {
+    if (pointsRef.current.length < 3) return;
+    const g = window.google;
+    if (polylineRef.current){ polylineRef.current.setMap(null); polylineRef.current = null; }
+    markersRef.current.forEach(m => m.setMap(null));
+    markersRef.current = [];
+    const poly = new g.maps.Polygon({
+      paths: pointsRef.current, map: mapRef.current, clickable: false,
+      strokeColor:"#15803d", strokeWeight:2, fillColor:"#16a34a", fillOpacity:0.25,
+    });
+    polygonsRef.current.push(poly);
+    pointsRef.current = [];
+    setPointCount(0);
+    setPolyCount(polygonsRef.current.length);
+    recalc();
+  };
+
+  const undoPoint = () => {
+    if (pointsRef.current.length > 0) {
+      pointsRef.current.pop();
+      const m = markersRef.current.pop(); if (m) m.setMap(null);
+      if (polylineRef.current) {
+        if (pointsRef.current.length === 0){ polylineRef.current.setMap(null); polylineRef.current = null; }
+        else polylineRef.current.setPath(pointsRef.current);
+      }
+      setPointCount(pointsRef.current.length);
+    } else if (polygonsRef.current.length > 0) {
+      const last = polygonsRef.current.pop();
+      last.setMap(null);
+      setPolyCount(polygonsRef.current.length);
+    }
+    recalc();
+  };
+
+  const clearAll = (skipConfirm=false) => {
+    if (!skipConfirm && polygonsRef.current.length > 0) {
+      if (!window.confirm("Clear all measurements?")) return;
+    }
+    markersRef.current.forEach(m => m.setMap(null)); markersRef.current = [];
+    if (polylineRef.current){ polylineRef.current.setMap(null); polylineRef.current = null; }
+    polygonsRef.current.forEach(p => p.setMap(null)); polygonsRef.current = [];
+    pointsRef.current = [];
+    setPointCount(0); setPolyCount(0); setTotals({area:0,perim:0});
+    setConfirmed(false); setJustConfirmedTotals(null);
+  };
+
+  const confirmNow = () => {
+    if (polygonsRef.current.length === 0) return;
+    onConfirm({ areaSqft: totals.area, perimFt: totals.perim });
+    setJustConfirmedTotals({...totals});
+    setConfirmed(true);
+  };
+
+  const handleClick = (e) => {
+    if (confirmedRef.current) return;
+    const g = window.google;
+    if (pointsRef.current.length >= 3) {
+      const first = pointsRef.current[0];
+      const zoom = mapRef.current.getZoom();
+      const mpp = 156543.03392 * Math.cos(first.lat() * Math.PI / 180) / Math.pow(2, zoom);
+      const threshold = 25 * mpp;
+      const dist = g.maps.geometry.spherical.computeDistanceBetween(e.latLng, first);
+      if (dist < threshold) { closePolygon(); return; }
+    }
+    addPoint(e.latLng);
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    mapsReady.then(google => {
+      if (cancelled || !mapDivRef.current) return;
+      const init = (center) => {
+        mapRef.current = new google.maps.Map(mapDivRef.current, {
+          center, zoom:19, mapTypeId:"satellite",
+          zoomControl:true, mapTypeControl:false, streetViewControl:false, fullscreenControl:false,
+          gestureHandling:"greedy", clickableIcons:false,
+        });
+        mapRef.current.addListener("click", handleClick);
+        if (searchInputRef.current) {
+          const ac = new google.maps.places.Autocomplete(searchInputRef.current, { fields:["geometry","formatted_address"] });
+          ac.addListener("place_changed", () => {
+            const place = ac.getPlace();
+            if (!place.geometry?.location) return;
+            if (polygonsRef.current.length>0 || pointsRef.current.length>0) {
+              if (!window.confirm("Clear all measurements and move to new location?")) return;
+            }
+            clearAll(true);
+            mapRef.current.setCenter(place.geometry.location);
+            mapRef.current.setZoom(19);
+          });
+        }
+        setMapState("ready");
+        setTimeout(()=>setHintVisible(false), 3000);
+      };
+      if (!address?.trim()) { setMapState("geocode-fail"); return; }
+      geocoderRef.current = new google.maps.Geocoder();
+      geocoderRef.current.geocode({ address }, (results, status) => {
+        if (cancelled) return;
+        if (status !== "OK" || !results?.[0]) { setMapState("geocode-fail"); return; }
+        init(results[0].geometry.location);
+      });
+    }).catch(()=>{ if(!cancelled) setMapState("api-fail"); });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [address]);
+
+  // ── API-fail → auto-switch to manual ──
+  useEffect(() => { if (mapState==="api-fail") onSwitchManual?.(); }, [mapState, onSwitchManual]);
+
+  const mapHeight = isDesktop ? "calc(100vh - 240px)" : "max(300px, calc(100dvh - 300px))";
+  const totalPointsPlaced = pointCount + polygonsRef.current.reduce((s,p)=>s+p.getPath().getLength(),0);
+  const canConfirm = polyCount > 0;
+  const tbBtnHeight = isDesktop ? 40 : 48;
+
+  if (mapState === "api-fail") {
+    return <Card><div style={{fontSize:14,color:"#92400e",fontWeight:500}}>Map unavailable — using manual entry</div></Card>;
+  }
+
+  return (
+    <Card style={{padding:0,overflow:"hidden"}}>
+      <div style={{position:"relative",width:"100%",height:mapHeight,minHeight:300,background:"#e5e7eb"}}>
+        {/* Search input overlay */}
+        <input ref={searchInputRef} defaultValue={address||""} placeholder="Search for an address…"
+          style={{position:"absolute",top:10,left:10,right:10,zIndex:5,height:40,padding:"0 14px",border:"none",borderRadius:10,boxShadow:"0 2px 8px rgba(0,0,0,.15)",fontSize:16,fontFamily:"inherit",background:"#ffffff",color:"#0f172a",outline:"none"}}/>
+        <div ref={mapDivRef} style={{position:"absolute",inset:0,width:"100%",height:"100%"}}/>
+        {mapState==="loading" && (
+          <div style={{position:"absolute",inset:0,background:"#e5e7eb",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:10,color:"#64748b",fontSize:14,fontWeight:500}}>
+            <div style={{width:32,height:32,border:"3px solid #cbd5e1",borderTopColor:"#15803d",borderRadius:"50%",animation:"spin 0.8s linear infinite"}}/>
+            Loading satellite view…
+          </div>
+        )}
+        {mapState==="geocode-fail" && (
+          <div style={{position:"absolute",inset:0,background:"rgba(248,250,252,.95)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:12,padding:20,textAlign:"center"}}>
+            <div style={{fontSize:32}}>📍</div>
+            <div style={{fontSize:14,color:"#334155",fontWeight:500,maxWidth:320}}>Could not locate this address on the map. Try the Manual tab or check the address in Step 1.</div>
+            <Btn onClick={onSwitchManual}>Switch to Manual</Btn>
+          </div>
+        )}
+        {mapState==="ready" && hintVisible && (
+          <div style={{position:"absolute",top:64,left:"50%",transform:"translateX(-50%)",zIndex:5,background:"rgba(15,23,42,.85)",color:"#ffffff",padding:"8px 14px",borderRadius:10,fontSize:13,fontWeight:500,transition:"opacity .4s",pointerEvents:"none",whiteSpace:"nowrap"}}>Tap to place points around your lawn area</div>
+        )}
+        {mapState==="ready" && tooltipVisible && (
+          <div style={{position:"absolute",top:110,left:"50%",transform:"translateX(-50%)",zIndex:5,background:"#ffffff",color:"#0f172a",padding:"8px 14px",borderRadius:10,fontSize:12,fontWeight:500,boxShadow:"0 2px 10px rgba(0,0,0,.2)",pointerEvents:"none",whiteSpace:"nowrap"}}>💡 Click near the starting point to close the polygon</div>
+        )}
+        {mapState==="ready" && (
+          <div style={{position:"absolute",left:10,right:10,bottom:10,background:"#ffffff",borderRadius:12,padding:"10px 14px",boxShadow:"0 2px 10px rgba(0,0,0,.15)",fontSize:14,fontWeight:500,color:"#334155",display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
+            <div>
+              {totalPointsPlaced < 3 ? (
+                <div style={{color:"#94a3b8",fontSize:13,fontWeight:500}}>Area: — · Perimeter: —</div>
+              ) : (
+                <>
+                  <div><span style={{color:"#64748b"}}>Area:</span> <span style={{color:"#15803d",fontWeight:700}}>{totals.area.toLocaleString()} sqft</span> <span style={{color:"#94a3b8",fontSize:12}}>({(totals.area/43560).toFixed(2)} acres)</span></div>
+                  <div><span style={{color:"#64748b"}}>Perimeter:</span> <span style={{color:"#15803d",fontWeight:700}}>{totals.perim.toLocaleString()} ft</span></div>
+                </>
+              )}
+            </div>
+            {pointCount>=3 && !confirmed && (
+              <button onClick={closePolygon} style={{height:36,minHeight:36,padding:"0 12px",borderRadius:10,border:"1.5px solid #15803d",background:"#15803d",color:"#ffffff",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap",flexShrink:0}}>Close & Measure</button>
+            )}
+          </div>
+        )}
+      </div>
+      <div style={{padding:12,display:"flex",gap:8}}>
+        <Btn variant="secondary" onClick={undoPoint} disabled={pointCount===0 && polyCount===0} style={{flex:1,height:tbBtnHeight,minHeight:tbBtnHeight,padding:"0 10px",fontSize:13}}>↩ Undo Point</Btn>
+        <Btn variant="secondary" onClick={()=>clearAll(false)} disabled={pointCount===0 && polyCount===0} style={{flex:1,height:tbBtnHeight,minHeight:tbBtnHeight,padding:"0 10px",fontSize:13}}>✕ Clear All</Btn>
+        {confirmed ? (
+          <Btn variant="outline" onClick={()=>clearAll(true)} style={{flex:"1.4",height:tbBtnHeight,minHeight:tbBtnHeight,padding:"0 10px",fontSize:13}}>↻ Redraw</Btn>
+        ) : (
+          <Btn onClick={confirmNow} disabled={!canConfirm} style={{flex:"1.4",height:tbBtnHeight,minHeight:tbBtnHeight,padding:"0 10px",fontSize:13}}>✓ Use These</Btn>
+        )}
+      </div>
+      {confirmed && justConfirmedTotals && (
+        <div style={{padding:"10px 14px",background:"#f0fdf4",borderTop:"1px solid #bbf7d0",color:"#166534",fontSize:13,fontWeight:600,display:"flex",alignItems:"center",gap:8}}>
+          <span style={{fontSize:15}}>✓</span>
+          <span>Measurements set — {justConfirmedTotals.area.toLocaleString()} sqft · {justConfirmedTotals.perim.toLocaleString()} ft</span>
+        </div>
+      )}
+    </Card>
   );
 }
 
