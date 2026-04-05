@@ -50,6 +50,14 @@
     transition: background 0.2s, transform 0.1s;
   }
   .nav-cta:hover { background: #15803d; transform: translateY(-1px); }
+  .nav-signin {
+    color: rgba(255,255,255,0.75); text-decoration: none;
+    font-weight: 500; font-size: 14px; letter-spacing: -0.1px;
+    padding: 10px 14px; margin-right: 4px;
+    transition: color 0.15s;
+  }
+  .nav-signin:hover { color: var(--white); }
+  .nav-actions { display: flex; align-items: center; gap: 4px; }
 
   /* ── HERO ── */
   .hero {
@@ -321,7 +329,10 @@
     <img src="/logo.png" alt="WinWin LawnBid"/>
     <span>WinWin LawnBid</span>
   </a>
-  <a href="https://winwinlawnbid.com/app" class="nav-cta">Start Free →</a>
+  <div class="nav-actions">
+    <a href="https://winwinlawnbid.com/app" class="nav-signin">Sign In</a>
+    <a href="https://winwinlawnbid.com/app" class="nav-cta">Start Free →</a>
+  </div>
 </nav>
 
 <!-- HERO -->
