@@ -10,14 +10,38 @@
   --border: #e2e8f0;
   --danger: #dc2626;
 
+  /* Responsive scale tokens */
+  --card-padding: 20px;
+  --card-heading: 15px;
+  --price-hero: 52px;
+  --base-font: 14px;
+
   --font: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
 
   color-scheme: light;
   font-family: var(--font);
+  font-size: var(--base-font);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
   font-synthesis: none;
+}
+
+/* Tablet */
+@media (min-width: 768px) {
+  :root {
+    --card-padding: 24px;
+  }
+}
+
+/* Desktop */
+@media (min-width: 1200px) {
+  :root {
+    --card-padding: 24px;
+    --card-heading: 17px;
+    --price-hero: 64px;
+    --base-font: 15px;
+  }
 }
 
 * { box-sizing: border-box; }
@@ -29,28 +53,53 @@ html, body {
   color: var(--text);
   font-family: var(--font);
   -webkit-tap-highlight-color: transparent;
+  font-size: var(--base-font);
 }
 
 #root {
   width: 100%;
-  min-height: 100svh;
+  min-height: 100vh;
+  min-height: 100dvh;
 }
 
 button {
   font-family: var(--font);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none;
+  user-select: none;
   transition: transform 0.08s ease, background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
 button:active:not(:disabled) {
   transform: scale(0.98);
 }
+button:disabled { cursor: not-allowed; }
 
 input, select, textarea {
   font-family: var(--font);
+  font-size: 16px;                   /* iOS: <16px causes page zoom on focus */
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  border-radius: 12px;               /* iOS ignores inherited border-radius on form elements */
 }
 input:focus, select:focus, textarea:focus {
   border-color: var(--primary) !important;
   outline: none;
 }
+select {
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path fill='%2364748b' d='M2 4l4 4 4-4z'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  padding-right: 28px;
+}
+
+/* Momentum scrolling for scrollable containers (iOS) */
+.lb-scroll {
+  -webkit-overflow-scrolling: touch;
+  overflow-y: auto;
+}
 
 /* Scrollable rows don't show ugly scrollbars on mobile */
 ::-webkit-scrollbar { height: 0; width: 0; }
+.lb-scroll::-webkit-scrollbar { width: 0; height: 0; }

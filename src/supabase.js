@@ -93,6 +93,26 @@ export async function saveSettings(settings) {
   if (error) throw error
 }
 
+// ─── Quote Attachments ────────────────────────────────────────────────────────────
+const ATTACH_BUCKET = 'quote-attachments'
+
+export async function uploadQuoteFile(quoteId, file) {
+  const cleanName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
+  const path = `quotes/${quoteId}/${Date.now()}-${cleanName}`
+  const { error } = await supabase.storage
+    .from(ATTACH_BUCKET)
+    .upload(path, file, { contentType: file.type, upsert: false })
+  if (error) throw error
+  const { data } = supabase.storage.from(ATTACH_BUCKET).getPublicUrl(path)
+  return { path, url: data.publicUrl }
+}
+
+export async function deleteQuoteFile(path) {
+  if (!path) return
+  const { error } = await supabase.storage.from(ATTACH_BUCKET).remove([path])
+  if (error) console.warn('Could not delete attachment:', error.message)
+}
+
 // ─── Quote ID ─────────────────────────────────────────────────────────────────────
 export async function nextQuoteId() {
   const { data, error } = await supabase.rpc('next_quote_id')
