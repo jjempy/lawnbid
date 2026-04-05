@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, forwardRef } from "react";
 import jsPDF from "jspdf";
 import supabase, {
   loadQuotes, upsertQuote, deleteQuote, updateQuoteStatus,
@@ -298,7 +298,7 @@ function quoteText(q, s) {
 const CARD_SHADOW = "0 1px 3px rgba(0,0,0,.06), 0 1px 2px rgba(0,0,0,.04)";
 const Card  = ({children,style={},onClick,...p}) => <div onClick={onClick} style={{background:"#ffffff",borderRadius:16,padding:"var(--card-padding)",marginBottom:12,boxShadow:CARD_SHADOW,cursor:onClick?"pointer":undefined,...style}} {...p}>{children}</div>;
 const Lbl   = ({children,style={}}) => <div style={{fontSize:11,fontWeight:700,color:"#64748b",letterSpacing:1,textTransform:"uppercase",marginBottom:10,...style}}>{children}</div>;
-const Inp   = ({style={},...p}) => <input style={{width:"100%",height:48,padding:"0 14px",border:"1.5px solid #e2e8f0",borderRadius:12,fontSize:16,fontWeight:500,color:"#0f172a",background:"#ffffff",outline:"none",boxSizing:"border-box",fontFamily:"inherit",...style}} {...p}/>;
+const Inp   = forwardRef(({style={},...p},ref) => <input ref={ref} style={{width:"100%",height:48,padding:"0 14px",border:"1.5px solid #e2e8f0",borderRadius:12,fontSize:16,fontWeight:500,color:"#0f172a",background:"#ffffff",outline:"none",boxSizing:"border-box",fontFamily:"inherit",...style}} {...p}/>);
 const Sel   = ({style={},...p}) => <select style={{height:48,padding:"0 10px",border:"1.5px solid #e2e8f0",borderRadius:12,fontSize:14,fontWeight:500,color:"#0f172a",background:"#ffffff",outline:"none",fontFamily:"inherit",...style}} {...p}/>;
 const Btn   = ({children,variant="primary",style={},...p}) => {
   const vs={
@@ -1326,6 +1326,24 @@ function QuoteFlow({bp,step,setStep,flow,setFlow,errors,setErrors,settings,clien
 
 function S1({flow,set,errors,clients}){
   const [sugg,setSugg]=useState([]);
+  const addressRef = useRef(null);
+  useEffect(() => {
+    let cancelled = false;
+    mapsReady.then(google => {
+      if (cancelled || !addressRef.current || !google?.maps?.places) return;
+      const ac = new google.maps.places.Autocomplete(addressRef.current, {
+        types: ["address"],
+        componentRestrictions: { country: "us" },
+        fields: ["formatted_address","geometry"],
+      });
+      ac.addListener("place_changed", () => {
+        const place = ac.getPlace();
+        if (place?.formatted_address) set("address", place.formatted_address);
+      });
+    }).catch(()=>{});
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const onName=v=>{set("clientName",v);set("clientId",null);setSugg(v.length>1?clients.filter(c=>c.name?.toLowerCase().includes(v.toLowerCase())||c.phone?.includes(v)).slice(0,5):[]);};
   const pick=c=>{set("clientId",c.id);set("clientName",c.name);set("clientPhone",c.phone||"");set("clientEmail",c.email||"");set("address",c.default_address||"");if(c.last_area_sqft){set("areaVal",String(c.last_area_sqft));set("areaUnit","sqft");}if(c.last_linear_ft){set("perimVal",String(c.last_linear_ft));set("perimUnit","ft");}setSugg([]);};
   return(
@@ -1360,7 +1378,7 @@ function S1({flow,set,errors,clients}){
       </Card>
       <Card>
         <Lbl>Job Address</Lbl>
-        <Inp value={flow.address} onChange={e=>set("address",e.target.value)} placeholder="123 Main St, City, State"/>
+        <Inp ref={addressRef} value={flow.address} onChange={e=>set("address",e.target.value)} placeholder="Start typing an address…" autoComplete="off"/>
         <ErrMsg msg={errors.address}/>
       </Card>
     </div>
@@ -1559,10 +1577,15 @@ function MapMeasure({bp,address,confirmed,setConfirmed,onConfirm,onSwitchManual}
       if (cancelled || !mapDivRef.current) return;
       const init = (center) => {
         mapRef.current = new google.maps.Map(mapDivRef.current, {
-          center, zoom:19, mapTypeId:"satellite",
-          zoomControl:true, mapTypeControl:false, streetViewControl:false, fullscreenControl:false,
+          center, zoom:20, mapTypeId:"satellite",
+          tilt:0, heading:0,
+          zoomControl:true, mapTypeControl:false, streetViewControl:false, fullscreenControl:false, rotateControl:false,
           gestureHandling:"greedy", clickableIcons:false,
         });
+        mapRef.current.setMapTypeId(google.maps.MapTypeId.SATELLITE);
+        mapRef.current.setTilt(0);
+        mapRef.current.addListener("tilesloaded", () => mapRef.current.setTilt(0));
+        mapRef.current.addListener("zoom_changed", () => mapRef.current.setTilt(0));
         mapRef.current.addListener("click", handleClick);
         if (searchInputRef.current) {
           const ac = new google.maps.places.Autocomplete(searchInputRef.current, { fields:["geometry","formatted_address"] });
@@ -1574,7 +1597,8 @@ function MapMeasure({bp,address,confirmed,setConfirmed,onConfirm,onSwitchManual}
             }
             clearAll(true);
             mapRef.current.setCenter(place.geometry.location);
-            mapRef.current.setZoom(19);
+            mapRef.current.setZoom(20);
+            mapRef.current.setTilt(0);
           });
         }
         setMapState("ready");
@@ -1663,6 +1687,7 @@ function MapMeasure({bp,address,confirmed,setConfirmed,onConfirm,onSwitchManual}
           <span>Measurements set — {justConfirmedTotals.area.toLocaleString()} sqft · {justConfirmedTotals.perim.toLocaleString()} ft</span>
         </div>
       )}
+      <div style={{padding:"8px 14px 12px",fontSize:11,color:"#94a3b8",fontWeight:500,lineHeight:1.4}}>Satellite imagery may not reflect recent construction. Verify new structures on site.</div>
     </Card>
   );
 }
