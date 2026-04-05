@@ -9,17 +9,21 @@ export default defineConfig({
     {
       name: 'copy-files',
       closeBundle() {
-        if (existsSync('public/_redirects')) {
-          copyFileSync('public/_redirects', 'dist/_redirects')
-          console.log('✓ _redirects copied')
+        // Step 1: Preserve Vite's built index.html as dist/app.html (the React entry)
+        if (existsSync('dist/index.html')) {
+          copyFileSync('dist/index.html', 'dist/app.html')
+          console.log('✓ dist/index.html → dist/app.html (React app)')
         }
+        // Step 2: Overwrite dist/index.html with the landing page so / serves landing
         if (existsSync('public/landing.html')) {
           copyFileSync('public/landing.html', 'dist/landing.html')
           console.log('✓ landing.html copied')
+          copyFileSync('public/landing.html', 'dist/index.html')
+          console.log('✓ landing.html → dist/index.html (root)')
         }
-        if (existsSync('public/_worker.js')) {
-          copyFileSync('public/_worker.js', 'dist/_worker.js')
-          console.log('✓ _worker.js copied')
+        if (existsSync('public/_redirects')) {
+          copyFileSync('public/_redirects', 'dist/_redirects')
+          console.log('✓ _redirects copied')
         }
       },
     },
