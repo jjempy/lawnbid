@@ -107,6 +107,16 @@ select {
 /* Loading spinner */
 @keyframes spin { to { transform: rotate(360deg); } }
 
+/* Bottom sheet slide-up */
+@keyframes lb-slide-up { from { transform: translateY(100%); } to { transform: translateY(0); } }
+@keyframes lb-fade-in { from { opacity: 0; } to { opacity: 1; } }
+
+/* Biometric pulse ring */
+@keyframes lb-pulse-ring {
+  0% { transform: scale(0.9); opacity: 0.7; }
+  80%, 100% { transform: scale(1.6); opacity: 0; }
+}
+
 /* Google Places autocomplete dropdown must float above the map overlays */
 .pac-container { z-index: 10000; border-radius: 10px; margin-top: 4px; box-shadow: 0 4px 16px rgba(0,0,0,.15); border: none; font-family: var(--font); }
 .pac-item { padding: 8px 12px; cursor: pointer; font-size: 13px; }
