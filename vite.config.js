@@ -1,15 +1,22 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
-import { copyFileSync } from 'fs'
+import { copyFileSync, existsSync } from 'fs'
 
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [
     react(),
     {
-      name: 'copy-redirects',
+      name: 'copy-files',
       closeBundle() {
-        copyFileSync('public/_redirects', 'dist/_redirects')
+        if (existsSync('public/_redirects')) {
+          copyFileSync('public/_redirects', 'dist/_redirects')
+          console.log('✓ _redirects copied')
+        }
+        if (existsSync('public/landing.html')) {
+          copyFileSync('public/landing.html', 'dist/landing.html')
+          console.log('✓ landing.html copied')
+        }
       },
     },
   ],
