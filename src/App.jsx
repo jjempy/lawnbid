@@ -106,6 +106,10 @@ const BIO = {
 };
 const b64e = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf)));
 const b64d = (str) => { const bin = atob(str); const out = new Uint8Array(bin.length); for (let i=0;i<bin.length;i++) out[i]=bin.charCodeAt(i); return out; };
+const withTimeout = (promise, ms) => Promise.race([
+  promise,
+  new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), ms)),
+]);
 async function biometricSupported() {
   if (typeof window === "undefined" || !window.PublicKeyCredential) return false;
   try { return await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable(); }
@@ -120,8 +124,8 @@ function getBiometricEmail() {
 function clearBiometric() {
   try { [BIO.ENABLED,BIO.EMAIL,BIO.CRED_ID,BIO.REFRESH].forEach(k=>localStorage.removeItem(k)); } catch {}
 }
-async function registerBiometric(userId, userEmail, refreshToken) {
-  const cred = await navigator.credentials.create({
+async function registerBiometric(userId, userEmail, refreshToken, signal) {
+  const cred = await withTimeout(navigator.credentials.create({
     publicKey: {
       challenge: crypto.getRandomValues(new Uint8Array(32)),
       rp: { name: "LawnBid", id: window.location.hostname },
@@ -130,7 +134,8 @@ async function registerBiometric(userId, userEmail, refreshToken) {
       authenticatorSelection: { authenticatorAttachment:"platform", userVerification:"required" },
       timeout: 60000,
     },
-  });
+    signal,
+  }), 30000);
   if (!cred) throw new Error("no-credential");
   localStorage.setItem(BIO.ENABLED, "true");
   localStorage.setItem(BIO.EMAIL, userEmail);
@@ -718,20 +723,47 @@ function BottomNav({tab,screen,setTab,setScreen,bp,maxW}){
 function BioEnrollModal({session,onDone}){
   const [busy,setBusy]=useState(false);
   const [err,setErr]=useState("");
+  const [showCancel,setShowCancel]=useState(false);
+  const abortRef = useRef(null);
+  const cancelTimerRef = useRef(null);
+
+  const cleanup = () => {
+    if (cancelTimerRef.current) { clearTimeout(cancelTimerRef.current); cancelTimerRef.current = null; }
+    setShowCancel(false);
+    setBusy(false);
+  };
   const notNow = () => {
     try { localStorage.setItem(BIO.PROMPTED, "true"); } catch {}
+    cleanup();
     onDone();
   };
+  const cancel = () => {
+    try { abortRef.current?.abort(); } catch {}
+    cleanup();
+    setErr("Biometric setup was cancelled.");
+  };
   const enable = async () => {
-    setErr(""); setBusy(true);
+    setErr("");
+    setBusy(true);
+    setShowCancel(false);
+    cancelTimerRef.current = setTimeout(() => setShowCancel(true), 5000);
+    abortRef.current = typeof AbortController !== "undefined" ? new AbortController() : null;
     try {
-      await registerBiometric(session.user.id, session.user.email, session.refresh_token);
+      await registerBiometric(session.user.id, session.user.email, session.refresh_token, abortRef.current?.signal);
       try { localStorage.setItem(BIO.PROMPTED, "true"); } catch {}
+      cleanup();
       onDone();
     } catch (e) {
-      if (e?.name === "NotAllowedError") { onDone(); return; } // user cancelled
-      setErr("Could not enable biometric login. Try again later.");
-    } finally { setBusy(false); }
+      if (e?.message === "timeout") {
+        setErr("Biometric setup timed out. Please try again.");
+      } else if (e?.name === "NotAllowedError" || e?.name === "AbortError") {
+        setErr("Biometric setup was cancelled.");
+      } else {
+        setErr("Biometric setup failed. You can try again in Settings.");
+      }
+    } finally {
+      cleanup();
+    }
   };
   return (
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.6)",zIndex:400,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
@@ -744,6 +776,9 @@ function BioEnrollModal({session,onDone}){
           <Btn onClick={enable} disabled={busy} style={{flex:1}}>{busy?"Enabling…":"Enable"}</Btn>
           <Btn variant="secondary" onClick={notNow} disabled={busy} style={{flex:1}}>Not now</Btn>
         </div>
+        {busy && showCancel && (
+          <Btn variant="danger" onClick={cancel} style={{width:"100%",marginTop:10}}>Cancel</Btn>
+        )}
       </div>
     </div>
   );
