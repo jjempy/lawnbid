@@ -192,7 +192,7 @@
   .demo-total { display: flex; justify-content: space-between; padding: 14px 0 0; font-size: 15px; font-weight: 600; }
   .demo-total-label { color: var(--green-400); }
   .demo-total-val { color: var(--green-400); font-family: var(--serif); font-size: 20px; }
-  .demo-btn { background: var(--green-500); color: var(--white); border: none; width: 100%; padding: 14px; border-radius: 8px; font-size: 15px; font-weight: 600; margin-top: 20px; cursor: pointer; font-family: var(--sans); }
+  .demo-btn { background: var(--green-500); color: var(--white); border: none; width: 100%; padding: 14px; border-radius: 8px; font-size: 15px; font-weight: 600; margin-top: 20px; cursor: pointer; font-family: var(--sans); display: block; text-align: center; text-decoration: none; box-sizing: border-box; }
   .demo-timer { text-align: center; margin-top: 12px; font-size: 12px; color: rgba(255,255,255,0.25); }
 
   /* ── PROBLEM ── */
@@ -353,13 +353,27 @@
   .fade-up:nth-child(2) { transition-delay: 0.1s; }
   .fade-up:nth-child(3) { transition-delay: 0.2s; }
   .fade-up:nth-child(4) { transition-delay: 0.3s; }
+
+  /* Pro trial modal */
+  .pro-modal { position: fixed; inset: 0; background: rgba(10,18,8,0.72); z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 20px; opacity: 0; pointer-events: none; transition: opacity 0.2s ease; }
+  .pro-modal.open { opacity: 1; pointer-events: auto; }
+  .pro-modal-dialog { background: var(--white); border-radius: 16px; padding: 32px; width: 100%; max-width: 420px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); position: relative; transform: translateY(10px); transition: transform 0.25s cubic-bezier(.2,.8,.2,1); }
+  .pro-modal.open .pro-modal-dialog { transform: translateY(0); }
+  .pro-modal-close { position: absolute; top: 14px; right: 14px; width: 32px; height: 32px; border-radius: 50%; border: none; background: transparent; color: rgba(0,0,0,0.4); font-size: 20px; cursor: pointer; line-height: 1; display: flex; align-items: center; justify-content: center; font-family: var(--sans); }
+  .pro-modal-close:hover { background: rgba(0,0,0,0.05); color: rgba(0,0,0,0.8); }
+  .pro-modal h3 { font-family: var(--serif); font-size: 24px; font-weight: 400; color: var(--gray-900); letter-spacing: -0.4px; margin-bottom: 14px; }
+  .pro-modal .pro-price { font-size: 15px; color: var(--gray-900); font-weight: 600; margin-bottom: 4px; }
+  .pro-modal .pro-terms { font-size: 14px; color: var(--gray-500); margin-bottom: 22px; }
+  .pro-modal .pro-continue { display: block; width: 100%; background: var(--green-500); color: var(--white); border: none; padding: 14px 20px; border-radius: 10px; font-size: 15px; font-weight: 600; cursor: pointer; font-family: var(--sans); text-decoration: none; text-align: center; box-sizing: border-box; transition: background 0.15s; }
+  .pro-modal .pro-continue:hover { background: var(--green-700); }
+  .pro-modal .pro-footnote { font-size: 12px; color: var(--gray-500); text-align: center; margin-top: 14px; line-height: 1.5; }
 </style>
 </head>
 <body>
 
 <!-- NAV -->
 <nav>
-  <a href="#" class="nav-logo">
+  <a href="/" class="nav-logo">
     <img src="/logo.png" alt="WinWin LawnBid"/>
     <span>WinWin LawnBid</span>
   </a>
@@ -420,7 +434,7 @@
         <span class="demo-total-label">Final Bid</span>
         <span class="demo-total-val">$193.61</span>
       </div>
-      <button class="demo-btn">📤 Send Quote</button>
+      <a href="/app" class="demo-btn">📤 Send Quote</a>
       <div class="demo-timer">Generated in 47 seconds</div>
     </div>
   </div>
@@ -563,7 +577,7 @@
           <li>Full client history</li>
           <li>Priority support</li>
         </ul>
-        <a href="https://winwinlawnbid.com/app" class="price-btn primary">Start Pro free →</a>
+        <a href="/app?plan=pro" class="price-btn primary" data-pro-trigger>Start Pro free →</a>
       </div>
       <!-- TEAM -->
       <div class="price-card">
@@ -582,7 +596,7 @@
           <li>Usage reporting</li>
           <li>Phone support</li>
         </ul>
-        <a href="https://winwinlawnbid.com/app" class="price-btn outline">Start Team free →</a>
+        <a href="/app?plan=team" class="price-btn outline">Start Team free →</a>
       </div>
     </div>
     <p class="pricing-note">All plans include a 14-day Pro trial. No credit card required to start.</p>
@@ -624,12 +638,33 @@
   </div>
 </footer>
 
+<!-- PRO TRIAL MODAL -->
+<div id="pro-modal" class="pro-modal" role="dialog" aria-modal="true" aria-labelledby="pro-modal-title">
+  <div class="pro-modal-dialog" role="document">
+    <button class="pro-modal-close" type="button" aria-label="Close" data-pro-close>✕</button>
+    <h3 id="pro-modal-title">Start your Pro trial</h3>
+    <div class="pro-price">$19/month after 14-day free trial</div>
+    <div class="pro-terms">Cancel anytime. No commitment.</div>
+    <a href="/app?plan=pro" class="pro-continue">Continue with email →</a>
+    <div class="pro-footnote">You'll create your account and enter payment details on the next step.</div>
+  </div>
+</div>
+
 <script>
   // Fade-up on scroll
   const obs = new IntersectionObserver(entries => {
     entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible'); });
   }, { threshold: 0.15 });
   document.querySelectorAll('.fade-up').forEach(el => obs.observe(el));
+
+  // Pro trial modal
+  const proModal = document.getElementById('pro-modal');
+  const openPro = (e) => { if (e) e.preventDefault(); proModal.classList.add('open'); document.body.style.overflow = 'hidden'; };
+  const closePro = () => { proModal.classList.remove('open'); document.body.style.overflow = ''; };
+  document.querySelectorAll('[data-pro-trigger]').forEach(el => el.addEventListener('click', openPro));
+  proModal.addEventListener('click', (e) => { if (e.target === proModal) closePro(); });
+  document.querySelectorAll('[data-pro-close]').forEach(el => el.addEventListener('click', closePro));
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && proModal.classList.contains('open')) closePro(); });
 </script>
 </body>
 </html>
