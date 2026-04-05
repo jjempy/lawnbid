@@ -96,6 +96,61 @@ const fmtTS= iso => new Date(iso).toLocaleString("en-US",{month:"short",day:"num
 const isExpired = iso => iso && new Date(iso) < new Date();
 const addDays = (iso, days) => new Date(new Date(iso).getTime() + (days||30)*86400000).toISOString();
 
+// ─── Biometric (WebAuthn) ───────────────────────────────────────────────────
+const BIO = {
+  ENABLED: "lb_biometric_enabled",
+  EMAIL: "lb_biometric_user_email",
+  CRED_ID: "lb_biometric_credential_id",
+  REFRESH: "lb_supabase_refresh_token",
+  PROMPTED: "lb_biometric_prompted",
+};
+const b64e = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf)));
+const b64d = (str) => { const bin = atob(str); const out = new Uint8Array(bin.length); for (let i=0;i<bin.length;i++) out[i]=bin.charCodeAt(i); return out; };
+async function biometricSupported() {
+  if (typeof window === "undefined" || !window.PublicKeyCredential) return false;
+  try { return await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable(); }
+  catch { return false; }
+}
+function isBiometricEnabled() {
+  try { return localStorage.getItem(BIO.ENABLED) === "true"; } catch { return false; }
+}
+function getBiometricEmail() {
+  try { return localStorage.getItem(BIO.EMAIL) || ""; } catch { return ""; }
+}
+function clearBiometric() {
+  try { [BIO.ENABLED,BIO.EMAIL,BIO.CRED_ID,BIO.REFRESH].forEach(k=>localStorage.removeItem(k)); } catch {}
+}
+async function registerBiometric(userId, userEmail, refreshToken) {
+  const cred = await navigator.credentials.create({
+    publicKey: {
+      challenge: crypto.getRandomValues(new Uint8Array(32)),
+      rp: { name: "LawnBid", id: window.location.hostname },
+      user: { id: new TextEncoder().encode(userId), name: userEmail, displayName: userEmail },
+      pubKeyCredParams: [{ type:"public-key", alg:-7 }, { type:"public-key", alg:-257 }],
+      authenticatorSelection: { authenticatorAttachment:"platform", userVerification:"required" },
+      timeout: 60000,
+    },
+  });
+  if (!cred) throw new Error("no-credential");
+  localStorage.setItem(BIO.ENABLED, "true");
+  localStorage.setItem(BIO.EMAIL, userEmail);
+  localStorage.setItem(BIO.CRED_ID, b64e(cred.rawId));
+  if (refreshToken) localStorage.setItem(BIO.REFRESH, refreshToken);
+}
+async function verifyBiometric() {
+  const credId = localStorage.getItem(BIO.CRED_ID);
+  if (!credId) throw new Error("no-credential");
+  await navigator.credentials.get({
+    publicKey: {
+      challenge: crypto.getRandomValues(new Uint8Array(32)),
+      rpId: window.location.hostname,
+      allowCredentials: [{ type:"public-key", id: b64d(credId), transports:["internal"] }],
+      userVerification: "required",
+      timeout: 60000,
+    },
+  });
+}
+
 // ─── Smart error messages ───────────────────────────────────────────────────
 function authErrorMessage(err) {
   const msg = (err?.message || "").toLowerCase();
@@ -322,6 +377,7 @@ export default function LawnBid() {
   const bp = useBreakpoint();
   const [authReady,setAuthReady]= useState(false);
   const [session,  setSession]  = useState(null);
+  const [bioPrompt,setBioPrompt]= useState(false);
   const [ready,    setReady]    = useState(false);
   const [dbErr,    setDbErr]    = useState(null);
   const [quotes,   setQuotes]   = useState([]);
@@ -346,6 +402,10 @@ export default function LawnBid() {
     });
     const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => {
       setSession(s || null);
+      // Keep refresh token fresh for biometric login
+      if (s?.refresh_token && isBiometricEnabled()) {
+        try { localStorage.setItem(BIO.REFRESH, s.refresh_token); } catch {}
+      }
     });
     return () => sub.subscription.unsubscribe();
   }, []);
@@ -490,7 +550,7 @@ export default function LawnBid() {
 
   if (!authReady) return (
     <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"100vh",fontFamily:"system-ui",gap:12}}>
-      <div style={{fontSize:48}}>🌿</div>
+      <img src="/logo.png" alt="LawnBid" style={{width:80,height:80,borderRadius:"50%",objectFit:"cover"}}/>
       <div style={{fontSize:20,fontWeight:900,color:"#16a34a"}}>LawnBid</div>
     </div>
   );
@@ -499,7 +559,7 @@ export default function LawnBid() {
 
   if (!ready) return (
     <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"100vh",fontFamily:"system-ui",gap:12}}>
-      <div style={{fontSize:48}}>🌿</div>
+      <img src="/logo.png" alt="LawnBid" style={{width:80,height:80,borderRadius:"50%",objectFit:"cover"}}/>
       <div style={{fontSize:20,fontWeight:900,color:"#16a34a"}}>LawnBid</div>
       <div style={{fontSize:13,color:"#64748b"}}>Connecting to database…</div>
     </div>
@@ -590,7 +650,7 @@ function SideNav({tab,setTab,setScreen}){
   return (
     <aside style={{width:240,flexShrink:0,background:"#ffffff",borderRight:"1px solid #e2e8f0",display:"flex",flexDirection:"column",position:"sticky",top:0,height:"100vh"}}>
       <div style={{padding:"20px 20px 16px",display:"flex",alignItems:"center",gap:12,borderBottom:"1px solid #e2e8f0"}}>
-        <img src="/logo.png" alt="" style={{width:36,height:36,borderRadius:"50%",objectFit:"cover"}}/>
+        <img src="/logo.png" alt="LawnBid" style={{width:40,height:40,borderRadius:"50%",objectFit:"cover"}}/>
         <div style={{fontSize:18,fontWeight:900,color:"#0f172a",letterSpacing:-.3}}>LawnBid</div>
       </div>
       <nav style={{padding:"12px 0",display:"flex",flexDirection:"column",gap:2}}>
@@ -648,8 +708,8 @@ function HomeScreen({bp,quotes,onNew,onView}){
       <div style={{minWidth:0}}>
       {!isDesktop && (
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
-          <div style={{display:"flex",alignItems:"center",gap:10}}>
-            <img src="/logo.png" alt="LawnBid" style={{width:40,height:40,borderRadius:"50%",objectFit:"cover"}}/>
+          <div style={{display:"flex",alignItems:"center",gap:8}}>
+            <img src="/logo.png" alt="LawnBid" style={{width:36,height:36,borderRadius:"50%",objectFit:"cover",marginRight:8}}/>
             <div>
               <div style={{fontSize:26,fontWeight:900,color:"#0f172a"}}>LawnBid</div>
               <div style={{fontSize:12,color:"#64748b"}}>{quotes.length} quote{quotes.length!==1?"s":""} in database</div>
