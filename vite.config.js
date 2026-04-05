@@ -17,6 +17,10 @@ export default defineConfig({
           copyFileSync('public/landing.html', 'dist/landing.html')
           console.log('✓ landing.html copied')
         }
+        if (existsSync('public/_worker.js')) {
+          copyFileSync('public/_worker.js', 'dist/_worker.js')
+          console.log('✓ _worker.js copied')
+        }
       },
     },
   ],
