@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "vite build && cp landing.html dist/landing.html && cp public/logo.png dist/logo.png",
     "lint": "eslint .",
     "preview": "vite preview"
   },

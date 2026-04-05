@@ -3,11 +3,16 @@
   publish = "dist"
 
 [[redirects]]
+  from = "/"
+  to = "/landing.html"
+  status = 200
+
+[[redirects]]
   from = "/app"
-  to = "/app.html"
+  to = "/app/index.html"
   status = 200
 
 [[redirects]]
   from = "/app/*"
-  to = "/app.html"
+  to = "/app/index.html"
   status = 200

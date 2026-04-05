@@ -3,11 +3,10 @@ import react from '@vitejs/plugin-react'
 
 // https://vite.dev/config/
 export default defineConfig({
-  base: '/app/',
   plugins: [react()],
+  base: '/app/',
   build: {
-    rollupOptions: {
-      input: 'app.html',
-    },
+    outDir: 'dist/app',
+    emptyOutDir: true,
   },
 })
