@@ -378,6 +378,7 @@ export default function LawnBid() {
   const [authReady,setAuthReady]= useState(false);
   const [session,  setSession]  = useState(null);
   const [bioPrompt,setBioPrompt]= useState(false);
+  const [recovering,setRecovering] = useState(false);
   const [ready,    setReady]    = useState(false);
   const [dbErr,    setDbErr]    = useState(null);
   const [quotes,   setQuotes]   = useState([]);
@@ -400,7 +401,8 @@ export default function LawnBid() {
       setSession(data.session || null);
       setAuthReady(true);
     });
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => {
+    const { data: sub } = supabase.auth.onAuthStateChange((event, s) => {
+      if (event === "PASSWORD_RECOVERY") setRecovering(true);
       setSession(s || null);
       // Keep refresh token fresh for biometric login
       if (s?.refresh_token && isBiometricEnabled()) {
@@ -412,11 +414,11 @@ export default function LawnBid() {
 
   // ── Offer biometric enrollment once per device after first password login ──
   useEffect(() => {
-    if (!session) return;
+    if (!session || recovering) return;
     if (isBiometricEnabled()) return;
     try { if (localStorage.getItem(BIO.PROMPTED) === "true") return; } catch { return; }
     biometricSupported().then(ok => { if (ok) setBioPrompt(true); });
-  }, [session]);
+  }, [session, recovering]);
 
   // ── Load all data from Supabase once authenticated ──
   useEffect(() => {
@@ -562,6 +564,8 @@ export default function LawnBid() {
       <div style={{fontSize:20,fontWeight:900,color:"#16a34a"}}>LawnBid</div>
     </div>
   );
+
+  if (recovering) return <ResetPasswordScreen onDone={()=>setRecovering(false)}/>;
 
   if (!session) return <AuthScreen/>;
 
@@ -1324,7 +1328,7 @@ function AuthScreen(){
   };
   const sendReset=async()=>{
     clearMsgs(); setBusy(true);
-    const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: "https://winwinlawnbid.com" });
+    const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: "https://winwinlawnbid.com/app" });
     setBusy(false);
     if(error) setErr(authErrorMessage(error));
     else setInfo(`Check your email — we sent a password reset link to ${email}`);
@@ -1384,6 +1388,62 @@ function AuthScreen(){
         {err && <ErrBox style={{marginTop:12}}>{err}</ErrBox>}
         {info && <div style={{marginTop:12,padding:"10px 12px",background:"#f0fdf4",borderLeft:"3px solid #16a34a",borderRadius:"0 8px 8px 0",color:"#166534",fontSize:13,fontWeight:500}}>✓ {info}</div>}
         </>}
+      </Card>
+    </div>
+  );
+}
+
+// ─── Reset Password Screen (after email recovery link) ───
+function ResetPasswordScreen({onDone}){
+  const [pw,setPw]=useState("");
+  const [pw2,setPw2]=useState("");
+  const [showPw,setShowPw]=useState(false);
+  const [showPw2,setShowPw2]=useState(false);
+  const [err,setErr]=useState("");
+  const [info,setInfo]=useState("");
+  const [busy,setBusy]=useState(false);
+
+  const submit = async () => {
+    setErr(""); setInfo("");
+    if (pw.length < 6) { setErr("Password must be at least 6 characters. Please choose a longer password."); return; }
+    if (pw !== pw2) { setErr("Passwords do not match. Please retype the new password."); return; }
+    setBusy(true);
+    const { error } = await supabase.auth.updateUser({ password: pw });
+    setBusy(false);
+    if (error) { setErr(authErrorMessage(error)); return; }
+    setInfo("Password updated. You're now logged in.");
+    setTimeout(onDone, 1200);
+  };
+
+  return(
+    <div style={{maxWidth:480,margin:"0 auto",minHeight:"100vh",display:"flex",flexDirection:"column",justifyContent:"center",padding:"24px",fontFamily:"'Inter',system-ui,-apple-system,sans-serif",background:"#f8fafc",boxSizing:"border-box",color:"#0f172a"}}>
+      <div style={{textAlign:"center",marginBottom:28}}>
+        <img src="/logo.png" alt="LawnBid" style={{width:72,height:72,borderRadius:"50%",objectFit:"cover",marginBottom:12}}/>
+        <div style={{fontSize:32,fontWeight:900,color:"#0f172a",letterSpacing:-.8}}>Set a new password</div>
+        <div style={{fontSize:13,color:"#64748b",marginTop:4,fontWeight:500}}>Choose something at least 6 characters long.</div>
+      </div>
+      <Card>
+        <div style={{marginBottom:12}}>
+          <div style={{fontSize:13,fontWeight:600,color:"#334155",marginBottom:4}}>New password</div>
+          <div style={{position:"relative"}}>
+            <Inp type={showPw?"text":"password"} value={pw} onChange={e=>setPw(e.target.value)} placeholder="••••••••" autoComplete="new-password" style={{paddingRight:44}}/>
+            <button type="button" onClick={()=>setShowPw(v=>!v)} aria-label={showPw?"Hide password":"Show password"} style={{position:"absolute",right:12,top:"50%",transform:"translateY(-50%)",width:24,height:24,minHeight:24,padding:0,border:"none",background:"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
+              {showPw ? <EyeOpen color="#15803d"/> : <EyeOff color="#94a3b8"/>}
+            </button>
+          </div>
+        </div>
+        <div style={{marginBottom:12}}>
+          <div style={{fontSize:13,fontWeight:600,color:"#334155",marginBottom:4}}>Confirm new password</div>
+          <div style={{position:"relative"}}>
+            <Inp type={showPw2?"text":"password"} value={pw2} onChange={e=>setPw2(e.target.value)} placeholder="••••••••" autoComplete="new-password" style={{paddingRight:44}}/>
+            <button type="button" onClick={()=>setShowPw2(v=>!v)} aria-label={showPw2?"Hide password":"Show password"} style={{position:"absolute",right:12,top:"50%",transform:"translateY(-50%)",width:24,height:24,minHeight:24,padding:0,border:"none",background:"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
+              {showPw2 ? <EyeOpen color="#15803d"/> : <EyeOff color="#94a3b8"/>}
+            </button>
+          </div>
+        </div>
+        <Btn onClick={submit} disabled={busy||!pw||!pw2} style={{width:"100%",marginTop:4}}>{busy?"Updating…":"Update Password"}</Btn>
+        {err && <ErrBox style={{marginTop:12}}>{err}</ErrBox>}
+        {info && <div style={{marginTop:12,padding:"10px 12px",background:"#f0fdf4",borderLeft:"3px solid #16a34a",borderRadius:"0 8px 8px 0",color:"#166534",fontSize:13,fontWeight:500}}>✓ {info}</div>}
       </Card>
     </div>
   );
