@@ -83,6 +83,25 @@ const fmtTS= iso => new Date(iso).toLocaleString("en-US",{month:"short",day:"num
 const isExpired = iso => iso && new Date(iso) < new Date();
 const addDays = (iso, days) => new Date(new Date(iso).getTime() + (days||30)*86400000).toISOString();
 
+// ─── Smart error messages ───────────────────────────────────────────────────
+function authErrorMessage(err) {
+  const msg = (err?.message || "").toLowerCase();
+  if (msg.includes("invalid login credentials")) return "Email or password is incorrect. Double-check your details or tap Forgot Password to reset.";
+  if (msg.includes("email not confirmed")) return "Please check your email and click the confirmation link we sent before logging in.";
+  if (msg.includes("user already registered") || msg.includes("already been registered")) return "An account with this email already exists. Try logging in instead.";
+  if (msg.includes("password should be at least")) return "Password must be at least 6 characters. Please choose a longer password.";
+  if (msg.includes("too many requests") || msg.includes("rate limit")) return "Too many attempts. Please wait a few minutes and try again.";
+  if (msg.includes("failed to fetch") || msg.includes("network")) return "Could not connect. Check your internet connection and try again.";
+  return "Something went wrong signing in. Check your internet connection and try again.";
+}
+function dbErrorMessage(err) {
+  const msg = (err?.message || "").toLowerCase();
+  const code = err?.code || "";
+  if (msg.includes("failed to fetch") || msg.includes("network") || msg.includes("networkerror")) return "Could not connect to the database. Check your internet connection and try again.";
+  if (code === "42501" || msg.includes("row-level security") || msg.includes("row level security") || msg.includes("permission denied") || msg.includes("not authorized")) return "Permission denied. Try logging out and back in.";
+  return "Could not save your data. Check your connection and try again. Your quote information is preserved.";
+}
+
 function calcQ(area, perim, cx, risk, disc, s, ov=null) {
   if(!area||!perim||area<=0||perim<=0) return null;
   const mh=area/20000, th=perim/3000;
@@ -280,7 +299,8 @@ const Btn   = ({children,variant="primary",style={},...p}) => {
 };
 const Chip  = ({label,active,onClick,style={}}) => <button onClick={onClick} style={{height:36,minHeight:36,padding:"0 16px",borderRadius:18,border:active?"1.5px solid #15803d":"1.5px solid #e2e8f0",background:active?"#15803d":"#ffffff",color:active?"#ffffff":"#374151",fontSize:13,fontWeight:600,cursor:"pointer",whiteSpace:"nowrap",fontFamily:"inherit",flexShrink:0,display:"inline-flex",alignItems:"center",...style}}>{label}</button>;
 const Badge = ({status}) => <span style={{padding:"3px 9px",borderRadius:999,fontSize:10,fontWeight:700,background:STATUS_BG[status]||"#f1f5f9",color:STATUS_COLOR[status]||"#64748b",textTransform:"uppercase",letterSpacing:.6}}>{status}</span>;
-const ErrMsg= ({msg}) => msg?<div style={{color:"#dc2626",fontSize:12,marginTop:6,fontWeight:500}}>⚠ {msg}</div>:null;
+const ErrMsg= ({msg}) => msg?<div style={{color:"#dc2626",fontSize:13,marginTop:6,fontWeight:500,background:"#fef2f2",borderLeft:"3px solid #dc2626",padding:"8px 10px",borderRadius:"0 8px 8px 0"}}>⚠ {msg}</div>:null;
+const ErrBox= ({children,style={}}) => children?<div style={{color:"#dc2626",fontSize:13,fontWeight:500,background:"#fef2f2",borderLeft:"3px solid #dc2626",padding:"10px 12px",borderRadius:"0 8px 8px 0",...style}}>⚠ {children}</div>:null;
 const QID   = ({id}) => <span style={{fontFamily:"ui-monospace, SFMono-Regular, Menlo, monospace",fontSize:11,background:"#f1f5f9",color:"#475569",padding:"2px 7px",borderRadius:6,letterSpacing:.3,fontWeight:600}}>{id}</span>;
 const Back  = ({onClick}) => <button onClick={onClick} style={{width:40,height:40,minHeight:40,display:"inline-flex",alignItems:"center",justifyContent:"center",background:"none",border:"none",fontSize:26,cursor:"pointer",color:"#15803d",fontFamily:"inherit",lineHeight:1,padding:0,marginLeft:-8}}>‹</button>;
 
@@ -428,7 +448,7 @@ export default function LawnBid() {
       setScreen("quote-detail");
       setFlow(null);
     } catch (e) {
-      alert("Save failed: " + (e.message || "Unknown error. Check your connection."));
+      alert(dbErrorMessage(e));
     } finally {
       setSaving(false);
     }
@@ -444,7 +464,7 @@ export default function LawnBid() {
       await deleteQuote(quoteId);
       setQuotes(prev => prev.filter(q => q.quote_id !== quoteId));
       goHome();
-    } catch(e) { alert("Delete failed: " + e.message); }
+    } catch(e) { alert(dbErrorMessage(e)); }
   }, [goHome]);
 
   const handleAccepted = useCallback(async (quoteId) => {
@@ -452,7 +472,7 @@ export default function LawnBid() {
     try {
       await updateQuoteStatus(quoteId, "accepted", { accepted_at: now });
       setQuotes(prev => prev.map(q => q.quote_id === quoteId ? { ...q, status: "accepted", accepted_at: now } : q));
-    } catch(e) { alert("Update failed: " + e.message); }
+    } catch(e) { alert(dbErrorMessage(e)); }
   }, []);
 
   if (!authReady) return (
@@ -1096,25 +1116,48 @@ function SettingsScreen({bp,settings,onSave,onLogout}){
 }
 
 // ─── Auth Screen ──────────────────────────────────────────────────────────────
+const EyeOpen = ({color}) => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+  </svg>
+);
+const EyeOff = ({color}) => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a19.79 19.79 0 0 1 5.06-5.94M9.9 4.24A10.94 10.94 0 0 1 12 4c7 0 11 8 11 8a19.77 19.77 0 0 1-3.17 4.19"/>
+    <path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><line x1="1" y1="1" x2="23" y2="23"/>
+  </svg>
+);
+
 function AuthScreen(){
+  const [mode,setMode]=useState("login"); // "login" | "reset"
   const [email,setEmail]=useState("");
   const [password,setPassword]=useState("");
+  const [showPw,setShowPw]=useState(false);
   const [err,setErr]=useState("");
   const [info,setInfo]=useState("");
   const [busy,setBusy]=useState(false);
 
+  const clearMsgs = () => { setErr(""); setInfo(""); };
+
   const login=async()=>{
-    setErr("");setInfo("");setBusy(true);
+    clearMsgs(); setBusy(true);
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     setBusy(false);
-    if(error) setErr(error.message);
+    if(error) setErr(authErrorMessage(error));
   };
   const signup=async()=>{
-    setErr("");setInfo("");setBusy(true);
+    clearMsgs(); setBusy(true);
     const { data, error } = await supabase.auth.signUp({ email, password });
     setBusy(false);
-    if(error) setErr(error.message);
-    else if(!data.session) setInfo("Check your email to confirm your account.");
+    if(error) setErr(authErrorMessage(error));
+    else if(!data.session) setInfo(`Check your email — we sent a confirmation link to ${email}`);
+  };
+  const sendReset=async()=>{
+    clearMsgs(); setBusy(true);
+    const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: "https://winwinlawnbid.com" });
+    setBusy(false);
+    if(error) setErr(authErrorMessage(error));
+    else setInfo(`Check your email — we sent a password reset link to ${email}`);
   };
 
   return(
@@ -1122,23 +1165,43 @@ function AuthScreen(){
       <div style={{textAlign:"center",marginBottom:28}}>
         <img src="/logo.png" alt="LawnBid" style={{width:72,height:72,borderRadius:"50%",objectFit:"cover",marginBottom:12}}/>
         <div style={{fontSize:32,fontWeight:900,color:"#0f172a",letterSpacing:-.8}}>LawnBid</div>
-        <div style={{fontSize:13,color:"#64748b",marginTop:4,fontWeight:500}}>Sign in to your account</div>
+        <div style={{fontSize:13,color:"#64748b",marginTop:4,fontWeight:500}}>{mode==="reset"?"Reset your password":"Sign in to your account"}</div>
       </div>
       <Card>
         <div style={{marginBottom:12}}>
           <div style={{fontSize:13,fontWeight:600,color:"#334155",marginBottom:4}}>Email</div>
           <Inp type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="you@example.com" autoComplete="email"/>
         </div>
-        <div style={{marginBottom:12}}>
-          <div style={{fontSize:13,fontWeight:600,color:"#334155",marginBottom:4}}>Password</div>
-          <Inp type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="••••••••" autoComplete="current-password"/>
-        </div>
-        <div style={{display:"flex",gap:8,marginTop:8}}>
-          <Btn onClick={login} disabled={busy||!email||!password} style={{flex:1}}>Log In</Btn>
-          <Btn variant="outline" onClick={signup} disabled={busy||!email||!password} style={{flex:1}}>Create Account</Btn>
-        </div>
-        {err&&<div style={{marginTop:12,padding:"10px 12px",background:"#fef2f2",border:"1px solid #fca5a5",borderRadius:8,color:"#dc2626",fontSize:13,fontWeight:500}}>⚠ {err}</div>}
-        {info&&<div style={{marginTop:12,padding:"10px 12px",background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:8,color:"#166534",fontSize:13,fontWeight:500}}>✓ {info}</div>}
+        {mode==="login" && (
+          <>
+            <div style={{marginBottom:4}}>
+              <div style={{fontSize:13,fontWeight:600,color:"#334155",marginBottom:4}}>Password</div>
+              <div style={{position:"relative"}}>
+                <Inp type={showPw?"text":"password"} value={password} onChange={e=>setPassword(e.target.value)} placeholder="••••••••" autoComplete="current-password" style={{paddingRight:44}}/>
+                <button type="button" onClick={()=>setShowPw(v=>!v)} aria-label={showPw?"Hide password":"Show password"} style={{position:"absolute",right:12,top:"50%",transform:"translateY(-50%)",width:24,height:24,minHeight:24,padding:0,border:"none",background:"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                  {showPw ? <EyeOpen color="#15803d"/> : <EyeOff color="#94a3b8"/>}
+                </button>
+              </div>
+            </div>
+            <div style={{textAlign:"right",marginBottom:12}}>
+              <button type="button" onClick={()=>{clearMsgs();setMode("reset");}} style={{background:"none",border:"none",color:"#15803d",fontSize:12,fontWeight:600,cursor:"pointer",textDecoration:"underline",padding:"4px 0",minHeight:28,fontFamily:"inherit"}}>Forgot password?</button>
+            </div>
+            <div style={{display:"flex",gap:8}}>
+              <Btn onClick={login} disabled={busy||!email||!password} style={{flex:1}}>Log In</Btn>
+              <Btn variant="outline" onClick={signup} disabled={busy||!email||!password} style={{flex:1}}>Create Account</Btn>
+            </div>
+          </>
+        )}
+        {mode==="reset" && (
+          <>
+            <Btn onClick={sendReset} disabled={busy||!email} style={{width:"100%",marginTop:4}}>Send Reset Link</Btn>
+            <div style={{textAlign:"center",marginTop:12}}>
+              <button type="button" onClick={()=>{clearMsgs();setMode("login");}} style={{background:"none",border:"none",color:"#15803d",fontSize:13,fontWeight:600,cursor:"pointer",textDecoration:"underline",padding:"6px 0",minHeight:28,fontFamily:"inherit"}}>← Back to Login</button>
+            </div>
+          </>
+        )}
+        {err && <ErrBox style={{marginTop:12}}>{err}</ErrBox>}
+        {info && <div style={{marginTop:12,padding:"10px 12px",background:"#f0fdf4",borderLeft:"3px solid #16a34a",borderRadius:"0 8px 8px 0",color:"#166534",fontSize:13,fontWeight:500}}>✓ {info}</div>}
       </Card>
     </div>
   );
@@ -1158,8 +1221,15 @@ function QuoteFlow({bp,step,setStep,flow,setFlow,errors,setErrors,settings,clien
   const calc=calcQ(area,perim,flow.cx,flow.risk,flow.disc,settings,flow.override);
   const time=calcTime(area,perim,flow.crew,flow.cx);
 
-  const v1=()=>{const e={};if(!flow.clientName?.trim())e.clientName="Required";if(!flow.clientPhone?.trim())e.clientPhone="Required";if(!flow.address?.trim())e.address="Required";setErrors(e);return!Object.keys(e).length;};
-  const v2=()=>{const e={};if(!flow.areaVal||area<=0)e.area="Enter a valid area greater than 0";if(!flow.perimVal||perim<=0)e.perim="Enter a valid perimeter greater than 0";setErrors(e);return!Object.keys(e).length;};
+  const v1=()=>{const e={};
+    if(!flow.clientName?.trim()) e.clientName="Enter the client's name to continue.";
+    if(!flow.clientPhone?.trim()) e.clientPhone="A phone number is required to send quotes.";
+    if(!flow.address?.trim()) e.address="Enter the property address to load the map.";
+    setErrors(e); return !Object.keys(e).length;};
+  const v2=()=>{const e={};
+    if(!flow.areaVal||area<=0) e.area="Enter the lawn area or use the map to draw the property boundary.";
+    if(!flow.perimVal||perim<=0) e.perim="Enter the perimeter or draw the boundary on the map — it calculates automatically.";
+    setErrors(e); return !Object.keys(e).length;};
   const next=()=>{if(step===1&&!v1())return;if(step===2&&!v2())return;setStep(s=>s+1);};
 
   const buildRec=(status)=>({
@@ -1179,7 +1249,7 @@ function QuoteFlow({bp,step,setStep,flow,setFlow,errors,setErrors,settings,clien
       // Reserve the real quote_id now so the shared text shows it (not "PENDING")
       if(!rec.existingId){
         try{ rec.existingId=await nextQuoteId(); }
-        catch(e){ alert("Could not reserve quote ID: "+(e.message||"network error")); return; }
+        catch(e){ alert(dbErrorMessage(e)); return; }
       }
       const preview={...rec,quote_id:rec.existingId,created_at:new Date().toISOString()};
       const txt=quoteText(preview,settings);
@@ -1707,7 +1777,7 @@ function S4({bp,flow,set,setFlow,area,perim,calc,time,onSend,saving}){
     let qid = flow.existingId;
     if (!qid) {
       try { qid = await nextQuoteId(); }
-      catch(e){ alert("Could not reserve quote ID: "+(e.message||"network error")); return; }
+      catch(e){ alert(dbErrorMessage(e)); return; }
     }
     setUploading(true);
     const uploaded = [];
@@ -1721,7 +1791,7 @@ function S4({bp,flow,set,setFlow,area,perim,calc,time,onSend,saving}){
       }
       setFlow(fl => ({ ...fl, existingId: qid, attachments: [...(fl.attachments||[]), ...uploaded] }));
     } catch(e) {
-      alert("Upload failed: " + (e.message || "unknown error"));
+      alert(dbErrorMessage(e));
     } finally {
       setUploading(false);
     }
