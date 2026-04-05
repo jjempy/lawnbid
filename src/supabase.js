@@ -1,6 +1,22 @@
-// To manually upgrade a user to Pro, run in Supabase SQL Editor:
-// UPDATE settings SET plan = 'pro' WHERE user_id = 'paste-user-id-here';
-// To find a user's ID: SELECT id, email FROM auth.users;
+// ─────────────────────────────────────────────────────────────────────────────
+// SCHEMA MIGRATIONS — run these in Supabase SQL Editor if any column is missing.
+// These are idempotent (ADD COLUMN IF NOT EXISTS), safe to run repeatedly.
+// ─────────────────────────────────────────────────────────────────────────────
+// ALTER TABLE quotes   ADD COLUMN IF NOT EXISTS expiry_date timestamptz;
+// ALTER TABLE quotes   ADD COLUMN IF NOT EXISTS attachments jsonb DEFAULT '[]';
+// ALTER TABLE settings ADD COLUMN IF NOT EXISTS profit_margin decimal DEFAULT 0.30;
+// ALTER TABLE settings ADD COLUMN IF NOT EXISTS company_logo_base64 text;
+// ALTER TABLE settings ADD COLUMN IF NOT EXISTS plan text DEFAULT 'free';
+// ALTER TABLE settings ADD COLUMN IF NOT EXISTS quote_count_this_month integer DEFAULT 0;
+// ALTER TABLE settings ADD COLUMN IF NOT EXISTS quote_count_reset_at timestamptz DEFAULT NOW();
+// ALTER TABLE settings ADD COLUMN IF NOT EXISTS quote_validity_days integer DEFAULT 30;
+//
+// Storage bucket: create `quote-attachments` in Supabase Dashboard → Storage.
+//
+// Admin: to manually upgrade a user to Pro, run in Supabase SQL Editor:
+//   UPDATE settings SET plan = 'pro' WHERE user_id = 'paste-user-id-here';
+//   -- find user id via: SELECT id, email FROM auth.users;
+// ─────────────────────────────────────────────────────────────────────────────
 
 import { createClient } from '@supabase/supabase-js'
 
@@ -101,12 +117,20 @@ export async function saveSettings(settings) {
 const ATTACH_BUCKET = 'quote-attachments'
 
 export async function uploadQuoteFile(quoteId, file) {
+  const userId = await currentUserId()
+  if (!userId) throw new Error('Not authenticated')
   const cleanName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
-  const path = `quotes/${quoteId}/${Date.now()}-${cleanName}`
+  const path = `${userId}/${quoteId}/${Date.now()}-${cleanName}`
   const { error } = await supabase.storage
     .from(ATTACH_BUCKET)
-    .upload(path, file, { contentType: file.type, upsert: false })
-  if (error) throw error
+    .upload(path, file, { contentType: file.type, cacheControl: '3600', upsert: false })
+  if (error) {
+    const msg = (error.message || '').toLowerCase()
+    if (msg.includes('bucket not found') || msg.includes('the resource was not found')) {
+      throw new Error('Photo storage is not configured. Please contact support.')
+    }
+    throw error
+  }
   const { data } = supabase.storage.from(ATTACH_BUCKET).getPublicUrl(path)
   return { path, url: data.publicUrl }
 }

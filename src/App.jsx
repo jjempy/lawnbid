@@ -12,6 +12,7 @@ const APP_VERSION = "1.0.0";
 const DEFAULT_SETTINGS = {
   mow_rate: 110, trim_rate: 18, equipment_cost: 12.35, hourly_rate: 22.80,
   minimum_bid: 55, complexity_default: 1.0, risk_default: 1.0,
+  profit_margin: 0.30,
   quote_validity_days: 30,
   company_name: "", company_phone: "", company_email: "", company_logo_base64: "",
   plan: "free", quote_count_this_month: 0, quote_count_reset_at: new Date().toISOString(),
@@ -115,6 +116,11 @@ const BIO = {
 };
 const COMPANY_LOGO_CACHE = "lb_company_logo";
 const isIOSDevice = () => typeof navigator !== "undefined" && /iPad|iPhone|iPod/.test(navigator.userAgent);
+const isMobileDevice = () => {
+  if (typeof navigator === "undefined") return false;
+  if (/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) return true;
+  return (navigator.maxTouchPoints || 0) > 1 && window.innerWidth < 1024;
+};
 function canPromptBio() {
   try {
     const count = parseInt(localStorage.getItem(BIO.DISMISSED) || "0", 10);
@@ -139,6 +145,7 @@ const withTimeout = (promise, ms) => Promise.race([
 ]);
 async function biometricSupported() {
   if (typeof window === "undefined" || !window.PublicKeyCredential) return false;
+  if (!isMobileDevice()) return false; // never offer biometrics on desktop
   try { return await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable(); }
   catch { return false; }
 }
@@ -211,18 +218,22 @@ function calcQ(area, perim, cx, risk, disc, s, ov=null) {
   const mh=area/20000, th=perim/3000;
   const mc=area*(s.mow_rate/20000), tc=perim*(s.trim_rate/3000), ec=s.equipment_cost*(mh+th);
   const sub=mc+tc+ec, acx=sub*cx, ar=acx*risk;
-  const minA=ar<s.minimum_bid, fl=Math.max(ar,s.minimum_bid), fin=fl*(1-disc/100);
+  // Profit margin: price = cost / (1 - margin). Clamp 0-0.8 to avoid division by zero.
+  const margin = Math.min(0.8, Math.max(0, (s.profit_margin ?? 0.30)));
+  const withMargin = margin > 0 ? ar / (1 - margin) : ar;
+  const minA=withMargin<s.minimum_bid, fl=Math.max(withMargin,s.minimum_bid), fin=fl*(1-disc/100);
   const disp=ov!==null?(parseFloat(ov)||0):fin;
   const bd=[
     {label:"Mow (area)",       note:`${Math.round(area).toLocaleString()} sqft × ($${s.mow_rate}÷20,000)`, value:mc},
     {label:"Trim (perimeter)", note:`${Math.round(perim).toLocaleString()} ft × ($${s.trim_rate}÷3,000)`,  value:tc},
     {label:"Equipment",        note:`${(mh+th).toFixed(2)} hrs × $${s.equipment_cost}/hr`,                 value:ec},
-    {subtotal:true, label:"Subtotal", value:sub},
+    {subtotal:true, label:"Subtotal (costs)", value:sub},
     {modifier:true, label:`Complexity (${cx}×)`,  value:acx-sub},
     {modifier:true, label:`Risk (${risk}×)`,       value:ar-acx},
+    ...(margin>0?[{modifier:true,label:`Profit margin (${Math.round(margin*100)}%)`,value:withMargin-ar}]:[]),
     ...(disc>0?[{modifier:true,label:`Discount (${disc}%)`,value:-(fl*disc/100)}]:[]),
   ];
-  return {mh,th,mc,tc,ec,sub,acx,ar,minA,fl,fin,disp,bd};
+  return {mh,th,mc,tc,ec,sub,acx,ar,withMargin,minA,fl,fin,disp,bd};
 }
 
 function calcTime(area, perim, crew, cx) {
@@ -1414,29 +1425,53 @@ function SettingsScreen({bp,settings,onSave,onLogout}){
   const set=(k,v)=>setLoc(s=>({...s,[k]:v}));
   const save=()=>{onSave(loc);setSaved(true);setTimeout(()=>setSaved(false),2000);};
   const reset=()=>{if(confirm("Reset formula settings to defaults?")){const ns={...loc,...DEFAULT_SETTINGS};setLoc(ns);onSave(ns);}};
-  const TIPS={mow_rate:"Dollar value of mowing 20,000 sqft (≈½ acre) in 1 hr.",trim_rate:"Cost to trim 3,000 linear feet in 1 hr. Most crews do 2,500–4,000 ft/hr.",equipment_cost:"Hourly cost to run your equipment — fuel, maintenance, depreciation.",hourly_rate:"True cost per worker per hour: wages + payroll taxes + benefits.",minimum_bid:"No quote goes below this. Covers drive time, mobilization, admin.",quote_validity_days:"How many days a new quote is valid before it is marked expired."};
-  const FIELDS=[{key:"mow_rate",label:"Mow Rate ($/20k sqft)"},{key:"trim_rate",label:"Trim Rate ($/3k linear ft)"},{key:"equipment_cost",label:"Equipment Cost ($/hr)"},{key:"hourly_rate",label:"Hourly Rate ($/worker/hr)"},{key:"minimum_bid",label:"Minimum Bid ($)"},{key:"quote_validity_days",label:"Quote Valid For (days)"}];
+  const TIPS={mow_rate:"Dollar value of mowing 20,000 sqft (≈½ acre) in 1 hr.",trim_rate:"Cost to trim 3,000 linear feet in 1 hr. Most crews do 2,500–4,000 ft/hr.",equipment_cost:"Hourly cost to run your equipment — fuel, maintenance, depreciation.",hourly_rate:"True cost per worker per hour: wages + payroll taxes + benefits.",minimum_bid:"No quote goes below this. Covers drive time, mobilization, admin.",quote_validity_days:"How many days a new quote is valid before it is marked expired.",profit_margin:"Your target profit. 30% means for every $100 charged, $30 is profit after all costs. Most lawn care businesses target 25–40%. Formula: price = cost ÷ (1 - margin)"};
+  const FIELDS=[{key:"mow_rate",label:"Mow Rate ($/20k sqft)"},{key:"trim_rate",label:"Trim Rate ($/3k linear ft)"},{key:"equipment_cost",label:"Equipment Cost ($/hr)"},{key:"hourly_rate",label:"Hourly Rate ($/worker/hr)"},{key:"minimum_bid",label:"Minimum Bid ($)"},{key:"profit_margin",label:"Profit Margin (%)",pct:true},{key:"quote_validity_days",label:"Quote Valid For (days)"}];
+  const [logoMsg,setLogoMsg]=useState("");
   const onLogo=async e=>{
     const f=e.target.files?.[0]; if(!f) return;
     if(!/^image\/(png|jpe?g|webp)$/i.test(f.type)){ alert("Please choose a PNG, JPG, or WebP image."); return; }
     const reader=new FileReader();
-    reader.onload=()=>set("company_logo_base64", reader.result);
+    reader.onload=async()=>{
+      const b64=reader.result;
+      // Update local form state, update parent settings, and persist immediately
+      const next = { ...loc, company_logo_base64: b64 };
+      setLoc(next);
+      try { await onSave(next); try { localStorage.setItem(COMPANY_LOGO_CACHE, b64); } catch {}
+        setLogoMsg("Logo saved ✓"); setTimeout(()=>setLogoMsg(""), 2000);
+      } catch { setLogoMsg("Could not save logo — try again."); setTimeout(()=>setLogoMsg(""), 3000); }
+    };
     reader.readAsDataURL(f);
+  };
+  const onLogoImgError = () => {
+    // Corrupted or unreadable base64 — silently drop back to /logo.png
+    setLoc(s => ({ ...s, company_logo_base64: "" }));
+  };
+  const removeLogo=async()=>{
+    const next = { ...loc, company_logo_base64: "" };
+    setLoc(next);
+    try { await onSave(next); try { localStorage.removeItem(COMPANY_LOGO_CACHE); } catch {} } catch {}
   };
   const isDesktop = bp==="desktop";
   const formulaCard = (
       <Card>
         <Lbl>Formula Defaults</Lbl>
-        {FIELDS.map(({key,label})=>(
+        {FIELDS.map(({key,label,pct})=>{
+          const val = pct ? Math.round((loc[key] ?? 0) * 100) : loc[key];
+          const onChange = pct
+            ? e => { const n = Math.min(80, Math.max(0, parseFloat(e.target.value)||0)); set(key, n/100); }
+            : e => set(key, parseFloat(e.target.value)||0);
+          return (
           <div key={key} style={{marginBottom:14}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
               <span style={{fontSize:13,fontWeight:600,color:"#334155"}}>{label}</span>
               <button onClick={()=>setTip(tip===key?null:key)} style={{width:20,height:20,borderRadius:"50%",border:"1.5px solid #d1d5db",background:"none",fontSize:10,cursor:"pointer",color:"#64748b",fontFamily:"inherit"}}>?</button>
             </div>
             {tip===key&&<div style={{background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:8,padding:"8px 12px",fontSize:12,color:"#166534",marginBottom:6}}>{TIPS[key]}</div>}
-            <Inp type="number" value={loc[key]} onChange={e=>set(key,parseFloat(e.target.value)||0)}/>
+            <Inp type="number" min={pct?0:undefined} max={pct?80:undefined} value={val} onChange={onChange}/>
           </div>
-        ))}
+          );
+        })}
         <div style={{marginBottom:12}}>
           <Lbl>Complexity Default</Lbl>
           <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{COMPLEXITY.map(o=><Chip key={o.value} label={`${o.label} (${o.value}×)`} active={loc.complexity_default===o.value} onClick={()=>set("complexity_default",o.value)}/>)}</div>
@@ -1454,7 +1489,7 @@ function SettingsScreen({bp,settings,onSave,onLogout}){
           <div style={{fontSize:13,fontWeight:600,color:"#334155",marginBottom:8}}>Company Logo</div>
           <div style={{display:"flex",alignItems:"center",gap:14}}>
             {loc.company_logo_base64
-              ? <img src={loc.company_logo_base64} alt="Logo" style={{width:64,height:64,borderRadius:"50%",objectFit:"cover",border:"1.5px solid #e2e8f0"}}/>
+              ? <img src={loc.company_logo_base64} alt="Logo" onError={onLogoImgError} style={{width:64,height:64,borderRadius:"50%",objectFit:"cover",border:"1.5px solid #e2e8f0"}}/>
               : <div style={{width:64,height:64,borderRadius:"50%",background:"#f1f5f9",border:"1.5px dashed #cbd5e1",display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,color:"#94a3b8"}}>🏢</div>
             }
             <div style={{display:"flex",flexDirection:"column",gap:6}}>
@@ -1462,7 +1497,8 @@ function SettingsScreen({bp,settings,onSave,onLogout}){
                 {loc.company_logo_base64?"Replace Logo":"Upload Logo"}
                 <input type="file" accept="image/png,image/jpeg,image/webp" onChange={onLogo} style={{display:"none"}}/>
               </label>
-              {loc.company_logo_base64 && <button onClick={()=>set("company_logo_base64","")} style={{background:"none",border:"none",color:"#dc2626",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit",textAlign:"left",padding:0}}>Remove</button>}
+              {loc.company_logo_base64 && <button onClick={removeLogo} style={{background:"none",border:"none",color:"#dc2626",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit",textAlign:"left",padding:0}}>Remove</button>}
+              {logoMsg && <div style={{fontSize:12,color:logoMsg.startsWith("Logo saved")?"#15803d":"#dc2626",fontWeight:600}}>{logoMsg}</div>}
             </div>
           </div>
         </div>
@@ -1537,17 +1573,31 @@ const EyeOff = ({color}) => (
 );
 
 function AuthScreen(){
-  const bioAvail = isBiometricEnabled();
-  const [mode,setMode]=useState(bioAvail?"biometric":"login"); // "biometric" | "login" | "reset"
+  // Read ?plan= from URL to nudge the user into the signup path for a specific plan
+  const initialPlanFromUrl = (()=>{
+    try { const p = new URLSearchParams(window.location.search).get("plan"); return p==="pro"||p==="team"?p:null; } catch { return null; }
+  })();
+  if (initialPlanFromUrl) {
+    try { localStorage.setItem("lb_intended_plan", initialPlanFromUrl); } catch {}
+  }
+  const bioAvail = isBiometricEnabled() && isMobileDevice();
+  const [mode,setMode]=useState(
+    bioAvail ? "biometric" : initialPlanFromUrl ? "signup" : "login"
+  ); // "biometric" | "login" | "signup" | "reset"
   const [email,setEmail]=useState("");
   const [password,setPassword]=useState("");
+  const [password2,setPassword2]=useState("");
   const [showPw,setShowPw]=useState(false);
+  const [showPw2,setShowPw2]=useState(false);
   const [err,setErr]=useState("");
   const [info,setInfo]=useState("");
   const [busy,setBusy]=useState(false);
   const autoTriggeredRef = useRef(false);
 
   const clearMsgs = () => { setErr(""); setInfo(""); };
+  const pwLongEnough = password.length >= 6;
+  const pwMatch = password2.length > 0 && password === password2;
+  const canSignup = pwLongEnough && pwMatch && email.trim().length > 0;
 
   const bioLogin = async () => {
     clearMsgs(); setBusy(true);
@@ -1588,11 +1638,14 @@ function AuthScreen(){
     if(error) setErr(authErrorMessage(error));
   };
   const signup=async()=>{
-    clearMsgs(); setBusy(true);
+    clearMsgs();
+    if (!pwLongEnough) { setErr("Password must be at least 6 characters long."); return; }
+    if (!pwMatch) { setErr("Passwords do not match. Please retype."); return; }
+    setBusy(true);
     const { data, error } = await supabase.auth.signUp({ email, password });
     setBusy(false);
     if(error) setErr(authErrorMessage(error));
-    else if(!data.session) setInfo(`Check your email — we sent a confirmation link to ${email}`);
+    else if(!data.session) setInfo(`Check your email to confirm your account — we sent a link to ${email}`);
   };
   const sendReset=async()=>{
     clearMsgs(); setBusy(true);
@@ -1605,13 +1658,14 @@ function AuthScreen(){
   const cachedLogo = (()=>{ try { return localStorage.getItem(COMPANY_LOGO_CACHE) || ""; } catch { return ""; } })();
   const logoSrc = cachedLogo || "/logo.png";
   const bioLabel = isIOSDevice() ? "Log in with Face ID" : "Touch to log in";
+  const subtitleFor = m => m==="reset"?"Reset your password":m==="biometric"?"Welcome back":m==="signup"?"Create your account":"Sign in to your account";
 
   return(
     <div style={{maxWidth:480,margin:"0 auto",minHeight:"100vh",display:"flex",flexDirection:"column",justifyContent:"center",padding:"24px",fontFamily:"'Inter',system-ui,-apple-system,sans-serif",background:"#f8fafc",boxSizing:"border-box",color:"#0f172a"}}>
       <div style={{textAlign:"center",marginBottom:mode==="biometric"?20:28}}>
         <img src={logoSrc} alt="LawnBid" style={{width:mode==="biometric"?64:72,height:mode==="biometric"?64:72,borderRadius:"50%",objectFit:"cover",marginBottom:12}}/>
         <div style={{fontSize:mode==="biometric"?26:32,fontWeight:900,color:"#0f172a",letterSpacing:-.6}}>LawnBid</div>
-        <div style={{fontSize:13,color:"#64748b",marginTop:4,fontWeight:500}}>{mode==="reset"?"Reset your password":mode==="biometric"?"Welcome back":"Sign in to your account"}</div>
+        <div style={{fontSize:13,color:"#64748b",marginTop:4,fontWeight:500}}>{subtitleFor(mode)}</div>
         {mode==="biometric" && getBiometricEmail() && (
           <div style={{fontSize:13,color:"#94a3b8",marginTop:4,fontWeight:500}}>{getBiometricEmail()}</div>
         )}
@@ -1632,7 +1686,14 @@ function AuthScreen(){
           {err && <div style={{maxWidth:360,margin:"12px auto 0"}}><ErrBox>{err}</ErrBox></div>}
         </div>
       )}
-      {mode!=="biometric" && <Card>
+      {mode!=="biometric" && <>
+      {mode==="signup" && initialPlanFromUrl && (
+        <div style={{background:"#dcfce7",border:"1px solid #bbf7d0",borderLeft:"3px solid #15803d",borderRadius:"0 10px 10px 0",padding:"10px 14px",marginBottom:12,fontSize:13,color:"#166534",fontWeight:600,display:"flex",alignItems:"center",gap:8}}>
+          <span style={{fontSize:15}}>🌿</span>
+          <span>You're signing up for LawnBid {initialPlanFromUrl==="pro"?"Pro":"Team"} — 14-day free trial</span>
+        </div>
+      )}
+      <Card>
         <div style={{marginBottom:12}}>
           <div style={{fontSize:13,fontWeight:600,color:"#334155",marginBottom:4}}>Email</div>
           <Inp type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="you@example.com" autoComplete="email"/>
@@ -1651,9 +1712,44 @@ function AuthScreen(){
             <div style={{textAlign:"right",marginBottom:12}}>
               <button type="button" onClick={()=>{clearMsgs();setMode("reset");}} style={{background:"none",border:"none",color:"#15803d",fontSize:12,fontWeight:600,cursor:"pointer",textDecoration:"underline",padding:"4px 0",minHeight:28,fontFamily:"inherit"}}>Forgot password?</button>
             </div>
-            <div style={{display:"flex",gap:8}}>
-              <Btn onClick={login} disabled={busy||!email||!password} style={{flex:1}}>Log In</Btn>
-              <Btn variant="outline" onClick={signup} disabled={busy||!email||!password} style={{flex:1}}>Create Account</Btn>
+            <Btn onClick={login} disabled={busy||!email||!password} style={{width:"100%"}}>Log In</Btn>
+            <div style={{height:1,background:"#e2e8f0",margin:"16px 0"}}/>
+            <div style={{textAlign:"center",fontSize:13,color:"#64748b"}}>
+              Don't have an account? <button type="button" onClick={()=>{clearMsgs();setMode("signup");}} style={{background:"none",border:"none",color:"#15803d",fontSize:13,fontWeight:600,cursor:"pointer",textDecoration:"underline",padding:"4px 2px",fontFamily:"inherit"}}>Create one →</button>
+            </div>
+          </>
+        )}
+        {mode==="signup" && (
+          <>
+            <div style={{marginBottom:12}}>
+              <div style={{fontSize:13,fontWeight:600,color:"#334155",marginBottom:4}}>Password</div>
+              <div style={{position:"relative"}}>
+                <Inp type={showPw?"text":"password"} value={password} onChange={e=>setPassword(e.target.value)} placeholder="At least 6 characters" autoComplete="new-password" style={{paddingRight:44}}/>
+                <button type="button" onClick={()=>setShowPw(v=>!v)} aria-label={showPw?"Hide password":"Show password"} style={{position:"absolute",right:12,top:"50%",transform:"translateY(-50%)",width:24,height:24,minHeight:24,padding:0,border:"none",background:"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                  {showPw ? <EyeOpen color="#15803d"/> : <EyeOff color="#94a3b8"/>}
+                </button>
+              </div>
+            </div>
+            <div style={{marginBottom:12}}>
+              <div style={{fontSize:13,fontWeight:600,color:"#334155",marginBottom:4}}>Confirm password</div>
+              <div style={{position:"relative"}}>
+                <Inp type={showPw2?"text":"password"} value={password2} onChange={e=>setPassword2(e.target.value)} placeholder="Retype your password" autoComplete="new-password" style={{paddingRight:72}}/>
+                {password2.length>0 && (
+                  <span style={{position:"absolute",right:44,top:"50%",transform:"translateY(-50%)",display:"flex",alignItems:"center",justifyContent:"center",pointerEvents:"none"}}>
+                    {pwMatch
+                      ? <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#15803d" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                      : <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#dc2626" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>}
+                  </span>
+                )}
+                <button type="button" onClick={()=>setShowPw2(v=>!v)} aria-label={showPw2?"Hide password":"Show password"} style={{position:"absolute",right:12,top:"50%",transform:"translateY(-50%)",width:24,height:24,minHeight:24,padding:0,border:"none",background:"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                  {showPw2 ? <EyeOpen color="#15803d"/> : <EyeOff color="#94a3b8"/>}
+                </button>
+              </div>
+            </div>
+            <Btn onClick={signup} disabled={busy||!canSignup} style={{width:"100%"}}>{busy?"Creating account…":"Create Account"}</Btn>
+            <div style={{height:1,background:"#e2e8f0",margin:"16px 0"}}/>
+            <div style={{textAlign:"center",fontSize:13,color:"#64748b"}}>
+              Already have an account? <button type="button" onClick={()=>{clearMsgs();setMode("login");}} style={{background:"none",border:"none",color:"#15803d",fontSize:13,fontWeight:600,cursor:"pointer",textDecoration:"underline",padding:"4px 2px",fontFamily:"inherit"}}>Log in →</button>
             </div>
           </>
         )}
@@ -1661,13 +1757,17 @@ function AuthScreen(){
           <>
             <Btn onClick={sendReset} disabled={busy||!email} style={{width:"100%",marginTop:4}}>Send Reset Link</Btn>
             <div style={{textAlign:"center",marginTop:12}}>
-              <button type="button" onClick={()=>{clearMsgs();setMode("login");}} style={{background:"none",border:"none",color:"#15803d",fontSize:13,fontWeight:600,cursor:"pointer",textDecoration:"underline",padding:"6px 0",minHeight:28,fontFamily:"inherit"}}>← Back to Login</button>
+              <button type="button" onClick={()=>{clearMsgs();setMode("login");}} style={{background:"none",border:"none",color:"#15803d",fontSize:13,fontWeight:600,cursor:"pointer",textDecoration:"underline",padding:"6px 0",minHeight:28,fontFamily:"inherit"}}>← Back to login</button>
             </div>
           </>
         )}
         {err && <ErrBox style={{marginTop:12}}>{err}</ErrBox>}
         {info && <div style={{marginTop:12,padding:"10px 12px",background:"#f0fdf4",borderLeft:"3px solid #16a34a",borderRadius:"0 8px 8px 0",color:"#166534",fontSize:13,fontWeight:500}}>✓ {info}</div>}
-      </Card>}
+      </Card>
+      <div style={{textAlign:"center",marginTop:16}}>
+        <a href="/" style={{color:"#94a3b8",fontSize:12,fontWeight:500,textDecoration:"none"}}>← Back to winwinlawnbid.com</a>
+      </div>
+      </>}
     </div>
   );
 }
@@ -2406,7 +2506,7 @@ function S4({bp,flow,set,setFlow,area,perim,calc,time,onSend,saving}){
       }
       setFlow(fl => ({ ...fl, existingId: qid, attachments: [...(fl.attachments||[]), ...uploaded] }));
     } catch(e) {
-      alert(dbErrorMessage(e));
+      alert(e?.message?.includes("Photo storage") || e?.message?.includes("Not authenticated") ? e.message : dbErrorMessage(e));
     } finally {
       setUploading(false);
     }
