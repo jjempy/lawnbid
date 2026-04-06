@@ -102,6 +102,7 @@ const $$ = v => `$${(+(v||0)).toLocaleString("en-US",{minimumFractionDigits:2,ma
 const fmtT = h => { if(!h||h<=0) return "—"; const hr=Math.floor(h),m=Math.round((h-hr)*60); return hr===0?`${m}m`:m===0?`${hr}h`:`${hr}h ${m}m`; };
 const fmtD = iso => new Date(iso).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"});
 const fmtTS= iso => new Date(iso).toLocaleString("en-US",{month:"short",day:"numeric",year:"numeric",hour:"numeric",minute:"2-digit"});
+const fmtArea = (sqft) => { if(!sqft) return "—"; return `${Math.round(sqft).toLocaleString()} sqft (${(sqft/43560).toFixed(2)} ac)`; };
 const isExpired = iso => iso && new Date(iso) < new Date();
 const addDays = (iso, days) => new Date(new Date(iso).getTime() + (days||30)*86400000).toISOString();
 
@@ -162,17 +163,22 @@ function resetBioPromptCounters() {
   try { localStorage.removeItem(BIO.DISMISSED); localStorage.removeItem(BIO.NEXT_ASK); } catch {}
 }
 async function registerBiometric(userId, userEmail, refreshToken, signal) {
-  const cred = await withTimeout(navigator.credentials.create({
+  // userVerification "preferred" (not "required") — "required" silently fails on many
+  // Android devices where the authenticator reports as available but can't satisfy the
+  // strict requirement. "preferred" tries biometric first, falls back gracefully.
+  // No external withTimeout — let WebAuthn's native timeout handle cancellation cleanly.
+  // The AbortController signal handles manual user cancel from the UI.
+  const cred = await navigator.credentials.create({
     publicKey: {
       challenge: crypto.getRandomValues(new Uint8Array(32)),
       rp: { name: "LawnBid", id: window.location.hostname },
       user: { id: new TextEncoder().encode(userId), name: userEmail, displayName: userEmail },
       pubKeyCredParams: [{ type:"public-key", alg:-7 }, { type:"public-key", alg:-257 }],
-      authenticatorSelection: { authenticatorAttachment:"platform", userVerification:"required" },
-      timeout: 60000,
+      authenticatorSelection: { authenticatorAttachment:"platform", userVerification:"preferred" },
+      timeout: 120000,
     },
     signal,
-  }), 30000);
+  });
   if (!cred) throw new Error("no-credential");
   localStorage.setItem(BIO.ENABLED, "true");
   localStorage.setItem(BIO.EMAIL, userEmail);
@@ -188,8 +194,8 @@ async function verifyBiometric() {
       challenge: crypto.getRandomValues(new Uint8Array(32)),
       rpId: window.location.hostname,
       allowCredentials: [{ type:"public-key", id: b64d(credId), transports:["internal"] }],
-      userVerification: "required",
-      timeout: 60000,
+      userVerification: "preferred",
+      timeout: 120000,
     },
   });
 }
@@ -218,22 +224,25 @@ function calcQ(area, perim, cx, risk, disc, s, ov=null) {
   const mh=area/20000, th=perim/3000;
   const mc=area*(s.mow_rate/20000), tc=perim*(s.trim_rate/3000), ec=s.equipment_cost*(mh+th);
   const sub=mc+tc+ec, acx=sub*cx, ar=acx*risk;
-  // Profit margin: price = cost / (1 - margin). Clamp 0-0.8 to avoid division by zero.
+  // 1. Floor at minimum bid
+  const fl=Math.max(ar,s.minimum_bid), minA=ar<s.minimum_bid;
+  // 2. Apply discount (reduces billable amount)
+  const afterDisc=fl*(1-disc/100);
+  // 3. Apply profit margin on the discounted price: final = discounted / (1 - margin)
   const margin = Math.min(0.8, Math.max(0, (s.profit_margin ?? 0.30)));
-  const withMargin = margin > 0 ? ar / (1 - margin) : ar;
-  const minA=withMargin<s.minimum_bid, fl=Math.max(withMargin,s.minimum_bid), fin=fl*(1-disc/100);
+  const fin = margin > 0 ? afterDisc / (1 - margin) : afterDisc;
   const disp=ov!==null?(parseFloat(ov)||0):fin;
   const bd=[
-    {label:"Mow (area)",       note:`${Math.round(area).toLocaleString()} sqft × ($${s.mow_rate}÷20,000)`, value:mc},
+    {label:"Mow (area)",       note:`${fmtArea(area)} × ($${s.mow_rate}÷20,000)`, value:mc},
     {label:"Trim (perimeter)", note:`${Math.round(perim).toLocaleString()} ft × ($${s.trim_rate}÷3,000)`,  value:tc},
     {label:"Equipment",        note:`${(mh+th).toFixed(2)} hrs × $${s.equipment_cost}/hr`,                 value:ec},
     {subtotal:true, label:"Subtotal (costs)", value:sub},
     {modifier:true, label:`Complexity (${cx}×)`,  value:acx-sub},
     {modifier:true, label:`Risk (${risk}×)`,       value:ar-acx},
-    ...(margin>0?[{modifier:true,label:`Profit margin (${Math.round(margin*100)}%)`,value:withMargin-ar}]:[]),
     ...(disc>0?[{modifier:true,label:`Discount (${disc}%)`,value:-(fl*disc/100)}]:[]),
+    ...(margin>0?[{modifier:true,label:`Profit margin (${Math.round(margin*100)}%)`,value:fin-afterDisc}]:[]),
   ];
-  return {mh,th,mc,tc,ec,sub,acx,ar,withMargin,minA,fl,fin,disp,bd};
+  return {mh,th,mc,tc,ec,sub,acx,ar,afterDisc,minA,fl,fin,disp,bd};
 }
 
 function calcTime(area, perim, crew, cx) {
@@ -900,9 +909,12 @@ function BioEnrollModal({session,onDone}){
       setSucceeded(true);
       setTimeout(onDone, 1500);
     } catch (e) {
-      if (e?.message === "timeout") setErr("Biometric setup timed out. Please try again.");
-      else if (e?.name === "NotAllowedError" || e?.name === "AbortError") setErr("Biometric setup was cancelled.");
-      else setErr("Biometric setup failed. You can try again in Settings.");
+      console.error("[LawnBid] Biometric enrollment failed:", e?.name, e?.message, e);
+      if (e?.name === "NotAllowedError") setErr("Biometric setup was cancelled or denied by the device.");
+      else if (e?.name === "AbortError") setErr("Biometric setup was cancelled.");
+      else if (e?.name === "InvalidStateError") setErr("This device is already registered. Try disabling biometrics in Settings and re-enabling.");
+      else if (e?.name === "SecurityError") setErr("Biometric setup blocked. Make sure you're on a secure (HTTPS) connection.");
+      else setErr("Biometric setup failed. Make sure fingerprint or Face ID is set up in your phone's Settings → Security before trying here.");
       cleanup();
     }
   };
@@ -925,7 +937,8 @@ function BioEnrollModal({session,onDone}){
               </div>
             </div>
             <div style={{fontSize:20,fontWeight:800,color:"#0f172a",textAlign:"center",marginBottom:6,letterSpacing:-.3}}>Log in faster next time</div>
-            <div style={{fontSize:14,color:"#64748b",textAlign:"center",lineHeight:1.5,marginBottom:18,padding:"0 8px"}}>Use your fingerprint or Face ID instead of typing your password.</div>
+            <div style={{fontSize:14,color:"#64748b",textAlign:"center",lineHeight:1.5,marginBottom:6,padding:"0 8px"}}>Use your fingerprint or Face ID instead of typing your password.</div>
+            <div style={{fontSize:11,color:"#94a3b8",textAlign:"center",lineHeight:1.4,marginBottom:16,padding:"0 12px"}}>Make sure fingerprint or Face ID is already set up in your phone's Settings before enabling.</div>
             {err && <ErrBox style={{marginBottom:12}}>{err}</ErrBox>}
             <Btn onClick={enable} disabled={busy} style={{width:"100%"}}>{busy?"Enabling…":"Enable Biometric Login"}</Btn>
             {busy && showCancel && <Btn variant="secondary" onClick={cancel} style={{width:"100%",marginTop:8}}>Cancel</Btn>}
@@ -1368,9 +1381,10 @@ function BiometricRow(){
       setEnabled(true);
       setMsg("Biometric login enabled.");
     } catch (e) {
-      if (e?.message === "timeout") setErr("Biometric setup timed out. Please try again.");
-      else if (e?.name === "NotAllowedError" || e?.name === "AbortError") setErr("Biometric setup was cancelled.");
-      else setErr("Biometric setup failed. Please try again.");
+      console.error("[LawnBid] Biometric enrollment (Settings) failed:", e?.name, e?.message, e);
+      if (e?.name === "NotAllowedError") setErr("Biometric setup was cancelled or denied.");
+      else if (e?.name === "AbortError") setErr("Biometric setup was cancelled.");
+      else setErr("Biometric setup failed. Make sure fingerprint or Face ID is set up in your phone's Settings → Security.");
       cleanup();
     }
   };
@@ -1396,23 +1410,23 @@ function BiometricRow(){
 }
 
 function PlanBadge(){
-  const {plan,planName,quoteLimit,quotesUsed,showUpgrade} = usePlan();
+  const {plan,planName,quoteLimit,quotesUsed} = usePlan();
   if (plan === "free") {
     return (
-      <Card style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap",padding:"14px 18px",marginBottom:12}}>
+      <Card style={{background:"#f0fdf4",border:"1px solid #bbf7d0",display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap",padding:"16px 18px",marginBottom:14}}>
         <div style={{minWidth:0}}>
-          <div style={{fontSize:14,fontWeight:700,color:"#0f172a"}}>Free Plan</div>
-          <div style={{fontSize:12,color:"#64748b",fontWeight:500,marginTop:2}}>{quotesUsed} of {quoteLimit} quotes used this month</div>
+          <div style={{fontSize:14,fontWeight:700,color:"#166534"}}>Free Plan</div>
+          <div style={{fontSize:12,color:"#15803d",fontWeight:500,marginTop:3}}>{quotesUsed} of {quoteLimit} quotes used this month</div>
         </div>
-        <button onClick={()=>showUpgrade("Upgrade to Pro")} style={{height:36,minHeight:36,padding:"0 14px",borderRadius:10,border:"1.5px solid #15803d",background:"#15803d",color:"#ffffff",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap"}}>Upgrade to Pro →</button>
+        <a href="/app/?plan=pro" style={{height:36,minHeight:36,padding:"0 14px",borderRadius:10,border:"none",background:"#15803d",color:"#ffffff",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap",textDecoration:"none",display:"inline-flex",alignItems:"center"}}>Upgrade to Pro →</a>
       </Card>
     );
   }
   return (
-    <Card style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,padding:"14px 18px",marginBottom:12}}>
+    <Card style={{background:"#f0fdf4",border:"1px solid #bbf7d0",display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,padding:"16px 18px",marginBottom:14}}>
       <div style={{minWidth:0}}>
-        <div style={{fontSize:14,fontWeight:700,color:"#0f172a"}}>{planName} Plan</div>
-        <div style={{fontSize:12,color:"#15803d",fontWeight:600,marginTop:2}}>Unlimited quotes ✓</div>
+        <div style={{fontSize:14,fontWeight:700,color:"#166534"}}>{planName} Plan</div>
+        <div style={{fontSize:12,color:"#15803d",fontWeight:600,marginTop:3}}>Unlimited quotes ✓</div>
       </div>
     </Card>
   );
@@ -1573,16 +1587,16 @@ const EyeOff = ({color}) => (
 );
 
 function AuthScreen(){
-  // Read ?plan= from URL to nudge the user into the signup path for a specific plan
-  const initialPlanFromUrl = (()=>{
-    try { const p = new URLSearchParams(window.location.search).get("plan"); return p==="pro"||p==="team"?p:null; } catch { return null; }
-  })();
+  // Read ?plan= and ?new=1 from URL to route new users to signup
+  const urlParams = (()=>{ try { return new URLSearchParams(window.location.search); } catch { return new URLSearchParams(); } })();
+  const initialPlanFromUrl = (()=>{ const p = urlParams.get("plan"); return p==="pro"||p==="team"?p:null; })();
+  const isNewFromUrl = urlParams.get("new") === "1";
   if (initialPlanFromUrl) {
     try { localStorage.setItem("lb_intended_plan", initialPlanFromUrl); } catch {}
   }
   const bioAvail = isBiometricEnabled() && isMobileDevice();
   const [mode,setMode]=useState(
-    bioAvail ? "biometric" : initialPlanFromUrl ? "signup" : "login"
+    bioAvail ? "biometric" : (initialPlanFromUrl || isNewFromUrl) ? "signup" : "login"
   ); // "biometric" | "login" | "signup" | "reset"
   const [email,setEmail]=useState("");
   const [password,setPassword]=useState("");
@@ -1612,7 +1626,8 @@ function AuthScreen(){
         setErr("Session expired — please log in with your password to re-enable biometric login.");
       }
     } catch (e) {
-      if (e?.name === "NotAllowedError") { /* user cancelled — stay put silently */ }
+      console.error("[LawnBid] Biometric login failed:", e?.name, e?.message, e);
+      if (e?.name === "NotAllowedError") { /* user cancelled biometric prompt — stay put silently */ }
       else if (e?.message === "no-credential" || e?.message === "no-refresh-token") {
         clearBiometric(); setMode("login");
         setErr("Session expired — please log in with your password to re-enable biometric login.");
@@ -1637,6 +1652,8 @@ function AuthScreen(){
     setBusy(false);
     if(error) setErr(authErrorMessage(error));
   };
+  const [emailBlurred,setEmailBlurred]=useState(false);
+  const emailLooksValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
   const signup=async()=>{
     clearMsgs();
     if (!pwLongEnough) { setErr("Password must be at least 6 characters long."); return; }
@@ -1644,8 +1661,13 @@ function AuthScreen(){
     setBusy(true);
     const { data, error } = await supabase.auth.signUp({ email, password });
     setBusy(false);
-    if(error) setErr(authErrorMessage(error));
-    else if(!data.session) setInfo(`Check your email to confirm your account — we sent a link to ${email}`);
+    if (error) { setErr(authErrorMessage(error)); return; }
+    // Supabase returns an empty identities array when the email is already registered
+    if (data?.user?.identities?.length === 0) {
+      setErr("duplicate-email");
+      return;
+    }
+    if (!data.session) setInfo("signup-check-email");
   };
   const sendReset=async()=>{
     clearMsgs(); setBusy(true);
@@ -1696,7 +1718,10 @@ function AuthScreen(){
       <Card>
         <div style={{marginBottom:12}}>
           <div style={{fontSize:13,fontWeight:600,color:"#334155",marginBottom:4}}>Email</div>
-          <Inp type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="you@example.com" autoComplete="email"/>
+          <Inp type="email" value={email} onChange={e=>{setEmail(e.target.value);setEmailBlurred(false);}} onBlur={()=>setEmailBlurred(true)} placeholder="you@example.com" autoComplete="email"/>
+          {mode==="signup" && emailBlurred && emailLooksValid && (
+            <div style={{fontSize:12,color:"#64748b",marginTop:6}}>If you already have an account, <button type="button" onClick={()=>{clearMsgs();setMode("login");}} style={{background:"none",border:"none",color:"#15803d",fontSize:12,fontWeight:600,cursor:"pointer",textDecoration:"underline",padding:0,fontFamily:"inherit"}}>log in instead →</button></div>
+          )}
         </div>
         {mode==="login" && (
           <>
@@ -1761,8 +1786,22 @@ function AuthScreen(){
             </div>
           </>
         )}
-        {err && <ErrBox style={{marginTop:12}}>{err}</ErrBox>}
-        {info && <div style={{marginTop:12,padding:"10px 12px",background:"#f0fdf4",borderLeft:"3px solid #16a34a",borderRadius:"0 8px 8px 0",color:"#166534",fontSize:13,fontWeight:500}}>✓ {info}</div>}
+        {err==="duplicate-email" ? (
+          <div style={{marginTop:12,padding:"12px 14px",background:"#eff6ff",borderLeft:"3px solid #3b82f6",borderRadius:"0 8px 8px 0",color:"#1e40af",fontSize:13,fontWeight:500,lineHeight:1.5}}>
+            An account with <strong>{email}</strong> already exists.
+            <div style={{marginTop:8}}>
+              <button type="button" onClick={()=>{clearMsgs();setMode("login");}} style={{height:36,minHeight:36,padding:"0 16px",borderRadius:8,border:"none",background:"#3b82f6",color:"#ffffff",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>Log in instead →</button>
+            </div>
+          </div>
+        ) : err ? <ErrBox style={{marginTop:12}}>{err}</ErrBox> : null}
+        {info==="signup-check-email" ? (
+          <div style={{marginTop:12,padding:"10px 12px",background:"#f0fdf4",borderLeft:"3px solid #16a34a",borderRadius:"0 8px 8px 0",color:"#166534",fontSize:13,fontWeight:500,lineHeight:1.5}}>
+            ✓ Check your email to confirm your account. If you already have an account, use the login screen instead.
+            <div style={{marginTop:6}}><button type="button" onClick={()=>{clearMsgs();setMode("login");}} style={{background:"none",border:"none",color:"#15803d",fontSize:13,fontWeight:600,cursor:"pointer",textDecoration:"underline",padding:0,fontFamily:"inherit"}}>Already have an account? Log in →</button></div>
+          </div>
+        ) : info ? (
+          <div style={{marginTop:12,padding:"10px 12px",background:"#f0fdf4",borderLeft:"3px solid #16a34a",borderRadius:"0 8px 8px 0",color:"#166534",fontSize:13,fontWeight:500}}>✓ {info}</div>
+        ) : null}
       </Card>
       <div style={{textAlign:"center",marginTop:16}}>
         <a href="https://winwinlawnbid.com" style={{color:"#94a3b8",fontSize:12,fontWeight:500,textDecoration:"none"}}>← Back to winwinlawnbid.com</a>
