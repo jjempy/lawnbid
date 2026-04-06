@@ -603,6 +603,13 @@ export default function LawnBid() {
     } catch(e) { alert(dbErrorMessage(e)); }
   }, []);
 
+  // Auto-dismiss toast (must be before any early returns)
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 4000);
+    return () => clearTimeout(t);
+  }, [toast]);
+
   if (!authReady) return (
     <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"100vh",fontFamily:"system-ui",gap:12}}>
       <img src="/logo.png" alt="LawnBid" style={{width:80,height:80,borderRadius:"50%",objectFit:"cover"}}/>
@@ -662,12 +669,6 @@ export default function LawnBid() {
       ⚠ {dbErr}
     </div>
   );
-  // Auto-dismiss toast
-  useEffect(() => {
-    if (!toast) return;
-    const t = setTimeout(() => setToast(null), 4000);
-    return () => clearTimeout(t);
-  }, [toast]);
   const toastBanner = toast && (
     <div style={{position:"fixed",top:"env(safe-area-inset-top)",left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:480,background:"#dcfce7",borderBottom:"2px solid #bbf7d0",padding:"10px 16px",fontSize:13,color:"#166534",fontWeight:600,zIndex:999,textAlign:"center",boxSizing:"border-box"}}>{toast}</div>
   );
