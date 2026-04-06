@@ -119,7 +119,7 @@ const COMPANY_LOGO_CACHE = "lb_company_logo";
 const isIOSDevice = () => typeof navigator !== "undefined" && /iPad|iPhone|iPod/.test(navigator.userAgent);
 const isMobileDevice = () => {
   if (typeof navigator === "undefined") return false;
-  if (/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) return true;
+  if (/Android|iPhone|iPad|iPod|Pixel/i.test(navigator.userAgent)) return true;
   return (navigator.maxTouchPoints || 0) > 1 && window.innerWidth < 1024;
 };
 function canPromptBio() {
@@ -147,8 +147,11 @@ const withTimeout = (promise, ms) => Promise.race([
 async function biometricSupported() {
   if (typeof window === "undefined" || !window.PublicKeyCredential) return false;
   if (!isMobileDevice()) return false; // never offer biometrics on desktop
-  try { return await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable(); }
-  catch { return false; }
+  try {
+    const ok = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
+    console.log("[LawnBid] Platform authenticator available:", ok);
+    return ok;
+  } catch { return false; }
 }
 function isBiometricEnabled() {
   try { return localStorage.getItem(BIO.ENABLED) === "true"; } catch { return false; }
@@ -162,23 +165,23 @@ function clearBiometric() {
 function resetBioPromptCounters() {
   try { localStorage.removeItem(BIO.DISMISSED); localStorage.removeItem(BIO.NEXT_ASK); } catch {}
 }
-async function registerBiometric(userId, userEmail, refreshToken, signal) {
-  // userVerification "preferred" (not "required") — "required" silently fails on many
-  // Android devices where the authenticator reports as available but can't satisfy the
-  // strict requirement. "preferred" tries biometric first, falls back gracefully.
-  // No external withTimeout — let WebAuthn's native timeout handle cancellation cleanly.
-  // The AbortController signal handles manual user cancel from the UI.
+async function registerBiometric(userId, userEmail, refreshToken) {
+  // Pixel 10+ / Android 15 fix: removed authenticatorAttachment:'platform' (causes
+  // silent hang on recent Pixel devices) and the AbortController signal (interferes
+  // with Pixel's WebAuthn). Using only ES256 (-7) for broadest compat. The browser
+  // selects the platform authenticator automatically on mobile.
+  console.log("[LawnBid] Starting WebAuthn credential creation...");
   const cred = await navigator.credentials.create({
     publicKey: {
       challenge: crypto.getRandomValues(new Uint8Array(32)),
       rp: { name: "LawnBid", id: window.location.hostname },
       user: { id: new TextEncoder().encode(userId), name: userEmail, displayName: userEmail },
-      pubKeyCredParams: [{ type:"public-key", alg:-7 }, { type:"public-key", alg:-257 }],
-      authenticatorSelection: { authenticatorAttachment:"platform", userVerification:"preferred" },
+      pubKeyCredParams: [{ type:"public-key", alg:-7 }],
+      authenticatorSelection: { userVerification:"preferred" },
       timeout: 120000,
     },
-    signal,
   });
+  console.log("[LawnBid] WebAuthn credential created:", cred);
   if (!cred) throw new Error("no-credential");
   localStorage.setItem(BIO.ENABLED, "true");
   localStorage.setItem(BIO.EMAIL, userEmail);
@@ -326,7 +329,7 @@ async function generateQuotePDF(quote, settings, calc, time) {
   doc.text("PERIMETER", M + 180, y);
   doc.text("EST. TIME", M + 340, y);
   doc.setFont("helvetica","normal"); doc.setFontSize(11); doc.setTextColor(...DARK);
-  doc.text(`${Math.round(quote.area_sqft).toLocaleString()} sqft`, M, y + 14);
+  doc.text(fmtArea(quote.area_sqft), M, y + 14);
   doc.text(`${Math.round(quote.linear_ft).toLocaleString()} ft`, M + 180, y + 14);
   doc.text(time ? fmtT(time.adj) : "—", M + 340, y + 14);
   y += 34;
@@ -399,7 +402,7 @@ function quoteText(q, s) {
     q.parent_id?`Revision of: ${q.parent_id}`:"",
     "",`Client: ${q.client_name||"—"}`,`Property: ${q.address}`,
     "","Service: Lawn Mowing, Trimming & Edging",
-    `Area: ${Math.round(q.area_sqft).toLocaleString()} sqft (${(q.area_sqft/43560).toFixed(3)} acres)`,
+    `Area: ${fmtArea(q.area_sqft)}`,
     `Perimeter: ${Math.round(q.linear_ft).toLocaleString()} linear ft`,
     "",`TOTAL: ${$$(q.final_price)}`,
     "",s.company_phone?`To accept, call ${s.company_phone}.`:"To accept, please reply.",
@@ -569,8 +572,8 @@ export default function LawnBid() {
   }, []);
 
   const handleSave = useCallback(async (rec, cliData, status) => {
-    // Gate: free plan quote limit (new quotes only)
-    if (rec.isNew) {
+    // Gate: free plan quote limit (genuinely new quotes only — not revisions)
+    if (rec.isNew && !rec.parentId) {
       const s = settingsRef.current || {};
       const cfg = PLANS[s.plan || "free"] || PLANS.free;
       const used = s.quote_count_this_month || 0;
@@ -642,8 +645,10 @@ export default function LawnBid() {
                       : [record, ...prev];
       });
 
-      // 4. Increment free-plan monthly quote count on new quotes
-      if (rec.isNew) {
+      // 4. Increment free-plan monthly quote count — only for genuinely new quotes
+      //    (not edits, not V2 revisions which have parentId, not draft updates)
+      const isNewQuote = rec.isNew && !rec.parentId;
+      if (isNewQuote) {
         const s = settingsRef.current || {};
         const cfg = PLANS[s.plan || "free"] || PLANS.free;
         if (cfg.quote_limit !== null) {
@@ -665,7 +670,7 @@ export default function LawnBid() {
 
   const handleSaveSettings = useCallback(async ns => {
     setSettings(ns);
-    try { await dbSaveSettings(ns); } catch(e) { console.error("Settings save failed:", e); }
+    await dbSaveSettings(ns); // let errors propagate so callers know if save failed
   }, []);
 
   const handleDeleteQuote = useCallback(async (quoteId) => {
@@ -893,18 +898,16 @@ function BioEnrollModal({session,onDone}){
     onDone();
   };
   const cancel = () => {
-    try { abortRef.current?.abort(); } catch {}
     cleanup();
-    setErr("Biometric setup was cancelled.");
+    setErr("Biometric setup was cancelled. You can try again in Settings.");
   };
   const enable = async () => {
     setErr("");
     setBusy(true);
     setShowCancel(false);
     cancelTimerRef.current = setTimeout(() => setShowCancel(true), 5000);
-    abortRef.current = typeof AbortController !== "undefined" ? new AbortController() : null;
     try {
-      await registerBiometric(session.user.id, session.user.email, session.refresh_token, abortRef.current?.signal);
+      await registerBiometric(session.user.id, session.user.email, session.refresh_token);
       cleanup();
       setSucceeded(true);
       setTimeout(onDone, 1500);
@@ -998,7 +1001,7 @@ function HomeScreen({bp,quotes,onNew,onView}){
               <div style={{fontSize:13,color:"#64748b",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontWeight:400}}>{q.address}</div>
               {showDetailRow && (
                 <div style={{display:"flex",gap:14,marginTop:6,fontSize:12,color:"#475569",fontWeight:500}}>
-                  <span><span style={{color:"#94a3b8"}}>Area </span>{Math.round(q.area_sqft).toLocaleString()} sqft</span>
+                  <span><span style={{color:"#94a3b8"}}>Area </span>{fmtArea(q.area_sqft)}</span>
                   <span><span style={{color:"#94a3b8"}}>Perim </span>{Math.round(q.linear_ft).toLocaleString()} ft</span>
                 </div>
               )}
@@ -1112,7 +1115,7 @@ function ClientDetail({bp,client,quotes,onBack,onViewQuote}){
     <Card>
       <Lbl>Last Job Measurements</Lbl>
       <div style={{display:"flex",gap:32}}>
-        <div><div style={{fontSize:10,color:"#94a3b8",textTransform:"uppercase",fontWeight:700,letterSpacing:1}}>Area</div><div style={{fontSize:20,fontWeight:800,color:"#0f172a",letterSpacing:-.3,marginTop:2}}>{Math.round(client.last_area_sqft).toLocaleString()} sqft</div><div style={{fontSize:11,color:"#64748b",fontWeight:500,marginTop:2}}>{(client.last_area_sqft/43560).toFixed(3)} acres</div></div>
+        <div><div style={{fontSize:10,color:"#94a3b8",textTransform:"uppercase",fontWeight:700,letterSpacing:1}}>Area</div><div style={{fontSize:20,fontWeight:800,color:"#0f172a",letterSpacing:-.3,marginTop:2}}>{fmtArea(client.last_area_sqft)}</div></div>
         <div><div style={{fontSize:10,color:"#94a3b8",textTransform:"uppercase",fontWeight:700,letterSpacing:1}}>Perimeter</div><div style={{fontSize:20,fontWeight:800,color:"#0f172a",letterSpacing:-.3,marginTop:2}}>{Math.round(client.last_linear_ft||0).toLocaleString()} ft</div></div>
       </div>
     </Card>
@@ -1136,7 +1139,7 @@ function ClientDetail({bp,client,quotes,onBack,onViewQuote}){
               </div>
               <div style={{fontSize:12,color:"#64748b"}}>{fmtTS(q.created_at)}</div>
               <div style={{fontSize:12,color:"#94a3b8",marginTop:2}}>
-                {Math.round(q.area_sqft).toLocaleString()} sqft · {q.crew_size} crew · {COMPLEXITY.find(o=>o.value===q.complexity)?.label} · {RISK.find(o=>o.value===q.risk)?.label}
+                {fmtArea(q.area_sqft)} · {q.crew_size} crew · {COMPLEXITY.find(o=>o.value===q.complexity)?.label} · {RISK.find(o=>o.value===q.risk)?.label}
               </div>
               {q.parent_id&&<div style={{fontSize:11,color:"#94a3b8",marginTop:2}}>Revision of {q.parent_id}</div>}
             </div>
@@ -1216,7 +1219,7 @@ function QuoteDetail({bp,quote,allQuotes,settings,onBack,onEdit,onDuplicate,onDe
     <Card>
       <Lbl>Job Details</Lbl>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-        {[{l:"Address",v:quote.address,full:true},{l:"Area",v:`${Math.round(quote.area_sqft).toLocaleString()} sqft (${(quote.area_sqft/43560).toFixed(3)} ac)`},{l:"Perimeter",v:`${Math.round(quote.linear_ft).toLocaleString()} ft`},{l:"Crew",v:`${quote.crew_size} worker${quote.crew_size>1?"s":""}`},{l:"Complexity",v:COMPLEXITY.find(o=>o.value===quote.complexity)?.label},{l:"Risk",v:RISK.find(o=>o.value===quote.risk)?.label},{l:"Discount",v:(quote.discount_pct||0)>0?`${quote.discount_pct}%`:"None"},{l:"Created",v:fmtTS(quote.created_at),full:true},{l:"Sent",v:quote.sent_at?fmtTS(quote.sent_at):"Not sent",full:true},{l:"Expires",v:quote.expiry_date?`${fmtD(quote.expiry_date)}${isExpired(quote.expiry_date)?" (expired)":""}`:"—",full:true}]
+        {[{l:"Address",v:quote.address,full:true},{l:"Area",v:fmtArea(quote.area_sqft)},{l:"Perimeter",v:`${Math.round(quote.linear_ft).toLocaleString()} ft`},{l:"Crew",v:`${quote.crew_size} worker${quote.crew_size>1?"s":""}`},{l:"Complexity",v:COMPLEXITY.find(o=>o.value===quote.complexity)?.label},{l:"Risk",v:RISK.find(o=>o.value===quote.risk)?.label},{l:"Discount",v:(quote.discount_pct||0)>0?`${quote.discount_pct}%`:"None"},{l:"Created",v:fmtTS(quote.created_at),full:true},{l:"Sent",v:quote.sent_at?fmtTS(quote.sent_at):"Not sent",full:true},{l:"Expires",v:quote.expiry_date?`${fmtD(quote.expiry_date)}${isExpired(quote.expiry_date)?" (expired)":""}`:"—",full:true}]
           .map(({l,v,full})=>(
             <div key={l} style={{gridColumn:full?"1 / -1":"auto"}}>
               <div style={{fontSize:10,fontWeight:700,color:"#94a3b8",textTransform:"uppercase"}}>{l}</div>
@@ -1372,11 +1375,10 @@ function BiometricRow(){
   const enable = async () => {
     setErr(""); setMsg(""); setBusy(true); setShowCancel(false);
     cancelTimerRef.current = setTimeout(() => setShowCancel(true), 5000);
-    abortRef.current = typeof AbortController !== "undefined" ? new AbortController() : null;
     try {
       const { data } = await supabase.auth.getSession();
       if (!data?.session) throw new Error("no-session");
-      await registerBiometric(data.session.user.id, data.session.user.email, data.session.refresh_token, abortRef.current?.signal);
+      await registerBiometric(data.session.user.id, data.session.user.email, data.session.refresh_token);
       cleanup();
       setEnabled(true);
       setMsg("Biometric login enabled.");
@@ -1388,7 +1390,7 @@ function BiometricRow(){
       cleanup();
     }
   };
-  const cancel = () => { try { abortRef.current?.abort(); } catch {}; cleanup(); setErr("Biometric setup was cancelled."); };
+  const cancel = () => { cleanup(); setErr("Biometric setup was cancelled."); };
 
   return (
     <div style={{marginTop:14,paddingTop:14,borderTop:"1px solid #e2e8f0"}}>
@@ -1437,8 +1439,11 @@ function SettingsScreen({bp,settings,onSave,onLogout}){
   const [tip,setTip]=useState(null);
   const [saved,setSaved]=useState(false);
   const set=(k,v)=>setLoc(s=>({...s,[k]:v}));
-  const save=()=>{onSave(loc);setSaved(true);setTimeout(()=>setSaved(false),2000);};
-  const reset=()=>{if(confirm("Reset formula settings to defaults?")){const ns={...loc,...DEFAULT_SETTINGS};setLoc(ns);onSave(ns);}};
+  const save=async()=>{
+    try { await onSave(loc); setSaved(true); setTimeout(()=>setSaved(false),2000); }
+    catch(e) { console.error("[LawnBid] Settings save failed:", e); alert("Could not save settings. Check your connection and try again."); }
+  };
+  const reset=async()=>{if(confirm("Reset formula settings to defaults?")){const ns={...loc,...DEFAULT_SETTINGS};setLoc(ns);try{await onSave(ns);}catch(e){console.error("[LawnBid] Settings reset failed:",e);}}};
   const TIPS={mow_rate:"Dollar value of mowing 20,000 sqft (≈½ acre) in 1 hr.",trim_rate:"Cost to trim 3,000 linear feet in 1 hr. Most crews do 2,500–4,000 ft/hr.",equipment_cost:"Hourly cost to run your equipment — fuel, maintenance, depreciation.",hourly_rate:"True cost per worker per hour: wages + payroll taxes + benefits.",minimum_bid:"No quote goes below this. Covers drive time, mobilization, admin.",quote_validity_days:"How many days a new quote is valid before it is marked expired.",profit_margin:"Your target profit. 30% means for every $100 charged, $30 is profit after all costs. Most lawn care businesses target 25–40%. Formula: price = cost ÷ (1 - margin)"};
   const FIELDS=[{key:"mow_rate",label:"Mow Rate ($/20k sqft)"},{key:"trim_rate",label:"Trim Rate ($/3k linear ft)"},{key:"equipment_cost",label:"Equipment Cost ($/hr)"},{key:"hourly_rate",label:"Hourly Rate ($/worker/hr)"},{key:"minimum_bid",label:"Minimum Bid ($)"},{key:"profit_margin",label:"Profit Margin (%)",pct:true},{key:"quote_validity_days",label:"Quote Valid For (days)"}];
   const [logoMsg,setLogoMsg]=useState("");
@@ -1448,23 +1453,38 @@ function SettingsScreen({bp,settings,onSave,onLogout}){
     const reader=new FileReader();
     reader.onload=async()=>{
       const b64=reader.result;
-      // Update local form state, update parent settings, and persist immediately
       const next = { ...loc, company_logo_base64: b64 };
       setLoc(next);
-      try { await onSave(next); try { localStorage.setItem(COMPANY_LOGO_CACHE, b64); } catch {}
-        setLogoMsg("Logo saved ✓"); setTimeout(()=>setLogoMsg(""), 2000);
-      } catch { setLogoMsg("Could not save logo — try again."); setTimeout(()=>setLogoMsg(""), 3000); }
+      try {
+        await onSave(next); // errors now propagate from handleSaveSettings
+        // Verify it actually persisted to Supabase
+        const { data } = await supabase.from("settings").select("company_logo_base64").eq("id",1).maybeSingle();
+        const persisted = !!data?.company_logo_base64;
+        console.log("[LawnBid] Logo saved to DB:", persisted, "size:", b64.length);
+        if (persisted) {
+          try { localStorage.setItem(COMPANY_LOGO_CACHE, b64); } catch {}
+          setLogoMsg("Logo saved ✓"); setTimeout(()=>setLogoMsg(""), 2000);
+        } else {
+          setLogoMsg("Logo saved locally but may not persist. Try saving Settings."); setTimeout(()=>setLogoMsg(""), 4000);
+        }
+      } catch(err) {
+        console.error("[LawnBid] Logo save failed:", err);
+        setLogoMsg("Could not save logo — check connection and try again.");
+        setTimeout(()=>setLogoMsg(""), 4000);
+        // Revert local state since DB save failed
+        setLoc(s => ({ ...s, company_logo_base64: settings.company_logo_base64 || "" }));
+      }
     };
     reader.readAsDataURL(f);
   };
   const onLogoImgError = () => {
-    // Corrupted or unreadable base64 — silently drop back to /logo.png
     setLoc(s => ({ ...s, company_logo_base64: "" }));
   };
   const removeLogo=async()=>{
     const next = { ...loc, company_logo_base64: "" };
     setLoc(next);
-    try { await onSave(next); try { localStorage.removeItem(COMPANY_LOGO_CACHE); } catch {} } catch {}
+    try { await onSave(next); try { localStorage.removeItem(COMPANY_LOGO_CACHE); } catch {} }
+    catch(err) { console.error("[LawnBid] Logo remove failed:", err); }
   };
   const isDesktop = bp==="desktop";
   const formulaCard = (
@@ -2427,7 +2447,7 @@ function S3({bp,flow,set,area,perim,calc,time,settings}){
     <div>
       <div style={{background:"#f0fdf4",borderRadius:12,padding:"10px 14px",marginBottom:12,fontSize:13}}>
         <div style={{fontWeight:700}}>📍 {flow.address}</div>
-        <div style={{color:"#475569",marginTop:2}}>{Math.round(area).toLocaleString()} sqft · {Math.round(perim).toLocaleString()} ft perimeter</div>
+        <div style={{color:"#475569",marginTop:2}}>{fmtArea(area)} · {Math.round(perim).toLocaleString()} ft perimeter</div>
       </div>
       {(() => {
         const timeCard = time && (
@@ -2438,7 +2458,7 @@ function S3({bp,flow,set,area,perim,calc,time,settings}){
             {flow.cx>1&&<div style={{fontSize:12,color:"#b45309",paddingBottom:6,fontWeight:600}}>+{fmtT(time.adj-time.wall)} complexity</div>}
           </div>
           <div style={{fontSize:13,color:"#64748b",marginBottom:16,fontWeight:500}}>{flow.crew>=2?`${flow.crew}-person crew — mow & trim in parallel`:"Solo — mow then trim sequentially"}</div>
-          {[{label:"Mowing",hrs:time.mh,note:`${Math.round(area).toLocaleString()} sqft ÷ 20,000`},{label:"Trimming",hrs:time.th,note:`${Math.round(perim).toLocaleString()} ft ÷ 3,000`}].map(ph=>(
+          {[{label:"Mowing",hrs:time.mh,note:`${fmtArea(area)} ÷ 20,000`},{label:"Trimming",hrs:time.th,note:`${Math.round(perim).toLocaleString()} ft ÷ 3,000`}].map(ph=>(
             <div key={ph.label} style={{marginBottom:12}}>
               <div style={{display:"flex",justifyContent:"space-between",fontSize:13,marginBottom:4}}><span style={{color:"#334155",fontWeight:500}}>{ph.label}</span><span style={{fontWeight:700,color:"#0f172a"}}>{fmtT(ph.hrs)}</span></div>
               <div style={{background:"#f1f5f9",borderRadius:4,height:6}}><div style={{background:"#15803d",height:"100%",borderRadius:4,width:`${Math.min(100,(ph.hrs/(time.mh+time.th))*100)}%`}}/></div>
@@ -2567,7 +2587,7 @@ function S4({bp,flow,set,setFlow,area,perim,calc,time,onSend,saving}){
       <Card>
         <Lbl>Quote Summary</Lbl>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:16}}>
-          {[{l:"Address",v:flow.address,full:true},{l:"Area",v:`${Math.round(area).toLocaleString()} sqft`},{l:"Perimeter",v:`${Math.round(perim).toLocaleString()} ft`},{l:"Crew",v:`${flow.crew} worker${flow.crew>1?"s":""}`},{l:"Complexity",v:COMPLEXITY.find(o=>o.value===flow.cx)?.label},{l:"Risk",v:RISK.find(o=>o.value===flow.risk)?.label},{l:"Est. Time",v:time?fmtT(time.adj):"—"},{l:"Discount",v:flow.disc>0?`${flow.disc}%`:"None"}]
+          {[{l:"Address",v:flow.address,full:true},{l:"Area",v:fmtArea(area)},{l:"Perimeter",v:`${Math.round(perim).toLocaleString()} ft`},{l:"Crew",v:`${flow.crew} worker${flow.crew>1?"s":""}`},{l:"Complexity",v:COMPLEXITY.find(o=>o.value===flow.cx)?.label},{l:"Risk",v:RISK.find(o=>o.value===flow.risk)?.label},{l:"Est. Time",v:time?fmtT(time.adj):"—"},{l:"Discount",v:flow.disc>0?`${flow.disc}%`:"None"}]
             .map(({l,v,full})=>(
               <div key={l} style={{gridColumn:full?"1 / -1":"auto"}}>
                 <div style={{fontSize:10,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:1}}>{l}</div>
