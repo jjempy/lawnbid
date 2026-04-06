@@ -107,102 +107,7 @@ const fmtArea = (sqft) => { if(!sqft) return "—"; return `${Math.round(sqft).t
 const isExpired = iso => iso && new Date(iso) < new Date();
 const addDays = (iso, days) => new Date(new Date(iso).getTime() + (days||30)*86400000).toISOString();
 
-// ─── Biometric (WebAuthn) ───────────────────────────────────────────────────
-const BIO = {
-  ENABLED: "lb_biometric_enabled",
-  EMAIL: "lb_biometric_user_email",
-  CRED_ID: "lb_biometric_credential_id",
-  REFRESH: "lb_supabase_refresh_token",
-  DISMISSED: "lb_biometric_dismissed_count",
-  NEXT_ASK: "lb_biometric_next_ask",
-};
 const COMPANY_LOGO_CACHE = "lb_company_logo";
-const isIOSDevice = () => typeof navigator !== "undefined" && /iPad|iPhone|iPod/.test(navigator.userAgent);
-const isMobileDevice = () => {
-  if (typeof navigator === "undefined") return false;
-  if (/Android|iPhone|iPad|iPod|Pixel/i.test(navigator.userAgent)) return true;
-  return (navigator.maxTouchPoints || 0) > 1 && window.innerWidth < 1024;
-};
-function canPromptBio() {
-  try {
-    const count = parseInt(localStorage.getItem(BIO.DISMISSED) || "0", 10);
-    if (count >= 2) return false;
-    const nextAsk = parseInt(localStorage.getItem(BIO.NEXT_ASK) || "0", 10);
-    if (nextAsk && Date.now() < nextAsk) return false;
-    return true;
-  } catch { return false; }
-}
-function recordBioDismiss() {
-  try {
-    const count = parseInt(localStorage.getItem(BIO.DISMISSED) || "0", 10) + 1;
-    localStorage.setItem(BIO.DISMISSED, String(count));
-    localStorage.setItem(BIO.NEXT_ASK, String(Date.now() + 7*86400000));
-  } catch {}
-}
-const b64e = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf)));
-const b64d = (str) => { const bin = atob(str); const out = new Uint8Array(bin.length); for (let i=0;i<bin.length;i++) out[i]=bin.charCodeAt(i); return out; };
-const withTimeout = (promise, ms) => Promise.race([
-  promise,
-  new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), ms)),
-]);
-async function biometricSupported() {
-  if (typeof window === "undefined" || !window.PublicKeyCredential) return false;
-  if (!isMobileDevice()) return false; // never offer biometrics on desktop
-  try {
-    const ok = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
-    console.log("[LawnBid] Platform authenticator available:", ok);
-    return ok;
-  } catch { return false; }
-}
-function isBiometricEnabled() {
-  try { return localStorage.getItem(BIO.ENABLED) === "true"; } catch { return false; }
-}
-function getBiometricEmail() {
-  try { return localStorage.getItem(BIO.EMAIL) || ""; } catch { return ""; }
-}
-function clearBiometric() {
-  try { [BIO.ENABLED,BIO.EMAIL,BIO.CRED_ID,BIO.REFRESH].forEach(k=>localStorage.removeItem(k)); } catch {}
-}
-function resetBioPromptCounters() {
-  try { localStorage.removeItem(BIO.DISMISSED); localStorage.removeItem(BIO.NEXT_ASK); } catch {}
-}
-async function registerBiometric(userId, userEmail, refreshToken) {
-  // Pixel 10+ / Android 15 fix: removed authenticatorAttachment:'platform' (causes
-  // silent hang on recent Pixel devices) and the AbortController signal (interferes
-  // with Pixel's WebAuthn). Using only ES256 (-7) for broadest compat. The browser
-  // selects the platform authenticator automatically on mobile.
-  console.log("[LawnBid] Starting WebAuthn credential creation...");
-  const cred = await navigator.credentials.create({
-    publicKey: {
-      challenge: crypto.getRandomValues(new Uint8Array(32)),
-      rp: { name: "LawnBid", id: window.location.hostname },
-      user: { id: new TextEncoder().encode(userId), name: userEmail, displayName: userEmail },
-      pubKeyCredParams: [{ type:"public-key", alg:-7 }],
-      authenticatorSelection: { userVerification:"preferred" },
-      timeout: 120000,
-    },
-  });
-  console.log("[LawnBid] WebAuthn credential created:", cred);
-  if (!cred) throw new Error("no-credential");
-  localStorage.setItem(BIO.ENABLED, "true");
-  localStorage.setItem(BIO.EMAIL, userEmail);
-  localStorage.setItem(BIO.CRED_ID, b64e(cred.rawId));
-  if (refreshToken) localStorage.setItem(BIO.REFRESH, refreshToken);
-  try { localStorage.removeItem(BIO.DISMISSED); localStorage.removeItem(BIO.NEXT_ASK); } catch {}
-}
-async function verifyBiometric() {
-  const credId = localStorage.getItem(BIO.CRED_ID);
-  if (!credId) throw new Error("no-credential");
-  await navigator.credentials.get({
-    publicKey: {
-      challenge: crypto.getRandomValues(new Uint8Array(32)),
-      rpId: window.location.hostname,
-      allowCredentials: [{ type:"public-key", id: b64d(credId), transports:["internal"] }],
-      userVerification: "preferred",
-      timeout: 120000,
-    },
-  });
-}
 
 // ─── Smart error messages ───────────────────────────────────────────────────
 function authErrorMessage(err) {
@@ -438,7 +343,6 @@ export default function LawnBid() {
   const bp = useBreakpoint();
   const [authReady,setAuthReady]= useState(false);
   const [session,  setSession]  = useState(null);
-  const [bioPrompt,setBioPrompt]= useState(false);
   const [recovering,setRecovering] = useState(false);
   const [upgradeFor,setUpgradeFor] = useState(null);
   const [ready,    setReady]    = useState(false);
@@ -467,26 +371,9 @@ export default function LawnBid() {
     const { data: sub } = supabase.auth.onAuthStateChange((event, s) => {
       if (event === "PASSWORD_RECOVERY") setRecovering(true);
       setSession(s || null);
-      // Keep refresh token fresh for biometric login
-      if (s?.refresh_token && isBiometricEnabled()) {
-        try { localStorage.setItem(BIO.REFRESH, s.refresh_token); } catch {}
-      }
     });
     return () => sub.subscription.unsubscribe();
   }, []);
-
-  // ── Offer biometric enrollment after first password login, with re-ask logic ──
-  useEffect(() => {
-    if (!session || recovering) return;
-    if (isBiometricEnabled()) return;
-    if (!canPromptBio()) return;
-    let t; let cancelled = false;
-    biometricSupported().then(ok => {
-      if (cancelled || !ok) return;
-      t = setTimeout(() => { if (!cancelled) setBioPrompt(true); }, 800);
-    });
-    return () => { cancelled = true; if (t) clearTimeout(t); };
-  }, [session, recovering]);
 
   // ── Cache company logo for AuthScreen ──
   useEffect(() => {
@@ -744,9 +631,6 @@ export default function LawnBid() {
       💾 Saving…
     </div>
   );
-  const bioEnrollModal = bioPrompt && session && (
-    <BioEnrollModal session={session} onDone={()=>setBioPrompt(false)}/>
-  );
 
   const upgradeModal = upgradeFor && <UpgradeModal feature={upgradeFor} onClose={()=>setUpgradeFor(null)}/>;
 
@@ -755,7 +639,7 @@ export default function LawnBid() {
     return (
       <PlanContext.Provider value={planValue}>
         <div style={{display:"flex",minHeight:"100vh",background:"#f8fafc",color:"#0f172a",fontFamily:"'Inter',system-ui,-apple-system,sans-serif"}}>
-          {bioEnrollModal}
+  
           {upgradeModal}
           <SideNav tab={tab} setTab={setTab} setScreen={setScreen}/>
           <div style={{flex:1,display:"flex",flexDirection:"column",minWidth:0}}>
@@ -778,7 +662,7 @@ export default function LawnBid() {
   return (
     <PlanContext.Provider value={planValue}>
       <div style={{maxWidth:maxW,margin:"0 auto",minHeight:"100vh",display:"flex",flexDirection:"column",fontFamily:"'Inter',system-ui,-apple-system,sans-serif",background:"#f8fafc",color:"#0f172a"}}>
-        {bioEnrollModal}
+
         {upgradeModal}
         {dbBanner}
         {savingBanner}
@@ -844,7 +728,6 @@ function BottomNav({tab,screen,setTab,setScreen,bp,maxW}){
   );
 }
 
-// ─── Biometric enrollment modal ───
 // ─── Upgrade modal (plan gate) ───
 function UpgradeModal({feature,onClose}){
   return (
@@ -865,82 +748,6 @@ function UpgradeModal({feature,onClose}){
         <div style={{textAlign:"center",marginTop:10}}>
           <button type="button" onClick={onClose} style={{background:"none",border:"none",color:"#64748b",fontSize:13,fontWeight:600,cursor:"pointer",padding:"8px 12px",minHeight:32,fontFamily:"inherit"}}>Maybe later</button>
         </div>
-      </div>
-    </div>
-  );
-}
-
-function BioEnrollModal({session,onDone}){
-  const [busy,setBusy]=useState(false);
-  const [err,setErr]=useState("");
-  const [showCancel,setShowCancel]=useState(false);
-  const [succeeded,setSucceeded]=useState(false);
-  const abortRef = useRef(null);
-  const cancelTimerRef = useRef(null);
-
-  const cleanup = () => {
-    if (cancelTimerRef.current) { clearTimeout(cancelTimerRef.current); cancelTimerRef.current = null; }
-    setShowCancel(false);
-    setBusy(false);
-  };
-  const maybeLater = () => {
-    recordBioDismiss();
-    cleanup();
-    onDone();
-  };
-  const cancel = () => {
-    cleanup();
-    setErr("Biometric setup was cancelled. You can try again in Settings.");
-  };
-  const enable = async () => {
-    setErr("");
-    setBusy(true);
-    setShowCancel(false);
-    cancelTimerRef.current = setTimeout(() => setShowCancel(true), 5000);
-    try {
-      await registerBiometric(session.user.id, session.user.email, session.refresh_token);
-      cleanup();
-      setSucceeded(true);
-      setTimeout(onDone, 1500);
-    } catch (e) {
-      console.error("[LawnBid] Biometric enrollment failed:", e?.name, e?.message, e);
-      if (e?.name === "NotAllowedError") setErr("Biometric setup was cancelled or denied by the device.");
-      else if (e?.name === "AbortError") setErr("Biometric setup was cancelled.");
-      else if (e?.name === "InvalidStateError") setErr("This device is already registered. Try disabling biometrics in Settings and re-enabling.");
-      else if (e?.name === "SecurityError") setErr("Biometric setup blocked. Make sure you're on a secure (HTTPS) connection.");
-      else setErr("Biometric setup failed. Make sure fingerprint or Face ID is set up in your phone's Settings → Security before trying here.");
-      cleanup();
-    }
-  };
-  return (
-    <div onClick={busy||succeeded?undefined:maybeLater} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.55)",zIndex:400,display:"flex",alignItems:"flex-end",justifyContent:"center",animation:"lb-fade-in .2s ease-out"}}>
-      <div onClick={e=>e.stopPropagation()} style={{background:"#ffffff",borderRadius:"20px 20px 0 0",padding:"24px 24px calc(24px + env(safe-area-inset-bottom))",width:"100%",maxWidth:480,boxSizing:"border-box",boxShadow:"0 -8px 32px rgba(0,0,0,.2)",animation:"lb-slide-up .28s cubic-bezier(.2,.8,.2,1)"}}>
-        <div style={{width:40,height:4,borderRadius:2,background:"#e2e8f0",margin:"0 auto 16px"}}/>
-        {succeeded ? (
-          <div style={{textAlign:"center",padding:"8px 0 12px"}}>
-            <div style={{width:56,height:56,borderRadius:"50%",background:"#dcfce7",display:"inline-flex",alignItems:"center",justifyContent:"center",marginBottom:10}}>
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#15803d" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-            </div>
-            <div style={{fontSize:16,fontWeight:700,color:"#0f172a"}}>Biometric login enabled</div>
-          </div>
-        ) : (
-          <>
-            <div style={{display:"flex",justifyContent:"center",marginBottom:10}}>
-              <div style={{width:72,height:72,borderRadius:"50%",background:"#dcfce7",display:"flex",alignItems:"center",justifyContent:"center"}}>
-                <Fingerprint size={48}/>
-              </div>
-            </div>
-            <div style={{fontSize:20,fontWeight:800,color:"#0f172a",textAlign:"center",marginBottom:6,letterSpacing:-.3}}>Log in faster next time</div>
-            <div style={{fontSize:14,color:"#64748b",textAlign:"center",lineHeight:1.5,marginBottom:6,padding:"0 8px"}}>Use your fingerprint or Face ID instead of typing your password.</div>
-            <div style={{fontSize:11,color:"#94a3b8",textAlign:"center",lineHeight:1.4,marginBottom:16,padding:"0 12px"}}>Make sure fingerprint or Face ID is already set up in your phone's Settings before enabling.</div>
-            {err && <ErrBox style={{marginBottom:12}}>{err}</ErrBox>}
-            <Btn onClick={enable} disabled={busy} style={{width:"100%"}}>{busy?"Enabling…":"Enable Biometric Login"}</Btn>
-            {busy && showCancel && <Btn variant="secondary" onClick={cancel} style={{width:"100%",marginTop:8}}>Cancel</Btn>}
-            <div style={{textAlign:"center",marginTop:12}}>
-              <button type="button" onClick={maybeLater} disabled={busy} style={{background:"none",border:"none",color:"#64748b",fontSize:13,fontWeight:600,cursor:busy?"default":"pointer",padding:"8px 12px",minHeight:32,fontFamily:"inherit",opacity:busy?.5:1}}>Maybe later</button>
-            </div>
-          </>
-        )}
       </div>
     </div>
   );
@@ -1338,70 +1145,6 @@ function QuoteDetail({bp,quote,allQuotes,settings,onBack,onEdit,onDuplicate,onDe
 }
 
 // ─── Settings ─────────────────────────────────────────────────────────────────
-function BiometricRow(){
-  const [enabled,setEnabled] = useState(isBiometricEnabled());
-  const [supported,setSupported] = useState(null); // null = checking, true/false
-  const [msg,setMsg] = useState("");
-  const [err,setErr] = useState("");
-  const [busy,setBusy] = useState(false);
-  const [showCancel,setShowCancel] = useState(false);
-  const abortRef = useRef(null);
-  const cancelTimerRef = useRef(null);
-
-  useEffect(() => { biometricSupported().then(setSupported); }, []);
-
-  if (supported === null) return null; // still checking
-  if (!supported && !enabled) return null; // device doesn't support and not enrolled → hide entirely
-
-  const cleanup = () => {
-    if (cancelTimerRef.current) { clearTimeout(cancelTimerRef.current); cancelTimerRef.current = null; }
-    setShowCancel(false); setBusy(false);
-  };
-  const disable = () => {
-    clearBiometric();
-    resetBioPromptCounters();
-    setEnabled(false);
-    setMsg("Biometric login disabled. You can re-enable it after your next login.");
-  };
-  const enable = async () => {
-    setErr(""); setMsg(""); setBusy(true); setShowCancel(false);
-    cancelTimerRef.current = setTimeout(() => setShowCancel(true), 5000);
-    try {
-      const { data } = await supabase.auth.getSession();
-      if (!data?.session) throw new Error("no-session");
-      await registerBiometric(data.session.user.id, data.session.user.email, data.session.refresh_token);
-      cleanup();
-      setEnabled(true);
-      setMsg("Biometric login enabled.");
-    } catch (e) {
-      console.error("[LawnBid] Biometric enrollment (Settings) failed:", e?.name, e?.message, e);
-      if (e?.name === "NotAllowedError") setErr("Biometric setup was cancelled or denied.");
-      else if (e?.name === "AbortError") setErr("Biometric setup was cancelled.");
-      else setErr("Biometric setup failed. Make sure fingerprint or Face ID is set up in your phone's Settings → Security.");
-      cleanup();
-    }
-  };
-  const cancel = () => { cleanup(); setErr("Biometric setup was cancelled."); };
-
-  return (
-    <div style={{marginTop:14,paddingTop:14,borderTop:"1px solid #e2e8f0"}}>
-      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
-        <div>
-          <div style={{fontSize:13,fontWeight:600,color:"#334155"}}>Biometric Login</div>
-          <div style={{fontSize:12,color:enabled?"#15803d":"#94a3b8",fontWeight:600,marginTop:2}}>{enabled?"Enabled ✓":"Off"}</div>
-        </div>
-        {enabled
-          ? <button onClick={disable} style={{height:36,minHeight:36,padding:"0 14px",borderRadius:10,border:"1.5px solid #fecaca",background:"#ffffff",color:"#dc2626",fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>Disable</button>
-          : <button onClick={enable} disabled={busy} style={{height:36,minHeight:36,padding:"0 14px",borderRadius:10,border:"1.5px solid #15803d",background:"#ffffff",color:"#15803d",fontSize:13,fontWeight:600,cursor:busy?"default":"pointer",fontFamily:"inherit",opacity:busy?.55:1}}>{busy?"Enabling…":"Enable"}</button>
-        }
-      </div>
-      {busy && showCancel && <button onClick={cancel} style={{marginTop:8,height:32,minHeight:32,padding:"0 12px",borderRadius:8,border:"1.5px solid #e2e8f0",background:"#ffffff",color:"#64748b",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>Cancel</button>}
-      {err && <div style={{fontSize:12,color:"#dc2626",background:"#fef2f2",borderLeft:"3px solid #dc2626",borderRadius:"0 8px 8px 0",padding:"8px 10px",fontWeight:500,marginTop:8}}>⚠ {err}</div>}
-      {msg && !err && <div style={{fontSize:12,color:"#166534",background:"#f0fdf4",borderLeft:"3px solid #16a34a",borderRadius:"0 8px 8px 0",padding:"8px 10px",fontWeight:500,marginTop:8}}>✓ {msg}</div>}
-    </div>
-  );
-}
-
 function PlanBadge(){
   const {plan,planName,quoteLimit,quotesUsed} = usePlan();
   if (plan === "free") {
@@ -1560,7 +1303,6 @@ function SettingsScreen({bp,settings,onSave,onLogout}){
             <Inp type={t} value={loc[k]||""} onChange={e=>set(k,e.target.value)} placeholder={ph}/>
           </div>
         ))}
-        <BiometricRow/>
       </Card>
   );
   const footer = (
@@ -1609,11 +1351,6 @@ const LockIcon = ({size=14,color="#94a3b8"}) => (
     <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
   </svg>
 );
-const Fingerprint = ({size=48,color="#15803d",strokeWidth=1.5}) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <path d="M12 10a2 2 0 0 0-2 2c0 1.02-.1 2.51-.26 4M12 10a2 2 0 0 1 2 2c0 3.5.66 7 2 7M12 10c-2.76 0-5 2.24-5 5 0 1.7-.09 3.37-.26 5M12 10c2.76 0 5 2.24 5 5 0 1.18.13 2.28.3 3.29M8.5 7.16A6.97 6.97 0 0 1 12 6c3.87 0 7 3.13 7 7M5.07 10.5A7 7 0 0 1 5 10a7 7 0 0 1 1.07-3.74"/>
-  </svg>
-);
 const EyeOpen = ({color}) => (
   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
     <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
@@ -1634,10 +1371,9 @@ function AuthScreen(){
   if (initialPlanFromUrl) {
     try { localStorage.setItem("lb_intended_plan", initialPlanFromUrl); } catch {}
   }
-  const bioAvail = isBiometricEnabled() && isMobileDevice();
   const [mode,setMode]=useState(
-    bioAvail ? "biometric" : (initialPlanFromUrl || isNewFromUrl) ? "signup" : "login"
-  ); // "biometric" | "login" | "signup" | "reset"
+    (initialPlanFromUrl || isNewFromUrl) ? "signup" : "login"
+  ); // "login" | "signup" | "reset"
   const [email,setEmail]=useState("");
   const [password,setPassword]=useState("");
   const [password2,setPassword2]=useState("");
@@ -1646,45 +1382,11 @@ function AuthScreen(){
   const [err,setErr]=useState("");
   const [info,setInfo]=useState("");
   const [busy,setBusy]=useState(false);
-  const autoTriggeredRef = useRef(false);
 
   const clearMsgs = () => { setErr(""); setInfo(""); };
   const pwLongEnough = password.length >= 6;
   const pwMatch = password2.length > 0 && password === password2;
   const canSignup = pwLongEnough && pwMatch && email.trim().length > 0;
-
-  const bioLogin = async () => {
-    clearMsgs(); setBusy(true);
-    try {
-      await verifyBiometric();
-      const refresh = localStorage.getItem(BIO.REFRESH);
-      if (!refresh) throw new Error("no-refresh-token");
-      const { error } = await supabase.auth.refreshSession({ refresh_token: refresh });
-      if (error) {
-        clearBiometric();
-        setMode("login");
-        setErr("Session expired — please log in with your password to re-enable biometric login.");
-      }
-    } catch (e) {
-      console.error("[LawnBid] Biometric login failed:", e?.name, e?.message, e);
-      if (e?.name === "NotAllowedError") { /* user cancelled biometric prompt — stay put silently */ }
-      else if (e?.message === "no-credential" || e?.message === "no-refresh-token") {
-        clearBiometric(); setMode("login");
-        setErr("Session expired — please log in with your password to re-enable biometric login.");
-      } else {
-        setErr("Biometric verification failed. Try again or use your password.");
-      }
-    } finally { setBusy(false); }
-  };
-
-  // Auto-trigger biometric prompt shortly after mount, once
-  useEffect(() => {
-    if (mode !== "biometric" || autoTriggeredRef.current) return;
-    autoTriggeredRef.current = true;
-    const t = setTimeout(() => { bioLogin(); }, 500);
-    return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode]);
 
   const login=async()=>{
     clearMsgs(); setBusy(true);
@@ -1719,36 +1421,15 @@ function AuthScreen(){
 
   const cachedLogo = (()=>{ try { return localStorage.getItem(COMPANY_LOGO_CACHE) || ""; } catch { return ""; } })();
   const logoSrc = cachedLogo || "/logo.png";
-  const bioLabel = isIOSDevice() ? "Log in with Face ID" : "Touch to log in";
-  const subtitleFor = m => m==="reset"?"Reset your password":m==="biometric"?"Welcome back":m==="signup"?"Create your account":"Sign in to your account";
+  const subtitleFor = m => m==="reset"?"Reset your password":m==="signup"?"Create your account":"Sign in to your account";
 
   return(
     <div style={{maxWidth:480,margin:"0 auto",minHeight:"100vh",display:"flex",flexDirection:"column",justifyContent:"center",padding:"24px",fontFamily:"'Inter',system-ui,-apple-system,sans-serif",background:"#f8fafc",boxSizing:"border-box",color:"#0f172a"}}>
-      <div style={{textAlign:"center",marginBottom:mode==="biometric"?20:28}}>
-        <img src={logoSrc} alt="LawnBid" style={{width:mode==="biometric"?64:72,height:mode==="biometric"?64:72,borderRadius:"50%",objectFit:"cover",marginBottom:12}}/>
-        <div style={{fontSize:mode==="biometric"?26:32,fontWeight:900,color:"#0f172a",letterSpacing:-.6}}>LawnBid</div>
+      <div style={{textAlign:"center",marginBottom:28}}>
+        <img src={logoSrc} alt="LawnBid" style={{width:72,height:72,borderRadius:"50%",objectFit:"cover",marginBottom:12}}/>
+        <div style={{fontSize:32,fontWeight:900,color:"#0f172a",letterSpacing:-.6}}>LawnBid</div>
         <div style={{fontSize:13,color:"#64748b",marginTop:4,fontWeight:500}}>{subtitleFor(mode)}</div>
-        {mode==="biometric" && getBiometricEmail() && (
-          <div style={{fontSize:13,color:"#94a3b8",marginTop:4,fontWeight:500}}>{getBiometricEmail()}</div>
-        )}
       </div>
-      {mode==="biometric" && (
-        <div style={{textAlign:"center"}}>
-          <button onClick={bioLogin} disabled={busy} aria-label={bioLabel} style={{position:"relative",width:96,height:96,borderRadius:"50%",border:"none",background:"transparent",cursor:busy?"default":"pointer",padding:0,margin:"0 auto 16px",display:"inline-flex",alignItems:"center",justifyContent:"center",opacity:busy?.75:1,fontFamily:"inherit"}}>
-            <span style={{position:"absolute",inset:0,borderRadius:"50%",border:"2px solid #15803d",animation:"lb-pulse-ring 1.8s ease-out infinite",pointerEvents:"none"}}/>
-            <span style={{position:"absolute",inset:0,borderRadius:"50%",border:"2px solid #15803d",animation:"lb-pulse-ring 1.8s ease-out 0.9s infinite",pointerEvents:"none"}}/>
-            <span style={{position:"relative",width:84,height:84,borderRadius:"50%",background:"#dcfce7",display:"inline-flex",alignItems:"center",justifyContent:"center"}}>
-              <Fingerprint size={48} color="#15803d" strokeWidth={1.75}/>
-            </span>
-          </button>
-          <div style={{fontSize:15,fontWeight:600,color:"#0f172a",marginBottom:4}}>{busy?"Verifying…":bioLabel}</div>
-          <div style={{marginTop:14}}>
-            <button type="button" onClick={()=>{clearMsgs();setMode("login");}} disabled={busy} style={{background:"none",border:"none",color:"#15803d",fontSize:13,fontWeight:600,cursor:busy?"default":"pointer",textDecoration:"underline",padding:"8px 12px",minHeight:36,fontFamily:"inherit",opacity:busy?.5:1}}>Use password instead →</button>
-          </div>
-          {err && <div style={{maxWidth:360,margin:"12px auto 0"}}><ErrBox>{err}</ErrBox></div>}
-        </div>
-      )}
-      {mode!=="biometric" && <>
       {mode==="signup" && initialPlanFromUrl && (
         <div style={{background:"#dcfce7",border:"1px solid #bbf7d0",borderLeft:"3px solid #15803d",borderRadius:"0 10px 10px 0",padding:"10px 14px",marginBottom:12,fontSize:13,color:"#166534",fontWeight:600,display:"flex",alignItems:"center",gap:8}}>
           <span style={{fontSize:15}}>🌿</span>
@@ -1846,7 +1527,6 @@ function AuthScreen(){
       <div style={{textAlign:"center",marginTop:16}}>
         <a href="https://winwinlawnbid.com" style={{color:"#94a3b8",fontSize:12,fontWeight:500,textDecoration:"none"}}>← Back to winwinlawnbid.com</a>
       </div>
-      </>}
     </div>
   );
 }
