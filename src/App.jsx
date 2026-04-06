@@ -8,6 +8,27 @@ import supabase, {
   countRecentQuotes,
 } from "./supabase.js";
 
+// ─── Stripe checkout ────────────────────────────────────────────────────────────
+async function redirectToStripeCheckout(priceId) {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    const response = await fetch(
+      `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-checkout-session`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ priceId, userId: user.id, userEmail: user.email }),
+      }
+    );
+    const { url, error } = await response.json();
+    if (error) throw new Error(error);
+    window.location.href = url;
+  } catch (err) {
+    alert("Could not start checkout. Please try again.");
+    console.error("[LawnBid] Stripe checkout error:", err);
+  }
+}
+
 // ─── Constants ──────────────────────────────────────────────────────────────────
 const APP_VERSION = "1.0.0";
 const DEFAULT_SETTINGS = {
@@ -359,6 +380,7 @@ export default function LawnBid() {
   const [errors,   setErrors]   = useState({});
   const [saving,   setSaving]   = useState(false);
   const [quotesUsedLive, setQuotesUsedLive] = useState(0);
+  const [toast, setToast] = useState(null);
   const settingsRef = useRef(settings);
   useEffect(() => { settingsRef.current = settings; }, [settings]);
 
@@ -411,6 +433,20 @@ export default function LawnBid() {
         if (s) setSettings(prev => ({ ...prev, ...s }));
         setQuotesUsedLive(qCount);
         setReady(true);
+        // Handle Stripe upgrade return
+        try {
+          const up = new URLSearchParams(window.location.search).get("upgrade");
+          if (up === "success") {
+            // Re-fetch settings to pick up the updated plan from webhook
+            const fresh = await loadSettings();
+            if (fresh) setSettings(prev => ({ ...prev, ...fresh }));
+            setToast("Welcome to Pro! All features are now unlocked.");
+            window.history.replaceState({}, "", "/app/");
+          } else if (up === "cancelled") {
+            setToast("Upgrade cancelled — you can upgrade anytime from Settings.");
+            window.history.replaceState({}, "", "/app/");
+          }
+        } catch {}
       } catch (e) {
         setDbErr(dbErrorMessage(e));
         setReady(true);
@@ -626,6 +662,15 @@ export default function LawnBid() {
       ⚠ {dbErr}
     </div>
   );
+  // Auto-dismiss toast
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 4000);
+    return () => clearTimeout(t);
+  }, [toast]);
+  const toastBanner = toast && (
+    <div style={{position:"fixed",top:"env(safe-area-inset-top)",left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:480,background:"#dcfce7",borderBottom:"2px solid #bbf7d0",padding:"10px 16px",fontSize:13,color:"#166534",fontWeight:600,zIndex:999,textAlign:"center",boxSizing:"border-box"}}>{toast}</div>
+  );
   const savingBanner = saving && (
     <div style={{position:"fixed",top:"env(safe-area-inset-top)",left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:480,background:"#f0fdf4",borderBottom:"2px solid #bbf7d0",padding:"8px 16px",fontSize:13,color:"#166534",fontWeight:600,zIndex:999,textAlign:"center",boxSizing:"border-box"}}>
       💾 Saving…
@@ -645,6 +690,7 @@ export default function LawnBid() {
           <div style={{flex:1,display:"flex",flexDirection:"column",minWidth:0}}>
             {dbBanner}
             {savingBanner}
+          {toastBanner}
             <TopBar title={pageTitle} onNew={startNew} showBack={screen==="quote-detail"||screen==="client-detail"||screen==="flow"} onBack={screen==="flow"?goHome:()=>setScreen(screen==="quote-detail"&&selC&&tab==="clients"?"client-detail":"home")}/>
             <div className="lb-scroll" style={{flex:1,padding:"24px"}}>
               <div style={{maxWidth:900,margin:"0 auto",width:"100%"}}>
@@ -744,8 +790,11 @@ function UpgradeModal({feature,onClose}){
           <span style={{fontSize:28,fontWeight:900,color:"#0f172a",letterSpacing:-.5}}>$19</span>
           <span style={{fontSize:13,color:"#64748b",fontWeight:500}}>/month</span>
         </div>
-        <Btn onClick={()=>{window.location.href="/upgrade";}} style={{width:"100%"}}>Upgrade to Pro</Btn>
-        <div style={{textAlign:"center",marginTop:10}}>
+        <Btn onClick={()=>redirectToStripeCheckout(import.meta.env.VITE_STRIPE_PRO_PRICE_ID)} style={{width:"100%"}}>Upgrade to Pro — $19/month</Btn>
+        <div style={{textAlign:"center",marginTop:8}}>
+          <button type="button" onClick={()=>redirectToStripeCheckout(import.meta.env.VITE_STRIPE_TEAM_PRICE_ID)} style={{background:"none",border:"none",color:"#15803d",fontSize:13,fontWeight:600,cursor:"pointer",textDecoration:"underline",padding:"6px 12px",minHeight:32,fontFamily:"inherit"}}>Upgrade to Team instead ($39/mo)</button>
+        </div>
+        <div style={{textAlign:"center",marginTop:4}}>
           <button type="button" onClick={onClose} style={{background:"none",border:"none",color:"#64748b",fontSize:13,fontWeight:600,cursor:"pointer",padding:"8px 12px",minHeight:32,fontFamily:"inherit"}}>Maybe later</button>
         </div>
       </div>
@@ -1154,7 +1203,7 @@ function PlanBadge(){
           <div style={{fontSize:14,fontWeight:700,color:"#166534"}}>Free Plan</div>
           <div style={{fontSize:12,color:"#15803d",fontWeight:500,marginTop:3}}>{quotesUsed} of {quoteLimit} quotes used · Rolling 30 days</div>
         </div>
-        <a href="/app/?plan=pro" style={{height:36,minHeight:36,padding:"0 14px",borderRadius:10,border:"none",background:"#15803d",color:"#ffffff",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap",textDecoration:"none",display:"inline-flex",alignItems:"center"}}>Upgrade to Pro →</a>
+        <button onClick={()=>redirectToStripeCheckout(import.meta.env.VITE_STRIPE_PRO_PRICE_ID)} style={{height:36,minHeight:36,padding:"0 14px",borderRadius:10,border:"none",background:"#15803d",color:"#ffffff",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap"}}>Upgrade to Pro →</button>
       </Card>
     );
   }
