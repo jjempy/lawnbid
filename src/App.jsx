@@ -508,6 +508,8 @@ export default function LawnBid() {
     const key = settings?.plan || "free";
     const cfg = PLANS[key] || PLANS.free;
     const used = settings?.quote_count_this_month || 0;
+    const resetAt = settings?.quote_count_reset_at;
+    const resetDate = resetAt ? new Date(new Date(resetAt).getTime() + 30*86400000) : null;
     return {
       plan: key,
       planName: cfg.name,
@@ -518,9 +520,10 @@ export default function LawnBid() {
       quotesUsed: used,
       quotesRemaining: cfg.quote_limit !== null ? Math.max(0, cfg.quote_limit - used) : null,
       isAtLimit: cfg.quote_limit !== null && used >= cfg.quote_limit,
+      resetDate,
       showUpgrade: (feature) => setUpgradeFor(feature),
     };
-  }, [settings?.plan, settings?.quote_count_this_month]);
+  }, [settings?.plan, settings?.quote_count_this_month, settings?.quote_count_reset_at]);
 
   // ── Load all data from Supabase once authenticated ──
   useEffect(() => {
@@ -560,6 +563,14 @@ export default function LawnBid() {
   }, [settings]);
 
   const editQuote = useCallback((q, forceNew=false) => {
+    // If creating a new record (V2 or duplicate), check free-plan limit first
+    if (forceNew) {
+      const cfg = PLANS[settings.plan || "free"] || PLANS.free;
+      const used = settings.quote_count_this_month || 0;
+      if (cfg.quote_limit !== null && used >= cfg.quote_limit) {
+        setUpgradeFor("Unlimited Quotes"); return;
+      }
+    }
     setFlow({
       isNew:forceNew, parentId:forceNew?q.quote_id:(q.parent_id||null), existingId:forceNew?null:q.quote_id,
       clientId:q.client_id, clientName:q.client_name||"", clientPhone:q.client_phone||"", clientEmail:q.client_email||"",
@@ -572,8 +583,9 @@ export default function LawnBid() {
   }, []);
 
   const handleSave = useCallback(async (rec, cliData, status) => {
-    // Gate: free plan quote limit (genuinely new quotes only — not revisions)
-    if (rec.isNew && !rec.parentId) {
+    // Gate: free plan quote limit — any new record counts (brand new, V2, duplicate)
+    // Only in-place edits of existing drafts (rec.isNew === false) don't count
+    if (rec.isNew) {
       const s = settingsRef.current || {};
       const cfg = PLANS[s.plan || "free"] || PLANS.free;
       const used = s.quote_count_this_month || 0;
@@ -645,10 +657,9 @@ export default function LawnBid() {
                       : [record, ...prev];
       });
 
-      // 4. Increment free-plan monthly quote count — only for genuinely new quotes
-      //    (not edits, not V2 revisions which have parentId, not draft updates)
-      const isNewQuote = rec.isNew && !rec.parentId;
-      if (isNewQuote) {
+      // 4. Increment free-plan monthly quote count — any new DB record counts
+      //    (brand new, V2 revision, duplicate). Only in-place draft edits skip.
+      if (rec.isNew) {
         const s = settingsRef.current || {};
         const cfg = PLANS[s.plan || "free"] || PLANS.free;
         if (cfg.quote_limit !== null) {
@@ -1412,13 +1423,14 @@ function BiometricRow(){
 }
 
 function PlanBadge(){
-  const {plan,planName,quoteLimit,quotesUsed} = usePlan();
+  const {plan,planName,quoteLimit,quotesUsed,resetDate} = usePlan();
+  const resetLabel = resetDate ? resetDate.toLocaleDateString("en-US",{month:"short",day:"numeric"}) : "";
   if (plan === "free") {
     return (
       <Card style={{background:"#f0fdf4",border:"1px solid #bbf7d0",display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap",padding:"16px 18px",marginBottom:14}}>
         <div style={{minWidth:0}}>
           <div style={{fontSize:14,fontWeight:700,color:"#166534"}}>Free Plan</div>
-          <div style={{fontSize:12,color:"#15803d",fontWeight:500,marginTop:3}}>{quotesUsed} of {quoteLimit} quotes used this month</div>
+          <div style={{fontSize:12,color:"#15803d",fontWeight:500,marginTop:3}}>{quotesUsed} of {quoteLimit} quotes used{resetLabel ? ` · Resets ${resetLabel}` : ""}</div>
         </div>
         <a href="/app/?plan=pro" style={{height:36,minHeight:36,padding:"0 14px",borderRadius:10,border:"none",background:"#15803d",color:"#ffffff",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap",textDecoration:"none",display:"inline-flex",alignItems:"center"}}>Upgrade to Pro →</a>
       </Card>
