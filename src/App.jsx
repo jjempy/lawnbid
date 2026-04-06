@@ -5,6 +5,7 @@ import supabase, {
   loadSettings, saveSettings as dbSaveSettings,
   nextQuoteId,
   uploadQuoteFile, deleteQuoteFile,
+  countRecentQuotes,
 } from "./supabase.js";
 
 // ─── Constants ──────────────────────────────────────────────────────────────────
@@ -453,6 +454,7 @@ export default function LawnBid() {
   const [step,     setStep]     = useState(1);
   const [errors,   setErrors]   = useState({});
   const [saving,   setSaving]   = useState(false);
+  const [quotesUsedLive, setQuotesUsedLive] = useState(0);
   const settingsRef = useRef(settings);
   useEffect(() => { settingsRef.current = settings; }, [settings]);
 
@@ -493,23 +495,10 @@ export default function LawnBid() {
     }
   }, [settings?.company_logo_base64]);
 
-  // ── Monthly quote-count reset (30-day rolling window) ──
-  useEffect(() => {
-    if (!ready || !settings?.quote_count_reset_at) return;
-    const resetAt = new Date(settings.quote_count_reset_at).getTime();
-    if (Date.now() - resetAt < 30*86400000) return;
-    const ns = { ...settings, quote_count_this_month: 0, quote_count_reset_at: new Date().toISOString() };
-    setSettings(ns);
-    dbSaveSettings(ns).catch(()=>{});
-  }, [ready, settings?.quote_count_reset_at]);
-
   // ── Plan context value ──
   const planValue = useMemo(() => {
     const key = settings?.plan || "free";
     const cfg = PLANS[key] || PLANS.free;
-    const used = settings?.quote_count_this_month || 0;
-    const resetAt = settings?.quote_count_reset_at;
-    const resetDate = resetAt ? new Date(new Date(resetAt).getTime() + 30*86400000) : null;
     return {
       plan: key,
       planName: cfg.name,
@@ -517,23 +506,23 @@ export default function LawnBid() {
       canExportPDF: cfg.pdf,
       canAttachPhotos: cfg.photos,
       quoteLimit: cfg.quote_limit,
-      quotesUsed: used,
-      quotesRemaining: cfg.quote_limit !== null ? Math.max(0, cfg.quote_limit - used) : null,
-      isAtLimit: cfg.quote_limit !== null && used >= cfg.quote_limit,
-      resetDate,
+      quotesUsed: quotesUsedLive,
+      quotesRemaining: cfg.quote_limit !== null ? Math.max(0, cfg.quote_limit - quotesUsedLive) : null,
+      isAtLimit: cfg.quote_limit !== null && quotesUsedLive >= cfg.quote_limit,
       showUpgrade: (feature) => setUpgradeFor(feature),
     };
-  }, [settings?.plan, settings?.quote_count_this_month, settings?.quote_count_reset_at]);
+  }, [settings?.plan, quotesUsedLive]);
 
   // ── Load all data from Supabase once authenticated ──
   useEffect(() => {
-    if (!session) { setReady(false); setQuotes([]); setClients([]); setSettings(DEFAULT_SETTINGS); return; }
+    if (!session) { setReady(false); setQuotes([]); setClients([]); setSettings(DEFAULT_SETTINGS); setQuotesUsedLive(0); return; }
     (async () => {
       try {
-        const [q, c, s] = await Promise.all([loadQuotes(), loadClients(), loadSettings()]);
+        const [q, c, s, qCount] = await Promise.all([loadQuotes(), loadClients(), loadSettings(), countRecentQuotes(30)]);
         setQuotes(q);
         setClients(c);
         if (s) setSettings(prev => ({ ...prev, ...s }));
+        setQuotesUsedLive(qCount);
         setReady(true);
       } catch (e) {
         setDbErr(dbErrorMessage(e));
@@ -546,8 +535,7 @@ export default function LawnBid() {
 
   const startNew = useCallback(() => {
     const cfg = PLANS[settings.plan || "free"] || PLANS.free;
-    const used = settings.quote_count_this_month || 0;
-    if (cfg.quote_limit !== null && used >= cfg.quote_limit) {
+    if (cfg.quote_limit !== null && quotesUsedLive >= cfg.quote_limit) {
       setUpgradeFor("Unlimited Quotes");
       return;
     }
@@ -563,11 +551,9 @@ export default function LawnBid() {
   }, [settings]);
 
   const editQuote = useCallback((q, forceNew=false) => {
-    // If creating a new record (V2 or duplicate), check free-plan limit first
     if (forceNew) {
       const cfg = PLANS[settings.plan || "free"] || PLANS.free;
-      const used = settings.quote_count_this_month || 0;
-      if (cfg.quote_limit !== null && used >= cfg.quote_limit) {
+      if (cfg.quote_limit !== null && quotesUsedLive >= cfg.quote_limit) {
         setUpgradeFor("Unlimited Quotes"); return;
       }
     }
@@ -582,14 +568,15 @@ export default function LawnBid() {
     setStep(2); setErrors({}); setScreen("flow");
   }, []);
 
+  const quotesUsedRef = useRef(quotesUsedLive);
+  useEffect(() => { quotesUsedRef.current = quotesUsedLive; }, [quotesUsedLive]);
+
   const handleSave = useCallback(async (rec, cliData, status) => {
     // Gate: free plan quote limit — any new record counts (brand new, V2, duplicate)
-    // Only in-place edits of existing drafts (rec.isNew === false) don't count
     if (rec.isNew) {
       const s = settingsRef.current || {};
       const cfg = PLANS[s.plan || "free"] || PLANS.free;
-      const used = s.quote_count_this_month || 0;
-      if (cfg.quote_limit !== null && used >= cfg.quote_limit) {
+      if (cfg.quote_limit !== null && quotesUsedRef.current >= cfg.quote_limit) {
         setUpgradeFor("Unlimited Quotes");
         return;
       }
@@ -657,16 +644,9 @@ export default function LawnBid() {
                       : [record, ...prev];
       });
 
-      // 4. Increment free-plan monthly quote count — any new DB record counts
-      //    (brand new, V2 revision, duplicate). Only in-place draft edits skip.
+      // 4. Bump local quote count for immediate UI feedback when a new record is created
       if (rec.isNew) {
-        const s = settingsRef.current || {};
-        const cfg = PLANS[s.plan || "free"] || PLANS.free;
-        if (cfg.quote_limit !== null) {
-          const ns = { ...s, quote_count_this_month: (s.quote_count_this_month || 0) + 1 };
-          setSettings(ns);
-          dbSaveSettings(ns).catch(()=>{});
-        }
+        setQuotesUsedLive(n => n + 1);
       }
 
       setSelQ(quoteId);
@@ -1423,14 +1403,13 @@ function BiometricRow(){
 }
 
 function PlanBadge(){
-  const {plan,planName,quoteLimit,quotesUsed,resetDate} = usePlan();
-  const resetLabel = resetDate ? resetDate.toLocaleDateString("en-US",{month:"short",day:"numeric"}) : "";
+  const {plan,planName,quoteLimit,quotesUsed} = usePlan();
   if (plan === "free") {
     return (
       <Card style={{background:"#f0fdf4",border:"1px solid #bbf7d0",display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap",padding:"16px 18px",marginBottom:14}}>
         <div style={{minWidth:0}}>
           <div style={{fontSize:14,fontWeight:700,color:"#166534"}}>Free Plan</div>
-          <div style={{fontSize:12,color:"#15803d",fontWeight:500,marginTop:3}}>{quotesUsed} of {quoteLimit} quotes used{resetLabel ? ` · Resets ${resetLabel}` : ""}</div>
+          <div style={{fontSize:12,color:"#15803d",fontWeight:500,marginTop:3}}>{quotesUsed} of {quoteLimit} quotes used · Rolling 30 days</div>
         </div>
         <a href="/app/?plan=pro" style={{height:36,minHeight:36,padding:"0 14px",borderRadius:10,border:"none",background:"#15803d",color:"#ffffff",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap",textDecoration:"none",display:"inline-flex",alignItems:"center"}}>Upgrade to Pro →</a>
       </Card>
@@ -1450,7 +1429,25 @@ function SettingsScreen({bp,settings,onSave,onLogout}){
   const [loc,setLoc]=useState(settings);
   const [tip,setTip]=useState(null);
   const [saved,setSaved]=useState(false);
+  const [autoSaveErr,setAutoSaveErr]=useState("");
   const set=(k,v)=>setLoc(s=>({...s,[k]:v}));
+  // Auto-save with 1.5s debounce — "set it and forget it"
+  const isFirstRender = useRef(true);
+  useEffect(()=>{
+    if (isFirstRender.current) { isFirstRender.current = false; return; }
+    setAutoSaveErr("");
+    const t = setTimeout(()=>{
+      onSave(loc).then(()=>{
+        setSaved(true); setTimeout(()=>setSaved(false),1500);
+      }).catch(e=>{
+        console.error("[LawnBid] Auto-save failed:", e);
+        setAutoSaveErr("Could not save — check connection.");
+        setTimeout(()=>setAutoSaveErr(""),4000);
+      });
+    }, 1500);
+    return ()=>clearTimeout(t);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[loc]);
   const save=async()=>{
     try { await onSave(loc); setSaved(true); setTimeout(()=>setSaved(false),2000); }
     catch(e) { console.error("[LawnBid] Settings save failed:", e); alert("Could not save settings. Check your connection and try again."); }
@@ -1459,35 +1456,44 @@ function SettingsScreen({bp,settings,onSave,onLogout}){
   const TIPS={mow_rate:"Dollar value of mowing 20,000 sqft (≈½ acre) in 1 hr.",trim_rate:"Cost to trim 3,000 linear feet in 1 hr. Most crews do 2,500–4,000 ft/hr.",equipment_cost:"Hourly cost to run your equipment — fuel, maintenance, depreciation.",hourly_rate:"True cost per worker per hour: wages + payroll taxes + benefits.",minimum_bid:"No quote goes below this. Covers drive time, mobilization, admin.",quote_validity_days:"How many days a new quote is valid before it is marked expired.",profit_margin:"Your target profit. 30% means for every $100 charged, $30 is profit after all costs. Most lawn care businesses target 25–40%. Formula: price = cost ÷ (1 - margin)"};
   const FIELDS=[{key:"mow_rate",label:"Mow Rate ($/20k sqft)"},{key:"trim_rate",label:"Trim Rate ($/3k linear ft)"},{key:"equipment_cost",label:"Equipment Cost ($/hr)"},{key:"hourly_rate",label:"Hourly Rate ($/worker/hr)"},{key:"minimum_bid",label:"Minimum Bid ($)"},{key:"profit_margin",label:"Profit Margin (%)",pct:true},{key:"quote_validity_days",label:"Quote Valid For (days)"}];
   const [logoMsg,setLogoMsg]=useState("");
+  const compressLogo = (file) => new Promise((resolve) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      const MAX = 256;
+      let w = img.width, h = img.height;
+      if (w > MAX || h > MAX) {
+        if (w > h) { h = Math.round(h * MAX / w); w = MAX; }
+        else { w = Math.round(w * MAX / h); h = MAX; }
+      }
+      const c = document.createElement("canvas");
+      c.width = w; c.height = h;
+      c.getContext("2d").drawImage(img, 0, 0, w, h);
+      resolve(c.toDataURL("image/png", 0.9));
+      URL.revokeObjectURL(url);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); resolve(null); };
+    img.src = url;
+  });
   const onLogo=async e=>{
     const f=e.target.files?.[0]; if(!f) return;
     if(!/^image\/(png|jpe?g|webp)$/i.test(f.type)){ alert("Please choose a PNG, JPG, or WebP image."); return; }
-    const reader=new FileReader();
-    reader.onload=async()=>{
-      const b64=reader.result;
-      const next = { ...loc, company_logo_base64: b64 };
-      setLoc(next);
-      try {
-        await onSave(next); // errors now propagate from handleSaveSettings
-        // Verify it actually persisted to Supabase
-        const { data } = await supabase.from("settings").select("company_logo_base64").eq("id",1).maybeSingle();
-        const persisted = !!data?.company_logo_base64;
-        console.log("[LawnBid] Logo saved to DB:", persisted, "size:", b64.length);
-        if (persisted) {
-          try { localStorage.setItem(COMPANY_LOGO_CACHE, b64); } catch {}
-          setLogoMsg("Logo saved ✓"); setTimeout(()=>setLogoMsg(""), 2000);
-        } else {
-          setLogoMsg("Logo saved locally but may not persist. Try saving Settings."); setTimeout(()=>setLogoMsg(""), 4000);
-        }
-      } catch(err) {
-        console.error("[LawnBid] Logo save failed:", err);
-        setLogoMsg("Could not save logo — check connection and try again.");
-        setTimeout(()=>setLogoMsg(""), 4000);
-        // Revert local state since DB save failed
-        setLoc(s => ({ ...s, company_logo_base64: settings.company_logo_base64 || "" }));
-      }
-    };
-    reader.readAsDataURL(f);
+    setLogoMsg("Processing…");
+    const b64 = await compressLogo(f);
+    if (!b64) { setLogoMsg("Could not read image."); setTimeout(()=>setLogoMsg(""), 3000); return; }
+    console.log("[LawnBid] Logo compressed:", Math.round(b64.length/1024)+"KB");
+    const next = { ...loc, company_logo_base64: b64 };
+    setLoc(next);
+    try {
+      await onSave(next);
+      try { localStorage.setItem(COMPANY_LOGO_CACHE, b64); } catch {}
+      setLogoMsg("Logo saved ✓"); setTimeout(()=>setLogoMsg(""), 2000);
+    } catch(err) {
+      console.error("[LawnBid] Logo save failed:", err);
+      setLogoMsg("Could not save logo — check connection and try again.");
+      setTimeout(()=>setLogoMsg(""), 4000);
+      setLoc(s => ({ ...s, company_logo_base64: settings.company_logo_base64 || "" }));
+    }
   };
   const onLogoImgError = () => {
     setLoc(s => ({ ...s, company_logo_base64: "" }));
@@ -1559,7 +1565,9 @@ function SettingsScreen({bp,settings,onSave,onLogout}){
   );
   const footer = (
     <>
-      <Btn onClick={save} style={{width:"100%"}}>{saved?"✓ Saved to database!":"Save Settings"}</Btn>
+      {autoSaveErr && <div style={{fontSize:12,color:"#dc2626",background:"#fef2f2",borderLeft:"3px solid #dc2626",borderRadius:"0 8px 8px 0",padding:"8px 10px",fontWeight:500,marginBottom:10}}>⚠ {autoSaveErr}</div>}
+      <Btn onClick={save} style={{width:"100%"}}>{saved?"✓ Saved!":"Save Settings"}</Btn>
+      <div style={{textAlign:"center",fontSize:11,color:"#94a3b8",marginTop:6}}>Settings auto-save as you type</div>
       <Btn variant="danger" onClick={onLogout} style={{width:"100%",marginTop:10}}>Log Out</Btn>
       <div style={{textAlign:"center",fontSize:11,color:"#94a3b8",marginTop:20}}>LawnBid v{APP_VERSION} · Built for lawn care professionals</div>
     </>

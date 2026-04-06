@@ -141,6 +141,17 @@ export async function deleteQuoteFile(path) {
   if (error) console.warn('Could not delete attachment:', error.message)
 }
 
+// ─── Quote count (for free plan limit) ────────────────────────────────────────────
+export async function countRecentQuotes(days = 30) {
+  const since = new Date(Date.now() - days * 86400000).toISOString()
+  const { count, error } = await supabase
+    .from('quotes')
+    .select('*', { count: 'exact', head: true })
+    .gte('created_at', since)
+  if (error) { console.error('[LawnBid] countRecentQuotes failed:', error); return 0 }
+  return count || 0
+}
+
 // ─── Quote ID ─────────────────────────────────────────────────────────────────────
 export async function nextQuoteId() {
   const { data, error } = await supabase.rpc('next_quote_id')
