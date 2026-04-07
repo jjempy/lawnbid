@@ -322,7 +322,7 @@ async function generateQuotePDF(quote, settings, calc, time) {
   const attachCount = Array.isArray(quote.attachments) ? quote.attachments.length : 0;
   if (attachCount > 0) {
     doc.setFont("helvetica","italic"); doc.setFontSize(9); doc.setTextColor(...MUTED);
-    doc.text(`${attachCount} attachment${attachCount>1?"s":""} included in digital quote.`, M, y);
+    doc.text(`📎 ${attachCount} photo${attachCount>1?"s":""} attached to digital quote`, M, y);
     y += 18;
   }
 
@@ -1420,17 +1420,20 @@ function QuoteDetail({bp,quote,allQuotes,settings,onBack,onEdit,onDuplicate,onDe
   const attachmentsCard = attachments.length>0 && (
     <Card>
       <Lbl>{t("attachments",lang)} ({attachments.length})</Lbl>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(3, 1fr)",gap:8}}>
-        {attachments.map(att=>{
+      <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+        {attachments.map((att,idx)=>{
           const isImg = att.type?.startsWith("image/");
-          const isPdf = att.type==="application/pdf" || att.name?.toLowerCase().endsWith(".pdf");
-          const onTap = ()=> isImg ? setLightbox(att) : window.open(att.url,"_blank","noopener,noreferrer");
+          const imgIdx = isImg ? imageAtts.indexOf(att) : -1;
           return (
-            <div key={att.id} onClick={onTap} style={{cursor:"pointer"}}>
-              <div style={{width:"100%",aspectRatio:"1",borderRadius:12,border:"1.5px solid #e2e8f0",background:"#f8fafc",overflow:"hidden",display:"flex",alignItems:"center",justifyContent:"center",fontSize:32}}>
-                {isImg ? <img src={att.url} alt={att.name} style={{width:"100%",height:"100%",objectFit:"cover"}}/> : isPdf ? "📄" : "📎"}
-              </div>
-              <div style={{fontSize:10,color:"#64748b",marginTop:4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontWeight:500}}>{att.name}</div>
+            <div key={att.id} style={{position:"relative",width:80,height:80}}>
+              {isImg ? (
+                <img src={att.url} alt={att.name} onClick={()=>setLightboxIdx(imgIdx)} style={{width:80,height:80,objectFit:"cover",borderRadius:8,cursor:"pointer",border:"1px solid #e2e8f0"}}/>
+              ) : (
+                <div onClick={()=>window.open(att.url,"_blank")} style={{width:80,height:80,borderRadius:8,background:"#f1f5f9",border:"1px solid #e2e8f0",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",cursor:"pointer",gap:4}}>
+                  <span style={{fontSize:24}}>📄</span>
+                  <span style={{fontSize:9,color:"#64748b",textAlign:"center",padding:"0 4px",wordBreak:"break-all"}}>{att.name?.slice(0,12)}</span>
+                </div>
+              )}
             </div>
           );
         })}
@@ -1531,10 +1534,14 @@ function QuoteDetail({bp,quote,allQuotes,settings,onBack,onEdit,onDuplicate,onDe
       {confirmDel&&<Btn variant="secondary" onClick={()=>setConfirmDel(false)} style={{width:"100%"}}>Cancel</Btn>}
     </div>
   );
-  const lightboxEl = lightbox && (
-    <div onClick={()=>setLightbox(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.92)",zIndex:300,display:"flex",alignItems:"center",justifyContent:"center",padding:20,cursor:"pointer"}}>
-      <img src={lightbox.url} alt={lightbox.name} style={{maxWidth:"100%",maxHeight:"100%",objectFit:"contain",borderRadius:8}}/>
-      <button onClick={e=>{e.stopPropagation();setLightbox(null);}} style={{position:"absolute",top:16,right:16,width:44,height:44,borderRadius:"50%",background:"rgba(255,255,255,.15)",border:"none",color:"#fff",fontSize:22,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
+  const lightboxEl = lightboxIdx!==null && imageAtts[lightboxIdx] && (
+    <div onClick={()=>setLightboxIdx(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.92)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",padding:20,cursor:"pointer"}}>
+      <img src={imageAtts[lightboxIdx].url} alt="" onClick={e=>e.stopPropagation()} style={{maxWidth:"95vw",maxHeight:"90vh",objectFit:"contain",borderRadius:8}}/>
+      {imageAtts.length>1&&<>
+        <button onClick={e=>{e.stopPropagation();setLightboxIdx(i=>(i-1+imageAtts.length)%imageAtts.length);}} style={{position:"absolute",left:16,top:"50%",transform:"translateY(-50%)",background:"rgba(255,255,255,.2)",border:"none",color:"#fff",width:44,height:44,borderRadius:"50%",fontSize:20,cursor:"pointer"}}>‹</button>
+        <button onClick={e=>{e.stopPropagation();setLightboxIdx(i=>(i+1)%imageAtts.length);}} style={{position:"absolute",right:16,top:"50%",transform:"translateY(-50%)",background:"rgba(255,255,255,.2)",border:"none",color:"#fff",width:44,height:44,borderRadius:"50%",fontSize:20,cursor:"pointer"}}>›</button>
+      </>}
+      <button onClick={()=>setLightboxIdx(null)} style={{position:"absolute",top:16,right:16,background:"rgba(255,255,255,.2)",border:"none",color:"#fff",width:44,height:44,borderRadius:"50%",fontSize:20,cursor:"pointer"}}>×</button>
     </div>
   );
 
@@ -2823,17 +2830,20 @@ function S4({bp,flow,set,setFlow,area,perim,calc,time,onSend,saving}){
         </div>
         {uploading&&<div style={{fontSize:12,color:"#15803d",fontWeight:600,marginBottom:8}}>Uploading…</div>}
         {attachments.length>0&&(
-          <div style={{display:"flex",gap:8,overflowX:"auto",paddingBottom:4,marginLeft:-20,marginRight:-20,paddingLeft:20,paddingRight:20}}>
+          <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
             {attachments.map(att=>{
               const isImg = att.type?.startsWith("image/");
-              const isPdf = att.type==="application/pdf" || att.name?.toLowerCase().endsWith(".pdf");
               return (
-                <div key={att.id} style={{flexShrink:0,width:88,position:"relative"}}>
-                  <div style={{width:88,height:88,borderRadius:12,border:"1.5px solid #e2e8f0",background:"#f8fafc",overflow:"hidden",display:"flex",alignItems:"center",justifyContent:"center",fontSize:32}}>
-                    {isImg ? <img src={att.url} alt={att.name} style={{width:"100%",height:"100%",objectFit:"cover"}}/> : isPdf ? "📄" : "📎"}
-                  </div>
-                  <button onClick={()=>removeAttach(att)} style={{position:"absolute",top:-6,right:-6,width:22,height:22,borderRadius:"50%",background:"#0f172a",color:"#ffffff",border:"2px solid #ffffff",fontSize:12,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"inherit",padding:0,lineHeight:1}}>×</button>
-                  <div style={{fontSize:10,color:"#64748b",marginTop:4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontWeight:500}}>{att.name}</div>
+                <div key={att.id} style={{position:"relative",width:80,height:80}}>
+                  {isImg ? (
+                    <img src={att.url} alt={att.name} style={{width:80,height:80,objectFit:"cover",borderRadius:8,border:"1px solid #e2e8f0"}}/>
+                  ) : (
+                    <div style={{width:80,height:80,borderRadius:8,background:"#f1f5f9",border:"1px solid #e2e8f0",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:4}}>
+                      <span style={{fontSize:24}}>📄</span>
+                      <span style={{fontSize:9,color:"#64748b",textAlign:"center",padding:"0 4px",wordBreak:"break-all"}}>{att.name?.slice(0,12)}</span>
+                    </div>
+                  )}
+                  <button onClick={()=>removeAttach(att)} style={{position:"absolute",top:-6,right:-6,width:20,height:20,borderRadius:"50%",background:"#dc2626",border:"none",color:"#fff",fontSize:12,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1}}>×</button>
                 </div>
               );
             })}
