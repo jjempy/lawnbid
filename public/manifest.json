@@ -1,8 +1,9 @@
 {
   "name": "LawnBid",
   "short_name": "LawnBid",
-  "start_url": "/app",
-  "scope": "/",
+  "version": "0.9.0",
+  "start_url": "/app/",
+  "scope": "/app/",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#15803d",
