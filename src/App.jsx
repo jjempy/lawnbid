@@ -1170,7 +1170,7 @@ function ClientsScreen({bp,clients,quotes,onView}){
   return(
     <div style={{padding:isDesktop?0:16}}>
       {!isDesktop && <div style={{fontSize:26,fontWeight:900,color:"#0f172a",marginBottom:14}}>{t("clients_title",lang)}</div>}
-      <Inp placeholder="Search name or phone…" value={search} onChange={e=>setSearch(e.target.value)} style={{marginBottom:14}}/>
+      <Inp placeholder={t("search_name_phone",lang)} value={search} onChange={e=>setSearch(e.target.value)} style={{marginBottom:14}}/>
       {shown.length===0?(
         <div style={{textAlign:"center",padding:"60px 20px",color:"#64748b"}}>
           <div style={{fontSize:48,marginBottom:12}}>👥</div>
@@ -1814,6 +1814,7 @@ const EyeOff = ({color}) => (
 );
 
 function AuthScreen(){
+  const lang = (()=>{try{return localStorage.getItem("lb_language")||"en";}catch{return"en";}})();
   // Read ?plan= and ?new=1 from URL to route new users to signup
   const urlParams = (()=>{ try { return new URLSearchParams(window.location.search); } catch { return new URLSearchParams(); } })();
   const initialPlanFromUrl = (()=>{ const p = urlParams.get("plan"); return p==="pro"||p==="team"?p:null; })();
@@ -1871,7 +1872,7 @@ function AuthScreen(){
 
   const cachedLogo = (()=>{ try { return localStorage.getItem(COMPANY_LOGO_CACHE) || ""; } catch { return ""; } })();
   const logoSrc = cachedLogo || "/logo.png";
-  const subtitleFor = m => m==="reset"?"Reset your password":m==="signup"?"Create your account":"Sign in to your account";
+  const subtitleFor = m => m==="reset"?t("reset_password_title",lang):m==="signup"?t("create_account_subtitle",lang):t("sign_in_subtitle",lang);
 
   return(
     <div style={{maxWidth:480,margin:"0 auto",minHeight:"100vh",display:"flex",flexDirection:"column",justifyContent:"center",padding:"24px",fontFamily:"'Inter',system-ui,-apple-system,sans-serif",background:"#f8fafc",boxSizing:"border-box",color:"#0f172a"}}>
@@ -1888,8 +1889,8 @@ function AuthScreen(){
       )}
       <Card>
         <div style={{marginBottom:12}}>
-          <div style={{fontSize:13,fontWeight:600,color:"#334155",marginBottom:4}}>Email</div>
-          <Inp type="email" value={email} onChange={e=>{setEmail(e.target.value);setEmailBlurred(false);}} onBlur={()=>setEmailBlurred(true)} placeholder="you@example.com" autoComplete="email"/>
+          <div style={{fontSize:13,fontWeight:600,color:"#334155",marginBottom:4}}>{t("email",lang)}</div>
+          <Inp type="email" value={email} onChange={e=>{setEmail(e.target.value);setEmailBlurred(false);}} onBlur={()=>setEmailBlurred(true)} placeholder={t("ph_company_email",lang)} autoComplete="email"/>
           {mode==="signup" && emailBlurred && emailLooksValid && (
             <div style={{fontSize:12,color:"#64748b",marginTop:6}}>If you already have an account, <button type="button" onClick={()=>{clearMsgs();setMode("login");}} style={{background:"none",border:"none",color:"#15803d",fontSize:12,fontWeight:600,cursor:"pointer",textDecoration:"underline",padding:0,fontFamily:"inherit"}}>log in instead →</button></div>
           )}
@@ -1897,7 +1898,7 @@ function AuthScreen(){
         {mode==="login" && (
           <>
             <div style={{marginBottom:4}}>
-              <div style={{fontSize:13,fontWeight:600,color:"#334155",marginBottom:4}}>Password</div>
+              <div style={{fontSize:13,fontWeight:600,color:"#334155",marginBottom:4}}>{t("password",lang)}</div>
               <div style={{position:"relative"}}>
                 <Inp type={showPw?"text":"password"} value={password} onChange={e=>setPassword(e.target.value)} placeholder="••••••••" autoComplete="current-password" style={{paddingRight:44}}/>
                 <button type="button" onClick={()=>setShowPw(v=>!v)} aria-label={showPw?"Hide password":"Show password"} style={{position:"absolute",right:12,top:"50%",transform:"translateY(-50%)",width:24,height:24,minHeight:24,padding:0,border:"none",background:"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
@@ -1906,30 +1907,30 @@ function AuthScreen(){
               </div>
             </div>
             <div style={{textAlign:"right",marginBottom:12}}>
-              <button type="button" onClick={()=>{clearMsgs();setMode("reset");}} style={{background:"none",border:"none",color:"#15803d",fontSize:12,fontWeight:600,cursor:"pointer",textDecoration:"underline",padding:"4px 0",minHeight:28,fontFamily:"inherit"}}>Forgot password?</button>
+              <button type="button" onClick={()=>{clearMsgs();setMode("reset");}} style={{background:"none",border:"none",color:"#15803d",fontSize:12,fontWeight:600,cursor:"pointer",textDecoration:"underline",padding:"4px 0",minHeight:28,fontFamily:"inherit"}}>{t("forgot_password",lang)}</button>
             </div>
-            <Btn onClick={login} disabled={busy||!email||!password} style={{width:"100%"}}>Log In</Btn>
+            <Btn onClick={login} disabled={busy||!email||!password} style={{width:"100%"}}>{t("log_in",lang)}</Btn>
             <div style={{height:1,background:"#e2e8f0",margin:"16px 0"}}/>
             <div style={{textAlign:"center",fontSize:13,color:"#64748b"}}>
-              Don't have an account? <button type="button" onClick={()=>{clearMsgs();setMode("signup");}} style={{background:"none",border:"none",color:"#15803d",fontSize:13,fontWeight:600,cursor:"pointer",textDecoration:"underline",padding:"4px 2px",fontFamily:"inherit"}}>Create one →</button>
+              {t("no_account",lang)} <button type="button" onClick={()=>{clearMsgs();setMode("signup");}} style={{background:"none",border:"none",color:"#15803d",fontSize:13,fontWeight:600,cursor:"pointer",textDecoration:"underline",padding:"4px 2px",fontFamily:"inherit"}}>{t("create_one",lang)}</button>
             </div>
           </>
         )}
         {mode==="signup" && (
           <>
             <div style={{marginBottom:12}}>
-              <div style={{fontSize:13,fontWeight:600,color:"#334155",marginBottom:4}}>Password</div>
+              <div style={{fontSize:13,fontWeight:600,color:"#334155",marginBottom:4}}>{t("password",lang)}</div>
               <div style={{position:"relative"}}>
-                <Inp type={showPw?"text":"password"} value={password} onChange={e=>setPassword(e.target.value)} placeholder="At least 6 characters" autoComplete="new-password" style={{paddingRight:44}}/>
+                <Inp type={showPw?"text":"password"} value={password} onChange={e=>setPassword(e.target.value)} placeholder={t("ph_password_min",lang)} autoComplete="new-password" style={{paddingRight:44}}/>
                 <button type="button" onClick={()=>setShowPw(v=>!v)} aria-label={showPw?"Hide password":"Show password"} style={{position:"absolute",right:12,top:"50%",transform:"translateY(-50%)",width:24,height:24,minHeight:24,padding:0,border:"none",background:"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
                   {showPw ? <EyeOpen color="#15803d"/> : <EyeOff color="#94a3b8"/>}
                 </button>
               </div>
             </div>
             <div style={{marginBottom:12}}>
-              <div style={{fontSize:13,fontWeight:600,color:"#334155",marginBottom:4}}>Confirm password</div>
+              <div style={{fontSize:13,fontWeight:600,color:"#334155",marginBottom:4}}>{t("confirm_password",lang)}</div>
               <div style={{position:"relative"}}>
-                <Inp type={showPw2?"text":"password"} value={password2} onChange={e=>setPassword2(e.target.value)} placeholder="Retype your password" autoComplete="new-password" style={{paddingRight:72}}/>
+                <Inp type={showPw2?"text":"password"} value={password2} onChange={e=>setPassword2(e.target.value)} placeholder={t("ph_password_retype",lang)} autoComplete="new-password" style={{paddingRight:72}}/>
                 {password2.length>0 && (
                   <span style={{position:"absolute",right:44,top:"50%",transform:"translateY(-50%)",display:"flex",alignItems:"center",justifyContent:"center",pointerEvents:"none"}}>
                     {pwMatch
@@ -1942,16 +1943,16 @@ function AuthScreen(){
                 </button>
               </div>
             </div>
-            <Btn onClick={signup} disabled={busy||!canSignup} style={{width:"100%"}}>{busy?"Creating account…":"Create Account"}</Btn>
+            <Btn onClick={signup} disabled={busy||!canSignup} style={{width:"100%"}}>{busy?"...":t("create_account",lang)}</Btn>
             <div style={{height:1,background:"#e2e8f0",margin:"16px 0"}}/>
             <div style={{textAlign:"center",fontSize:13,color:"#64748b"}}>
-              Already have an account? <button type="button" onClick={()=>{clearMsgs();setMode("login");}} style={{background:"none",border:"none",color:"#15803d",fontSize:13,fontWeight:600,cursor:"pointer",textDecoration:"underline",padding:"4px 2px",fontFamily:"inherit"}}>Log in →</button>
+              {t("already_account",lang)} <button type="button" onClick={()=>{clearMsgs();setMode("login");}} style={{background:"none",border:"none",color:"#15803d",fontSize:13,fontWeight:600,cursor:"pointer",textDecoration:"underline",padding:"4px 2px",fontFamily:"inherit"}}>{t("log_in_link",lang)}</button>
             </div>
           </>
         )}
         {mode==="reset" && (
           <>
-            <Btn onClick={sendReset} disabled={busy||!email} style={{width:"100%",marginTop:4}}>Send Reset Link</Btn>
+            <Btn onClick={sendReset} disabled={busy||!email} style={{width:"100%",marginTop:4}}>{t("send_reset",lang)}</Btn>
             <div style={{textAlign:"center",marginTop:12}}>
               <button type="button" onClick={()=>{clearMsgs();setMode("login");}} style={{background:"none",border:"none",color:"#15803d",fontSize:13,fontWeight:600,cursor:"pointer",textDecoration:"underline",padding:"6px 0",minHeight:28,fontFamily:"inherit"}}>← Back to login</button>
             </div>
@@ -1975,7 +1976,7 @@ function AuthScreen(){
         ) : null}
       </Card>
       <div style={{textAlign:"center",marginTop:16}}>
-        <a href="https://winwinlawnbid.com" style={{color:"#94a3b8",fontSize:12,fontWeight:500,textDecoration:"none"}}>← Back to winwinlawnbid.com</a>
+        <a href="https://winwinlawnbid.com" style={{color:"#94a3b8",fontSize:12,fontWeight:500,textDecoration:"none"}}>{t("back_to_site",lang)}</a>
       </div>
     </div>
   );
@@ -2145,6 +2146,7 @@ function QuoteFlow({bp,step,setStep,flow,setFlow,errors,setErrors,settings,clien
 }
 
 function S1({flow,set,errors,clients}){
+  const lang = useLang();
   const [sugg,setSugg]=useState([]);
   const addressRef = useRef(null);
   useEffect(() => {
@@ -2169,10 +2171,10 @@ function S1({flow,set,errors,clients}){
   return(
     <div>
       <Card>
-        <Lbl>Client Information</Lbl>
+        <Lbl>{t("client_info",lang)}</Lbl>
         <div style={{marginBottom:12,position:"relative"}}>
-          <div style={{fontSize:13,fontWeight:600,color:"#334155",marginBottom:4}}>Client Name *</div>
-          <Inp value={flow.clientName} onChange={e=>onName(e.target.value)} onBlur={()=>setTimeout(()=>setSugg([]),150)} placeholder="Name or search existing client"/>
+          <div style={{fontSize:13,fontWeight:600,color:"#334155",marginBottom:4}}>{t("client_name",lang)} *</div>
+          <Inp value={flow.clientName} onChange={e=>onName(e.target.value)} onBlur={()=>setTimeout(()=>setSugg([]),150)} placeholder={t("ph_client_name",lang)}/>
           <ErrMsg msg={errors.clientName}/>
           {sugg.length>0&&(
             <div style={{position:"absolute",top:"100%",left:0,right:0,background:"#fff",border:"1.5px solid #e2e8f0",borderRadius:8,boxShadow:"0 4px 12px rgba(0,0,0,.12)",zIndex:50,marginTop:2}}>
@@ -2185,20 +2187,20 @@ function S1({flow,set,errors,clients}){
             </div>
           )}
         </div>
-        {flow.clientId&&<div style={{background:"#f0fdf4",borderRadius:8,padding:"6px 10px",fontSize:12,color:"#166534",marginBottom:10}}>✓ Existing client — measurements pre-filled from last quote</div>}
+        {flow.clientId&&<div style={{background:"#f0fdf4",borderRadius:8,padding:"6px 10px",fontSize:12,color:"#166534",marginBottom:10}}>{t("existing_client_note",lang)}</div>}
         <div style={{marginBottom:12}}>
-          <div style={{fontSize:13,fontWeight:600,color:"#334155",marginBottom:4}}>Phone *</div>
-          <Inp type="tel" value={formatPhone(flow.clientPhone)} onChange={e=>set("clientPhone",formatPhone(e.target.value))} placeholder="(555) 555-5555"/>
+          <div style={{fontSize:13,fontWeight:600,color:"#334155",marginBottom:4}}>{t("client_phone",lang)} *</div>
+          <Inp type="tel" value={formatPhone(flow.clientPhone)} onChange={e=>set("clientPhone",formatPhone(e.target.value))} placeholder={t("ph_phone",lang)}/>
           <ErrMsg msg={errors.clientPhone}/>
         </div>
         <div>
-          <div style={{fontSize:13,fontWeight:600,color:"#334155",marginBottom:4}}>Email (optional)</div>
-          <Inp type="email" value={flow.clientEmail} onChange={e=>set("clientEmail",e.target.value)} placeholder="client@email.com"/>
+          <div style={{fontSize:13,fontWeight:600,color:"#334155",marginBottom:4}}>{t("client_email",lang)}</div>
+          <Inp type="email" value={flow.clientEmail} onChange={e=>set("clientEmail",e.target.value)} placeholder={t("ph_email_client",lang)}/>
         </div>
       </Card>
       <Card>
-        <Lbl>Job Address</Lbl>
-        <Inp ref={addressRef} value={flow.address} onChange={e=>set("address",e.target.value)} placeholder="Start typing an address…" autoComplete="off"/>
+        <Lbl>{t("job_address",lang)}</Lbl>
+        <Inp ref={addressRef} value={flow.address} onChange={e=>set("address",e.target.value)} placeholder={t("ph_address",lang)} autoComplete="off"/>
         <ErrMsg msg={errors.address}/>
       </Card>
     </div>
@@ -2206,6 +2208,7 @@ function S1({flow,set,errors,clients}){
 }
 
 function S2({bp,flow,set,errors,area,perim,onAdvance}){
+  const lang = useLang();
   const twoCol = bp !== "mobile";
   const {canUseMap,showUpgrade} = usePlan();
   const [mTab,setMTab] = useState(canUseMap?"map":"manual");
@@ -2219,9 +2222,9 @@ function S2({bp,flow,set,errors,area,perim,onAdvance}){
   };
   const areaCard = (
     <Card>
-      <Lbl>Lawn Area</Lbl>
+      <Lbl>{t("lawn_area",lang)}</Lbl>
       <div style={{display:"flex",gap:8,marginBottom:4}}>
-        <Inp type="number" value={flow.areaVal} onChange={e=>set("areaVal",e.target.value)} placeholder="Enter area" style={{flex:1}}/>
+        <Inp type="number" value={flow.areaVal} onChange={e=>set("areaVal",e.target.value)} placeholder={t("ph_enter_area",lang)} style={{flex:1}}/>
         <Sel value={flow.areaUnit} onChange={e=>set("areaUnit",e.target.value)}>{AREA_UNITS.map(u=><option key={u.value} value={u.value}>{u.label}</option>)}</Sel>
       </div>
       {area>0&&flow.areaUnit!=="sqft"&&<div style={{fontSize:12,color:"#16a34a",marginBottom:2}}>= {area.toLocaleString(undefined,{maximumFractionDigits:0})} sq ft</div>}
@@ -2231,9 +2234,9 @@ function S2({bp,flow,set,errors,area,perim,onAdvance}){
   );
   const perimCard = (
     <Card>
-      <Lbl>Perimeter</Lbl>
+      <Lbl>{t("perimeter",lang)}</Lbl>
       <div style={{display:"flex",gap:8,marginBottom:4}}>
-        <Inp type="number" value={flow.perimVal} onChange={e=>set("perimVal",e.target.value)} placeholder="Enter perimeter" style={{flex:1}}/>
+        <Inp type="number" value={flow.perimVal} onChange={e=>set("perimVal",e.target.value)} placeholder={t("ph_enter_perim",lang)} style={{flex:1}}/>
         <Sel value={flow.perimUnit} onChange={e=>set("perimUnit",e.target.value)}>{PERIM_UNITS.map(u=><option key={u.value} value={u.value}>{u.label}</option>)}</Sel>
       </div>
       {perim>0&&flow.perimUnit!=="ft"&&<div style={{fontSize:12,color:"#16a34a",marginBottom:2}}>= {perim.toLocaleString(undefined,{maximumFractionDigits:0})} linear ft</div>}
@@ -2601,16 +2604,17 @@ function MapMeasure({bp,address,confirmed,setConfirmed,onConfirm,onSwitchManual,
 }
 
 function S3({bp,flow,set,area,perim,calc,time,settings}){
+  const lang = useLang();
   const [editing,setEditing]=useState(false);
   const isDesktop = bp==="desktop";
   const leftCol = (<>
       <Card>
-        <Lbl>Job Complexity</Lbl>
+        <Lbl>{t("job_complexity",lang)}</Lbl>
         <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:8}}>{COMPLEXITY.map(o=><Chip key={o.value} label={`${o.label} (${o.value}×)`} active={flow.cx===o.value} onClick={()=>set("cx",o.value)}/>)}</div>
         <div style={{fontSize:12,color:"#64748b"}}>{COMPLEXITY.find(o=>o.value===flow.cx)?.desc}</div>
       </Card>
       <Card>
-        <Lbl>Site Risk</Lbl>
+        <Lbl>{t("site_risk",lang)}</Lbl>
         <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:8}}>{RISK.map(o=><Chip key={o.value} label={`${o.label} (${o.value}×)`} active={flow.risk===o.value} onClick={()=>set("risk",o.value)}/>)}</div>
         <div style={{fontSize:12,color:"#64748b"}}>{RISK.find(o=>o.value===flow.risk)?.desc}</div>
       </Card>
@@ -2624,7 +2628,7 @@ function S3({bp,flow,set,area,perim,calc,time,settings}){
       {(() => {
         const discountCard = (
         <Card>
-          <Lbl>Discount</Lbl>
+          <Lbl>{t("discount",lang)}</Lbl>
           <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
             {[0,5,10,15,20].map(p=><Chip key={p} label={p===0?"None":`${p}%`} active={flow.disc===p&&!flow.customDisc} onClick={()=>{set("disc",p);set("customDisc","");}}/>)}
             <div style={{display:"flex",alignItems:"center",gap:4}}>
@@ -2636,7 +2640,7 @@ function S3({bp,flow,set,area,perim,calc,time,settings}){
         );
         const calcCard = calc && (
         <Card style={{background:"#0f172a",color:"#ffffff",padding:24,boxShadow:"0 4px 16px rgba(15,23,42,.12)"}}>
-          <Lbl style={{color:"#64748b"}}>Calculated Bid</Lbl>
+          <Lbl style={{color:"#64748b"}}>{t("calculated_bid",lang)}</Lbl>
           {flow.override!==null&&flow.override!==undefined&&<div style={{fontSize:18,color:"#475569",textDecoration:"line-through",marginBottom:4,fontWeight:600}}>{$$(calc.fin)}</div>}
           {editing?(
             <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
@@ -2649,7 +2653,7 @@ function S3({bp,flow,set,area,perim,calc,time,settings}){
           {editing?<button onClick={()=>{setEditing(false);set("override",null);}} style={{fontSize:12,color:"#4ade80",background:"none",border:"none",cursor:"pointer",marginBottom:14,fontFamily:"inherit",fontWeight:600,padding:0,minHeight:32}}>← reset to formula</button>:<div style={{fontSize:12,color:"#64748b",marginBottom:14,fontWeight:500}}>Tap price to override</div>}
           {calc.minA&&<div style={{fontSize:12,color:"#fbbf24",marginBottom:12,fontWeight:500}}>⚠ Minimum bid applied (formula: {$$(calc.ar)})</div>}
           <div style={{borderTop:"1px solid #1e293b",paddingTop:14}}>
-            <Lbl style={{color:"#64748b"}}>Breakdown</Lbl>
+            <Lbl style={{color:"#64748b"}}>{t("breakdown",lang)}</Lbl>
             {calc.bd.map((r,i)=>(
               <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",padding:"6px 0",borderBottom:r.subtotal?"1px solid #334155":"1px solid #1e293b",color:r.subtotal?"#ffffff":r.modifier?"#94a3b8":"#cbd5e1",fontWeight:r.subtotal?700:500}}>
                 <div><div style={{fontSize:13}}>{r.label}</div>{r.note&&<div style={{fontSize:10,color:"#64748b",marginTop:1}}>{r.note}</div>}</div>
@@ -2660,7 +2664,7 @@ function S3({bp,flow,set,area,perim,calc,time,settings}){
           </div>
           {time&&(
             <div style={{borderTop:"1px solid #1e293b",paddingTop:14,marginTop:14}}>
-              <Lbl style={{color:"#64748b"}}>⏱ Crew & Time</Lbl>
+              <Lbl style={{color:"#64748b"}}>⏱ {t("crew_and_time",lang)}</Lbl>
               <div style={{display:"flex",gap:6,marginBottom:8}}>
                 {time.crew_times.map(({n,t})=>(
                   <button key={n} onClick={()=>set("crew",n)} style={{flex:1,textAlign:"center",padding:"8px 4px",borderRadius:10,border:n===flow.crew?"none":"1px solid rgba(255,255,255,.15)",background:n===flow.crew?"#15803d":"transparent",color:n===flow.crew?"#ffffff":"#94a3b8",cursor:"pointer",fontFamily:"inherit"}}>
@@ -2776,7 +2780,7 @@ function S4({bp,flow,set,setFlow,area,perim,calc,time,onSend,saving}){
       </Card>
       <Card>
         <Lbl>{t("notes",lang)}</Lbl>
-        <textarea value={flow.notes} onChange={e=>set("notes",e.target.value)} placeholder="Add notes for this job…" style={{width:"100%",minHeight:80,border:"1.5px solid #e2e8f0",borderRadius:12,padding:"12px 14px",fontSize:14,fontFamily:"inherit",resize:"vertical",boxSizing:"border-box",outline:"none",color:"#0f172a"}}/>
+        <textarea value={flow.notes} onChange={e=>set("notes",e.target.value)} placeholder={t("ph_notes",lang)} style={{width:"100%",minHeight:80,border:"1.5px solid #e2e8f0",borderRadius:12,padding:"12px 14px",fontSize:14,fontFamily:"inherit",resize:"vertical",boxSizing:"border-box",outline:"none",color:"#0f172a"}}/>
       </Card>
       {!canAttachPhotos && (
         <div style={{fontSize:12,color:"#64748b",fontWeight:500,marginBottom:12,display:"flex",alignItems:"center",gap:6,padding:"0 4px"}}>
