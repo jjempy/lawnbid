@@ -52,16 +52,16 @@ const usePlan = () => useContext(PlanContext);
 const LangContext = createContext("en");
 const useLang = () => useContext(LangContext);
 const COMPLEXITY = [
-  { label: "Simple",    value: 1.0,  desc: "Open lawn, no obstacles" },
-  { label: "Moderate",  value: 1.3,  desc: "Some trees, beds, tight spaces" },
-  { label: "Complex",   value: 1.6,  desc: "Heavy tree cover, dense landscaping" },
-  { label: "Very Complex", value: 2.0,  desc: "Heavily wooded, narrow gates" },
+  { lk: "cx_simple",    dk: "cx_simple_desc",    value: 1.0 },
+  { lk: "cx_moderate",  dk: "cx_moderate_desc",  value: 1.3 },
+  { lk: "cx_complex",   dk: "cx_complex_desc",   value: 1.6 },
+  { lk: "cx_very_complex", dk: "cx_very_complex_desc", value: 2.0 },
 ];
 const RISK = [
-  { label: "Low",      value: 1.0,  desc: "Flat, open, dry" },
-  { label: "Moderate", value: 1.25, desc: "Mild slope or wet areas" },
-  { label: "High",     value: 1.5,  desc: "Steep hills, drainage issues" },
-  { label: "Severe",   value: 1.75, desc: "Swampy, very steep, liability concern" },
+  { lk: "risk_low",      dk: "risk_low_desc",      value: 1.0 },
+  { lk: "risk_moderate",  dk: "risk_moderate_desc",  value: 1.25 },
+  { lk: "risk_high",     dk: "risk_high_desc",     value: 1.5 },
+  { lk: "risk_severe",   dk: "risk_severe_desc",   value: 1.75 },
 ];
 const AREA_UNITS  = [
   { label: "sq ft",    value: "sqft",   conv: v => v },
@@ -169,14 +169,14 @@ function calcQ(area, perim, cx, risk, disc, s, ov=null) {
   const fin = margin > 0 ? afterDisc / (1 - margin) : afterDisc;
   const disp=ov!==null?(parseFloat(ov)||0):fin;
   const bd=[
-    {label:"Mow (area)",       note:`${fmtArea(area)} × ($${s.mow_rate}÷20,000)`, value:mc},
-    {label:"Trim (perimeter)", note:`${Math.round(perim).toLocaleString()} ft × ($${s.trim_rate}÷3,000)`,  value:tc},
-    {label:"Equipment",        note:`${(mh+th).toFixed(2)} hrs × $${s.equipment_cost}/hr`,                 value:ec},
-    {subtotal:true, label:"Subtotal (costs)", value:sub},
-    {modifier:true, label:`Complexity (${cx}×)`,  value:acx-sub},
-    {modifier:true, label:`Risk (${risk}×)`,       value:ar-acx},
-    ...(disc>0?[{modifier:true,label:`Discount (${disc}%)`,value:-(fl*disc/100)}]:[]),
-    ...(margin>0?[{modifier:true,label:`Profit margin (${Math.round(margin*100)}%)`,value:fin-afterDisc}]:[]),
+    {label:"bd_mow",       note:`${fmtArea(area)} × ($${s.mow_rate}÷20,000)`, value:mc},
+    {label:"bd_trim",      note:`${Math.round(perim).toLocaleString()} ft × ($${s.trim_rate}÷3,000)`,  value:tc},
+    {label:"bd_equipment", note:`${(mh+th).toFixed(2)} hrs × $${s.equipment_cost}/hr`,                 value:ec},
+    {subtotal:true, label:"bd_subtotal", value:sub},
+    {modifier:true, label:"bd_complexity", suffix:` (${cx}×)`,  value:acx-sub},
+    {modifier:true, label:"bd_risk",       suffix:` (${risk}×)`, value:ar-acx},
+    ...(disc>0?[{modifier:true,label:"bd_discount",suffix:` (${disc}%)`,value:-(fl*disc/100)}]:[]),
+    ...(margin>0?[{modifier:true,label:"bd_margin",suffix:` (${Math.round(margin*100)}%)`,value:fin-afterDisc}]:[]),
   ];
   return {mh,th,mc,tc,ec,sub,acx,ar,afterDisc,minA,fl,fin,disp,bd};
 }
@@ -980,7 +980,7 @@ function HomeScreen({bp,quotes,settings,onNew,onView}){
       )}
       <div style={{display:"flex",gap:6,margin:isDesktop?"0 0 12px":"12px 0 8px",flexWrap:"wrap"}}>
         {["all","draft","sent","accepted","declined","recurring",...(followUpOn?["followup"]:[])].map(f=>(
-          <Chip key={f} label={f==="all"?`All (${quotes.length})`:f==="followup"?`⭐ Follow-up (${quotes.filter(isFollowUp).length})`:f==="recurring"?`↻ Recurring (${quotes.filter(isRecurring).length})`:`${f[0].toUpperCase()+f.slice(1)} (${quotes.filter(q=>q.status===f).length})`} active={filter===f} onClick={()=>setFilter(f)}/>
+          <Chip key={f} label={f==="all"?`${t("chip_all",lang)} (${quotes.length})`:f==="followup"?`${t("chip_followup",lang)} (${quotes.filter(isFollowUp).length})`:f==="recurring"?`${t("chip_recurring",lang)} (${quotes.filter(isRecurring).length})`:`${t("chip_"+f,lang)} (${quotes.filter(q=>q.status===f).length})`} active={filter===f} onClick={()=>setFilter(f)}/>
         ))}
       </div>
       <div style={{position:"relative",marginBottom:10}}>
@@ -1279,7 +1279,7 @@ function ClientDetail({bp,client,quotes,onBack,onViewQuote,onUpdateClient,onDele
               </div>
               <div style={{fontSize:12,color:"#64748b"}}>{fmtTS(q.created_at)}</div>
               <div style={{fontSize:12,color:"#94a3b8",marginTop:2}}>
-                {fmtArea(q.area_sqft)} · {q.crew_size} crew · {COMPLEXITY.find(o=>o.value===q.complexity)?.label} · {RISK.find(o=>o.value===q.risk)?.label}
+                {fmtArea(q.area_sqft)} · {q.crew_size} crew · {t(COMPLEXITY.find(o=>o.value===q.complexity)?.lk||"cx_simple",lang)} · {t(RISK.find(o=>o.value===q.risk)?.lk||"risk_low",lang)}
               </div>
               {q.parent_id&&<div style={{fontSize:11,color:"#94a3b8",marginTop:2}}>Revision of {q.parent_id}</div>}
             </div>
@@ -1379,7 +1379,7 @@ function QuoteDetail({bp,quote,allQuotes,settings,onBack,onEdit,onDuplicate,onDe
     <Card>
       <Lbl>{t("job_details",lang)}</Lbl>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-        {[{l:"Address",v:quote.address,full:true},{l:"Area",v:fmtArea(quote.area_sqft)},{l:"Perimeter",v:`${Math.round(quote.linear_ft).toLocaleString()} ft`},{l:"Crew",v:`${quote.crew_size} worker${quote.crew_size>1?"s":""}`},{l:"Complexity",v:COMPLEXITY.find(o=>o.value===quote.complexity)?.label},{l:"Risk",v:RISK.find(o=>o.value===quote.risk)?.label},{l:"Discount",v:(quote.discount_pct||0)>0?`${quote.discount_pct}%`:"None"},{l:"Created",v:fmtTS(quote.created_at),full:true},{l:"Sent",v:quote.sent_at?fmtTS(quote.sent_at):"Not sent",full:true},{l:"Expires",v:quote.expiry_date?`${fmtD(quote.expiry_date)}${isExpired(quote.expiry_date)?" (expired)":""}`:"—",full:true}]
+        {[{l:"Address",v:quote.address,full:true},{l:"Area",v:fmtArea(quote.area_sqft)},{l:"Perimeter",v:`${Math.round(quote.linear_ft).toLocaleString()} ft`},{l:"Crew",v:`${quote.crew_size} worker${quote.crew_size>1?"s":""}`},{l:"Complexity",v:t(COMPLEXITY.find(o=>o.value===quote.complexity)?.lk||"cx_simple",lang)},{l:"Risk",v:t(RISK.find(o=>o.value===quote.risk)?.lk||"risk_low",lang)},{l:"Discount",v:(quote.discount_pct||0)>0?`${quote.discount_pct}%`:"None"},{l:"Created",v:fmtTS(quote.created_at),full:true},{l:"Sent",v:quote.sent_at?fmtTS(quote.sent_at):"Not sent",full:true},{l:"Expires",v:quote.expiry_date?`${fmtD(quote.expiry_date)}${isExpired(quote.expiry_date)?" (expired)":""}`:"—",full:true}]
           .map(({l,v,full})=>(
             <div key={l} style={{gridColumn:full?"1 / -1":"auto"}}>
               <div style={{fontSize:10,fontWeight:700,color:"#94a3b8",textTransform:"uppercase"}}>{l}</div>
@@ -1394,7 +1394,7 @@ function QuoteDetail({bp,quote,allQuotes,settings,onBack,onEdit,onDuplicate,onDe
       <Lbl>{t("formula_breakdown",lang)}</Lbl>
       {calc.bd.map((r,i)=>(
         <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",padding:"5px 0",borderBottom:r.subtotal?"1.5px solid #e2e8f0":"1px solid #f1f5f9",fontWeight:r.subtotal?700:400,color:r.subtotal?"#0f172a":r.modifier?"#64748b":"#334155"}}>
-          <div><div style={{fontSize:13}}>{r.label}</div>{r.note&&<div style={{fontSize:10,color:"#cbd5e1"}}>{r.note}</div>}</div>
+          <div><div style={{fontSize:13}}>{t(r.label,lang)}{r.suffix||""}</div>{r.note&&<div style={{fontSize:10,color:"#cbd5e1"}}>{r.note}</div>}</div>
           <div style={{fontSize:13,fontWeight:600}}>{r.modifier&&r.value>0?"+":""}{$$(r.value)}</div>
         </div>
       ))}
@@ -1630,7 +1630,7 @@ function SettingsScreen({bp,settings,onSave,onLogout}){
     quote_validity_days:"How many days your quotes stay active before expiring. After this period, the quote shows as EXPIRED and you'll need to resend with updated pricing. 30 days is standard.",
     follow_up_days:"How many days after sending a quote you want a follow-up reminder. Quotes older than this show a nudge on the home screen. 3 days is a good default.",
   };
-  const FIELDS=[{key:"mow_rate",label:"Mow Rate ($/20k sqft)"},{key:"trim_rate",label:"Trim Rate ($/3k linear ft)"},{key:"equipment_cost",label:"Equipment Cost ($/hr)"},{key:"hourly_rate",label:"Hourly Rate ($/worker/hr)"},{key:"minimum_bid",label:"Minimum Bid ($)"},{key:"profit_margin",label:"Profit Margin (%)",pct:true},{key:"quote_validity_days",label:"Quote Valid For (days)"}];
+  const FIELDS=[{key:"mow_rate",lk:"mow_rate_label"},{key:"trim_rate",lk:"trim_rate_label"},{key:"equipment_cost",lk:"equipment_cost_label"},{key:"hourly_rate",lk:"hourly_rate_label"},{key:"minimum_bid",lk:"minimum_bid_label"},{key:"profit_margin",lk:"profit_margin_label",pct:true},{key:"quote_validity_days",lk:"quote_valid_days"}];
   const [logoMsg,setLogoMsg]=useState("");
   const compressLogo = (file) => new Promise((resolve) => {
     const img = new Image();
@@ -1685,7 +1685,7 @@ function SettingsScreen({bp,settings,onSave,onLogout}){
   const formulaCard = (
       <Card>
         <Lbl>{t("formula_defaults",lang)}</Lbl>
-        {FIELDS.map(({key,label,pct})=>{
+        {FIELDS.map(({key,lk,pct})=>{ const label=t(lk,lang);
           const displayVal = key in rawVals ? rawVals[key] : pct ? Math.round((loc[key]??0)*100) : loc[key];
           return (
           <div key={key} style={{marginBottom:14}}>
@@ -1704,11 +1704,11 @@ function SettingsScreen({bp,settings,onSave,onLogout}){
         })}
         <div style={{marginBottom:12}}>
           <Lbl>{t("complexity_default",lang)}</Lbl>
-          <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{COMPLEXITY.map(o=><Chip key={o.value} label={`${o.label} (${o.value}×)`} active={loc.complexity_default===o.value} onClick={()=>set("complexity_default",o.value)}/>)}</div>
+          <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{COMPLEXITY.map(o=><Chip key={o.value} label={`${t(o.lk,lang)} (${o.value}×)`} active={loc.complexity_default===o.value} onClick={()=>set("complexity_default",o.value)}/>)}</div>
         </div>
         <div>
           <Lbl>{t("risk_default",lang)}</Lbl>
-          <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{RISK.map(o=><Chip key={o.value} label={`${o.label} (${o.value}×)`} active={loc.risk_default===o.value} onClick={()=>set("risk_default",o.value)}/>)}</div>
+          <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{RISK.map(o=><Chip key={o.value} label={`${t(o.lk,lang)} (${o.value}×)`} active={loc.risk_default===o.value} onClick={()=>set("risk_default",o.value)}/>)}</div>
         </div>
         <div style={{marginTop:16,paddingTop:14,borderTop:"1px solid #e2e8f0"}}>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
@@ -2507,12 +2507,12 @@ function MapMeasure({bp,address,confirmed,setConfirmed,onConfirm,onSwitchManual,
   }
 
   const instructionText = polyCount > 0 && pointCount === 0
-    ? "✓ Shape closed — tap + Add Area or Use These Measurements"
+    ? t("map_hint_done",lang)
     : pointCount >= 3
-    ? "Tap near your first point to close the shape — or tap Close Shape"
+    ? t("map_hint_close",lang)
     : pointCount >= 1
-    ? "Keep tapping to trace the lawn edge"
-    : "Tap anywhere on your lawn to start dropping points";
+    ? t("map_hint_trace",lang)
+    : t("map_hint_start",lang);
   const canClose = pointCount >= 3;
   const drawingSomething = pointCount > 0 || polyCount > 0;
 
@@ -2548,16 +2548,16 @@ function MapMeasure({bp,address,confirmed,setConfirmed,onConfirm,onSwitchManual,
             <div style={{width:64,height:64,borderRadius:"50%",background:"rgba(220,252,231,.15)",border:"2px solid #4ade80",display:"flex",alignItems:"center",justifyContent:"center",marginBottom:16}}>
               <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#4ade80" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 11.24V7.5a2.5 2.5 0 0 1 5 0v3.74"/><path d="M16 12a5 5 0 0 0-10 0v6a4 4 0 0 0 4 4h2a4 4 0 0 0 4-4v-1"/><path d="M15 12v-1.5a2.5 2.5 0 1 1 5 0V14"/></svg>
             </div>
-            <div style={{fontSize:20,fontWeight:800,color:"#ffffff",marginBottom:16,letterSpacing:-.3}}>Measure your lawn in 3 steps</div>
+            <div style={{fontSize:20,fontWeight:800,color:"#ffffff",marginBottom:16,letterSpacing:-.3}}>{t("map_tutorial_title",lang)}</div>
             <div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:24,maxWidth:320,width:"100%"}}>
-              {[["1.","Tap to drop points around the lawn edge"],["2.","Close the shape by tapping near your first point"],["3.","Tap \"Use These Measurements\" to continue"]].map(([n,t])=>(
+              {[["1.",t("map_tut_1",lang)],["2.",t("map_tut_2",lang)],["3.",t("map_tut_3",lang)]].map(([n,txt])=>(
                 <div key={n} style={{display:"flex",alignItems:"flex-start",gap:12,background:"rgba(255,255,255,.08)",padding:"10px 14px",borderRadius:10,textAlign:"left"}}>
                   <span style={{fontSize:14,fontWeight:800,color:"#4ade80",flexShrink:0,width:18}}>{n}</span>
-                  <span style={{fontSize:13,color:"#e2e8f0",fontWeight:500,lineHeight:1.5}}>{t}</span>
+                  <span style={{fontSize:13,color:"#e2e8f0",fontWeight:500,lineHeight:1.5}}>{txt}</span>
                 </div>
               ))}
             </div>
-            <Btn onClick={dismissTutorial} style={{width:"100%",maxWidth:320}}>Got it — Start Drawing</Btn>
+            <Btn onClick={dismissTutorial} style={{width:"100%",maxWidth:320}}>{t("map_got_it",lang)}</Btn>
           </div>
         )}
         {/* Success overlay */}
@@ -2575,7 +2575,7 @@ function MapMeasure({bp,address,confirmed,setConfirmed,onConfirm,onSwitchManual,
       {mapState==="ready" && (
         <div style={{padding:"14px 16px",borderTop:"1px solid #e2e8f0",background:"#ffffff"}}>
           {totalPointsPlaced < 3 ? (
-            <div style={{fontSize:13,color:"#94a3b8",fontWeight:500,textAlign:"center",padding:"6px 0"}}>Drop at least 3 points to see measurements</div>
+            <div style={{fontSize:13,color:"#94a3b8",fontWeight:500,textAlign:"center",padding:"6px 0"}}>{t("map_drop_3",lang)}</div>
           ) : (
             <div style={{display:"flex",flexDirection:"column",gap:10}}>
               <div>
@@ -2593,17 +2593,17 @@ function MapMeasure({bp,address,confirmed,setConfirmed,onConfirm,onSwitchManual,
 
       {/* Toolbar */}
       <div style={{padding:12,display:"flex",gap:8,flexWrap:"wrap"}}>
-        <Btn variant="secondary" onClick={undoPoint} disabled={!drawingSomething || confirmed} style={{flex:1,minWidth:0,height:tbBtnHeight,minHeight:tbBtnHeight,padding:"0 10px",fontSize:13}}>↩ Undo</Btn>
-        {!confirmed && canClose && <Btn onClick={closePolygon} style={{flex:"1.3",minWidth:0,height:tbBtnHeight,minHeight:tbBtnHeight,padding:"0 10px",fontSize:13}}>Close Shape</Btn>}
-        {!confirmed && polyCount>0 && pointCount===0 && <Btn variant="outline" onClick={()=>mapDivRef.current?.scrollIntoView({behavior:"smooth",block:"nearest"})} style={{flex:"1.3",minWidth:0,height:tbBtnHeight,minHeight:tbBtnHeight,padding:"0 10px",fontSize:13}}>+ Add Area</Btn>}
-        <Btn variant="secondary" onClick={()=>clearAll(false)} disabled={!drawingSomething} style={{flex:1,minWidth:0,height:tbBtnHeight,minHeight:tbBtnHeight,padding:"0 10px",fontSize:13}}>✕ Clear</Btn>
+        <Btn variant="secondary" onClick={undoPoint} disabled={!drawingSomething || confirmed} style={{flex:1,minWidth:0,height:tbBtnHeight,minHeight:tbBtnHeight,padding:"0 10px",fontSize:13}}>{t("map_undo",lang)}</Btn>
+        {!confirmed && canClose && <Btn onClick={closePolygon} style={{flex:"1.3",minWidth:0,height:tbBtnHeight,minHeight:tbBtnHeight,padding:"0 10px",fontSize:13}}>{t("map_close_shape",lang)}</Btn>}
+        {!confirmed && polyCount>0 && pointCount===0 && <Btn variant="outline" onClick={()=>mapDivRef.current?.scrollIntoView({behavior:"smooth",block:"nearest"})} style={{flex:"1.3",minWidth:0,height:tbBtnHeight,minHeight:tbBtnHeight,padding:"0 10px",fontSize:13}}>{t("map_add_area",lang)}</Btn>}
+        <Btn variant="secondary" onClick={()=>clearAll(false)} disabled={!drawingSomething} style={{flex:1,minWidth:0,height:tbBtnHeight,minHeight:tbBtnHeight,padding:"0 10px",fontSize:13}}>{t("map_clear",lang)}</Btn>
         {confirmed
-          ? <Btn variant="outline" onClick={()=>clearAll(true)} style={{flex:"1.3",minWidth:0,height:tbBtnHeight,minHeight:tbBtnHeight,padding:"0 10px",fontSize:13}}>↻ Redraw</Btn>
-          : <Btn onClick={confirmNow} disabled={polyCount===0} style={{flex:"1.6",minWidth:0,height:tbBtnHeight,minHeight:tbBtnHeight,padding:"0 10px",fontSize:13}}>✓ Use These Measurements</Btn>
+          ? <Btn variant="outline" onClick={()=>clearAll(true)} style={{flex:"1.3",minWidth:0,height:tbBtnHeight,minHeight:tbBtnHeight,padding:"0 10px",fontSize:13}}>{t("map_redraw",lang)}</Btn>
+          : <Btn onClick={confirmNow} disabled={polyCount===0} style={{flex:"1.6",minWidth:0,height:tbBtnHeight,minHeight:tbBtnHeight,padding:"0 10px",fontSize:13}}>✓ {t("use_measurements",lang)}</Btn>
         }
       </div>
 
-      <div style={{padding:"8px 14px 12px",fontSize:11,color:"#94a3b8",fontWeight:500,lineHeight:1.4}}>Satellite imagery may not reflect recent construction. Verify new structures on site.</div>
+      <div style={{padding:"8px 14px 12px",fontSize:11,color:"#94a3b8",fontWeight:500,lineHeight:1.4}}>{t("map_imagery_note",lang)}</div>
     </Card>
   );
 }
@@ -2615,13 +2615,13 @@ function S3({bp,flow,set,area,perim,calc,time,settings}){
   const leftCol = (<>
       <Card>
         <Lbl>{t("job_complexity",lang)}</Lbl>
-        <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:8}}>{COMPLEXITY.map(o=><Chip key={o.value} label={`${o.label} (${o.value}×)`} active={flow.cx===o.value} onClick={()=>set("cx",o.value)}/>)}</div>
-        <div style={{fontSize:12,color:"#64748b"}}>{COMPLEXITY.find(o=>o.value===flow.cx)?.desc}</div>
+        <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:8}}>{COMPLEXITY.map(o=><Chip key={o.value} label={`${t(o.lk,lang)} (${o.value}×)`} active={flow.cx===o.value} onClick={()=>set("cx",o.value)}/>)}</div>
+        <div style={{fontSize:12,color:"#64748b"}}>{t(COMPLEXITY.find(o=>o.value===flow.cx)?.dk||"cx_simple_desc",lang)}</div>
       </Card>
       <Card>
         <Lbl>{t("site_risk",lang)}</Lbl>
-        <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:8}}>{RISK.map(o=><Chip key={o.value} label={`${o.label} (${o.value}×)`} active={flow.risk===o.value} onClick={()=>set("risk",o.value)}/>)}</div>
-        <div style={{fontSize:12,color:"#64748b"}}>{RISK.find(o=>o.value===flow.risk)?.desc}</div>
+        <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:8}}>{RISK.map(o=><Chip key={o.value} label={`${t(o.lk,lang)} (${o.value}×)`} active={flow.risk===o.value} onClick={()=>set("risk",o.value)}/>)}</div>
+        <div style={{fontSize:12,color:"#64748b"}}>{t(RISK.find(o=>o.value===flow.risk)?.dk||"risk_low_desc",lang)}</div>
       </Card>
   </>);
   return(
@@ -2661,7 +2661,7 @@ function S3({bp,flow,set,area,perim,calc,time,settings}){
             <Lbl style={{color:"#64748b"}}>{t("breakdown",lang)}</Lbl>
             {calc.bd.map((r,i)=>(
               <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",padding:"6px 0",borderBottom:r.subtotal?"1px solid #334155":"1px solid #1e293b",color:r.subtotal?"#ffffff":r.modifier?"#94a3b8":"#cbd5e1",fontWeight:r.subtotal?700:500}}>
-                <div><div style={{fontSize:13}}>{r.label}</div>{r.note&&<div style={{fontSize:10,color:"#64748b",marginTop:1}}>{r.note}</div>}</div>
+                <div><div style={{fontSize:13}}>{t(r.label,lang)}{r.suffix||""}</div>{r.note&&<div style={{fontSize:10,color:"#64748b",marginTop:1}}>{r.note}</div>}</div>
                 <div style={{fontSize:13,fontWeight:600}}>{r.modifier&&r.value>0?"+":""}{$$(r.value)}</div>
               </div>
             ))}
@@ -2753,7 +2753,7 @@ function S4({bp,flow,set,setFlow,area,perim,calc,time,onSend,saving}){
       <Card>
         <Lbl>{t("quote_summary",lang)}</Lbl>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:16}}>
-          {[{l:"Address",v:flow.address,full:true},{l:"Area",v:fmtArea(area)},{l:"Perimeter",v:`${Math.round(perim).toLocaleString()} ft`},{l:"Crew",v:`${flow.crew} worker${flow.crew>1?"s":""}`},{l:"Complexity",v:COMPLEXITY.find(o=>o.value===flow.cx)?.label},{l:"Risk",v:RISK.find(o=>o.value===flow.risk)?.label},{l:"Est. Time",v:time?fmtT(time.adj):"—"},{l:"Discount",v:flow.disc>0?`${flow.disc}%`:"None"}]
+          {[{l:"Address",v:flow.address,full:true},{l:"Area",v:fmtArea(area)},{l:"Perimeter",v:`${Math.round(perim).toLocaleString()} ft`},{l:"Crew",v:`${flow.crew} worker${flow.crew>1?"s":""}`},{l:"Complexity",v:t(COMPLEXITY.find(o=>o.value===flow.cx)?.lk||"cx_simple",lang)},{l:"Risk",v:t(RISK.find(o=>o.value===flow.risk)?.lk||"risk_low",lang)},{l:"Est. Time",v:time?fmtT(time.adj):"—"},{l:"Discount",v:flow.disc>0?`${flow.disc}%`:"None"}]
             .map(({l,v,full})=>(
               <div key={l} style={{gridColumn:full?"1 / -1":"auto"}}>
                 <div style={{fontSize:10,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:1}}>{l}</div>
