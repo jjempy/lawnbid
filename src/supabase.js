@@ -13,6 +13,7 @@
 // ALTER TABLE quotes   ADD COLUMN IF NOT EXISTS visit_count integer DEFAULT 0;
 // ALTER TABLE settings ADD COLUMN IF NOT EXISTS follow_up_days integer DEFAULT 3;
 // ALTER TABLE settings ADD COLUMN IF NOT EXISTS language text DEFAULT 'en';
+// ALTER TABLE settings ADD COLUMN IF NOT EXISTS follow_up_enabled boolean DEFAULT true;
 // ALTER TABLE settings ADD COLUMN IF NOT EXISTS profit_margin decimal DEFAULT 0.30;
 // ALTER TABLE settings ADD COLUMN IF NOT EXISTS company_logo_base64 text;
 // ALTER TABLE settings ADD COLUMN IF NOT EXISTS plan text DEFAULT 'free';
@@ -129,10 +130,20 @@ export async function loadSettings() {
   return data || null
 }
 
+// Known settings columns — only these are sent to Supabase.
+// If you add a new column, add it here AND run the ALTER TABLE SQL.
+const SETTINGS_COLUMNS = [
+  'mow_rate','trim_rate','equipment_cost','hourly_rate','minimum_bid',
+  'complexity_default','risk_default','profit_margin','quote_validity_days',
+  'follow_up_days','follow_up_enabled','language',
+  'company_name','company_phone','company_email','company_logo_base64',
+  'plan','quote_count_this_month','quote_count_reset_at',
+]
 export async function saveSettings(settings) {
-  const { id: _id, ...rest } = settings
-  const record = { id: 1, ...rest, user_id: await currentUserId() }
-  Object.keys(record).forEach(k => { if (record[k] === undefined || typeof record[k] === 'function') delete record[k] })
+  const record = { id: 1, user_id: await currentUserId() }
+  for (const k of SETTINGS_COLUMNS) {
+    if (settings[k] !== undefined && typeof settings[k] !== 'function') record[k] = settings[k]
+  }
   const { error } = await supabase
     .from('settings')
     .upsert(record, { onConflict: 'id' })
