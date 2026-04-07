@@ -207,17 +207,19 @@ async function generateQuotePDF(quote, settings, calc, time) {
       doc.addImage(settings.company_logo_base64, fmt==="JPG"?"JPEG":fmt, M, y, logoSize, logoSize);
     } catch(_) { /* ignore bad image */ }
   }
+  // Left column: logo + company info
   const textX = settings.company_logo_base64 ? M + logoSize + 16 : M;
-  doc.setFont("helvetica","bold"); doc.setFontSize(20); doc.setTextColor(...DARK);
-  doc.text(settings.company_name || "LawnBid", textX, y + 22);
+  doc.setFont("helvetica","bold"); doc.setFontSize(18); doc.setTextColor(...DARK);
+  doc.text(settings.company_name || "LawnBid", textX, y + 20, { maxWidth: W/2 - M });
   doc.setFont("helvetica","normal"); doc.setFontSize(10); doc.setTextColor(...MUTED);
-  const contact = [settings.company_phone, settings.company_email].filter(Boolean).join("  ·  ");
-  if (contact) doc.text(contact, textX, y + 40);
-  // Right side: QUOTE label
-  doc.setFont("helvetica","bold"); doc.setFontSize(22); doc.setTextColor(...PRIMARY);
-  doc.text(quote.is_recurring?"SERVICE AGREEMENT":"QUOTE", W - M, y + 22, { align: "right" });
+  const contact = [settings.company_phone ? formatPhone(settings.company_phone) : null, settings.company_email].filter(Boolean).join("  ·  ");
+  if (contact) doc.text(contact, textX, y + 36, { maxWidth: W/2 - M });
+  // Right column: document type + quote number (right-aligned, never overlaps left)
+  const docType = quote.is_recurring ? "SERVICE AGREEMENT" : "QUOTE";
+  doc.setFont("helvetica","bold"); doc.setFontSize(quote.is_recurring ? 14 : 22); doc.setTextColor(...PRIMARY);
+  doc.text(docType, W - M, y + 20, { align: "right" });
   doc.setFont("helvetica","normal"); doc.setFontSize(10); doc.setTextColor(...MUTED);
-  doc.text(`#${quote.quote_id}`, W - M, y + 40, { align: "right" });
+  doc.text(`#${quote.quote_id}`, W - M, y + (quote.is_recurring ? 34 : 38), { align: "right" });
 
   y += logoSize + 14;
   doc.setDrawColor(...LINE); doc.setLineWidth(0.8);
@@ -395,6 +397,7 @@ export default function LawnBid() {
   const [saving,   setSaving]   = useState(false);
   const [quotesUsedLive, setQuotesUsedLive] = useState(0);
   const [toast, setToast] = useState(null);
+  const [betaPrompt, setBetaPrompt] = useState(false);
   const settingsRef = useRef(settings);
   useEffect(() => { settingsRef.current = settings; }, [settings]);
 
@@ -459,6 +462,12 @@ export default function LawnBid() {
           } else if (up === "cancelled") {
             setToast("Upgrade cancelled — you can upgrade anytime from Settings.");
             window.history.replaceState({}, "", "/app/");
+          }
+        } catch {}
+        // Beta tester prompt — show once for new accounts (created < 10 min ago)
+        try {
+          if (localStorage.getItem("lb_beta_prompt_shown") !== "true" && (s?.plan||"free")==="free") {
+            setBetaPrompt(true);
           }
         } catch {}
       } catch (e) {
@@ -759,6 +768,7 @@ export default function LawnBid() {
         <div style={{display:"flex",minHeight:"100vh",background:"#f8fafc",color:"#0f172a",fontFamily:"'Inter',system-ui,-apple-system,sans-serif"}}>
   
           {upgradeModal}
+          {betaPrompt&&session&&<BetaPrompt userEmail={session.user?.email||""} onDone={()=>setBetaPrompt(false)}/>}
           <SideNav tab={tab} setTab={setTab} setScreen={setScreen}/>
           <div style={{flex:1,display:"flex",flexDirection:"column",minWidth:0}}>
             {dbBanner}
@@ -870,6 +880,53 @@ function UpgradeModal({feature,onClose}){
         <div style={{textAlign:"center",marginTop:4}}>
           <button type="button" onClick={onClose} style={{background:"none",border:"none",color:"#64748b",fontSize:13,fontWeight:600,cursor:"pointer",padding:"8px 12px",minHeight:32,fontFamily:"inherit"}}>Maybe later</button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Beta prompt ───
+function BetaPrompt({userEmail,onDone}){
+  const [sent,setSent]=useState(false);
+  const dismiss=()=>{try{localStorage.setItem("lb_beta_prompt_shown","true");}catch{}onDone();};
+  const send=()=>{
+    const subject=encodeURIComponent("LawnBid Beta Request");
+    const body=encodeURIComponent(`Please upgrade to Pro: ${userEmail}`);
+    window.open(`mailto:jjempy@yahoo.com?subject=${subject}&body=${body}`,"_blank");
+    try{localStorage.setItem("lb_beta_prompt_shown","true");}catch{}
+    setSent(true);
+    setTimeout(onDone,3000);
+  };
+  return(
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.55)",zIndex:500,display:"flex",alignItems:"flex-end",justifyContent:"center",animation:"lb-fade-in .2s ease-out"}}>
+      <div style={{background:"#ffffff",borderRadius:"20px 20px 0 0",padding:"24px 24px calc(24px + env(safe-area-inset-bottom))",width:"100%",maxWidth:480,boxSizing:"border-box",boxShadow:"0 -8px 32px rgba(0,0,0,.2)",animation:"lb-slide-up .28s cubic-bezier(.2,.8,.2,1)"}}>
+        <div style={{width:40,height:4,borderRadius:2,background:"#e2e8f0",margin:"0 auto 16px"}}/>
+        {sent?(
+          <div style={{textAlign:"center",padding:"16px 0"}}>
+            <div style={{width:56,height:56,borderRadius:"50%",background:"#dcfce7",display:"inline-flex",alignItems:"center",justifyContent:"center",marginBottom:10}}>
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#15803d" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            </div>
+            <div style={{fontSize:15,fontWeight:700,color:"#0f172a"}}>Request sent!</div>
+            <div style={{fontSize:13,color:"#64748b",marginTop:4}}>Joseph will be in touch within 24 hours.</div>
+          </div>
+        ):(
+          <>
+            <div style={{textAlign:"center",marginBottom:14}}>
+              <img src="/logo.png" alt="" style={{width:56,height:56,borderRadius:"50%",objectFit:"cover",marginBottom:10}}/>
+              <div style={{fontSize:20,fontWeight:800,color:"#0f172a",letterSpacing:-.3}}>Welcome to LawnBid Beta</div>
+            </div>
+            <div style={{fontSize:14,color:"#64748b",textAlign:"center",lineHeight:1.5,marginBottom:16}}>Get free Pro access — satellite maps, PDF quotes, and photo attachments — just for testing and giving feedback.</div>
+            <div style={{marginBottom:14}}>
+              <div style={{fontSize:12,fontWeight:600,color:"#334155",marginBottom:4}}>Your email</div>
+              <Inp value={userEmail} readOnly style={{background:"#f8fafc",color:"#64748b"}}/>
+            </div>
+            <Btn onClick={send} style={{width:"100%"}}>✉ Send my email for Pro access</Btn>
+            <div style={{fontSize:12,color:"#64748b",textAlign:"center",lineHeight:1.5,marginTop:12,marginBottom:8}}>Joseph will upgrade your account within 24 hours and reach out directly for your feedback.</div>
+            <div style={{textAlign:"center"}}>
+              <button onClick={dismiss} style={{background:"none",border:"none",color:"#94a3b8",fontSize:12,fontWeight:500,cursor:"pointer",padding:"8px 12px",fontFamily:"inherit"}}>Maybe later — skip for now</button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
