@@ -379,7 +379,7 @@ const Btn   = ({children,variant="primary",style={},...p}) => {
   return <button style={{height:48,minHeight:48,padding:"0 20px",borderRadius:16,fontSize:15,fontWeight:600,cursor:p.disabled?"not-allowed":"pointer",opacity:p.disabled?.55:1,fontFamily:"inherit",letterSpacing:-.1,...vs[variant],...style}} {...p}>{children}</button>;
 };
 const Chip  = ({label,active,onClick,style={}}) => <button onClick={onClick} style={{height:36,minHeight:36,padding:"0 16px",borderRadius:18,border:active?"1.5px solid #15803d":"1.5px solid #e2e8f0",background:active?"#15803d":"#ffffff",color:active?"#ffffff":"#374151",fontSize:13,fontWeight:600,cursor:"pointer",whiteSpace:"nowrap",fontFamily:"inherit",flexShrink:0,display:"inline-flex",alignItems:"center",...style}}>{label}</button>;
-const Badge = ({status}) => <span style={{padding:"3px 9px",borderRadius:999,fontSize:10,fontWeight:700,background:STATUS_BG[status]||"#f1f5f9",color:STATUS_COLOR[status]||"#64748b",textTransform:"uppercase",letterSpacing:.6}}>{status}</span>;
+const Badge = ({status}) => <span style={{padding:"3px 9px",borderRadius:999,fontSize:10,fontWeight:700,background:STATUS_BG[status]||"#f1f5f9",color:STATUS_COLOR[status]||"#64748b",letterSpacing:.6}}>{status==="seasonal_complete"?"Season Complete ✓":status?.toUpperCase()}</span>;
 const ErrMsg= ({msg}) => msg?<div style={{color:"#dc2626",fontSize:13,marginTop:6,fontWeight:500,background:"#fef2f2",borderLeft:"3px solid #dc2626",padding:"8px 10px",borderRadius:"0 8px 8px 0"}}>⚠ {msg}</div>:null;
 const ErrBox= ({children,style={}}) => children?<div style={{color:"#dc2626",fontSize:13,fontWeight:500,background:"#fef2f2",borderLeft:"3px solid #dc2626",padding:"10px 12px",borderRadius:"0 8px 8px 0",...style}}>⚠ {children}</div>:null;
 const QID   = ({id}) => <span style={{fontFamily:"ui-monospace, SFMono-Regular, Menlo, monospace",fontSize:11,background:"#f1f5f9",color:"#475569",padding:"2px 7px",borderRadius:6,letterSpacing:.3,fontWeight:600}}>{id}</span>;
@@ -969,7 +969,6 @@ function HomeScreen({bp,quotes,settings,onNew,onView}){
   const filtered=filter==="all"?quotes:filter==="followup"?quotes.filter(isFollowUp):filter==="recurring"?quotes.filter(isRecurring):quotes.filter(q=>q.status===filter);
   const shown=(search.trim()?filtered.filter(q=>{const s=search.toLowerCase();return (q.client_name||"").toLowerCase().includes(s)||(q.address||"").toLowerCase().includes(s)||(q.quote_id||"").toLowerCase().includes(s);}):filtered).sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));
   const isDesktop = bp==="desktop";
-  const showDetailRow = bp!=="mobile";
   return(
     <div style={{padding:isDesktop?0:16,display:isDesktop?"grid":"block",gridTemplateColumns:isDesktop?"minmax(0,3fr) minmax(0,2fr)":undefined,gap:isDesktop?24:0}}>
       <div style={{minWidth:0}}>
@@ -1016,12 +1015,12 @@ function HomeScreen({bp,quotes,settings,onNew,onView}){
                 {needsFollowUp&&<span style={{fontSize:12,flexShrink:0}} title="Follow-up needed">⭐</span>}
               </div>
               <div style={{fontSize:13,color:"#64748b",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontWeight:400}}>{q.address}</div>
-              {showDetailRow && (()=>{
+              {(()=>{
                 const qt=calcTime(q.area_sqft,q.linear_ft,q.crew_size,q.complexity);
                 return (
-                <div style={{display:"flex",gap:14,marginTop:6,fontSize:12,color:"#475569",fontWeight:500,flexWrap:"wrap"}}>
-                  <span><span style={{color:"#94a3b8"}}>Area </span>{fmtArea(q.area_sqft)}</span>
-                  <span><span style={{color:"#94a3b8"}}>Perim </span>{Math.round(q.linear_ft).toLocaleString()} ft</span>
+                <div style={{display:"flex",gap:bp==="mobile"?8:14,marginTop:5,fontSize:bp==="mobile"?11:12,color:"#475569",fontWeight:500,flexWrap:"wrap"}}>
+                  <span>{fmtArea(q.area_sqft)}</span>
+                  <span>{Math.round(q.linear_ft).toLocaleString()} ft</span>
                   {qt&&<span>⏱ {fmtT(qt.adj)}</span>}
                 </div>);
               })()}
@@ -1031,7 +1030,7 @@ function HomeScreen({bp,quotes,settings,onNew,onView}){
             </div>
             <div style={{textAlign:"right",flexShrink:0}}>
               <div style={{fontSize:20,fontWeight:900,color:"#0f172a",letterSpacing:-.5}}>{$$(q.final_price)}</div>
-              <div style={{marginTop:4,textTransform:"uppercase",fontSize:10,fontWeight:700,letterSpacing:.6,color:STATUS_COLOR[q.status]||"#64748b"}}>{q.status}</div>
+              <div style={{marginTop:4,fontSize:10,fontWeight:700,letterSpacing:.6,color:STATUS_COLOR[q.status]||"#64748b"}}>{q.status==="seasonal_complete"?"Season Complete ✓":q.status?.toUpperCase()}</div>
             </div>
           </div>
         </Card>
