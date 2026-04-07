@@ -31,13 +31,13 @@ async function redirectToStripeCheckout(priceId) {
 }
 
 // ─── Constants ──────────────────────────────────────────────────────────────────
-const APP_VERSION = "1.0.0";
+const APP_VERSION = "0.9.0";
 const DEFAULT_SETTINGS = {
   mow_rate: 110, trim_rate: 18, equipment_cost: 12.35, hourly_rate: 22.80,
   minimum_bid: 55, complexity_default: 1.0, risk_default: 1.0,
   profit_margin: 0.30,
   quote_validity_days: 30,
-  follow_up_days: 3, follow_up_enabled: true,
+  follow_up_days: 3, follow_up_enabled: true, language: "en",
   company_name: "", company_phone: "", company_email: "", company_logo_base64: "",
   plan: "free", quote_count_this_month: 0, quote_count_reset_at: new Date().toISOString(),
 };
@@ -449,6 +449,8 @@ export default function LawnBid() {
     };
   }, [settings?.plan, quotesUsedLive]);
 
+  const lang = settings?.language || (()=>{try{return localStorage.getItem("lb_language")}catch{return null}})() || "en";
+
   // ── Load all data from Supabase once authenticated ──
   useEffect(() => {
     if (!session) { setReady(false); setQuotes([]); setClients([]); setSettings(DEFAULT_SETTINGS); setQuotesUsedLive(0); return; }
@@ -776,7 +778,7 @@ export default function LawnBid() {
   // ─── Desktop layout: sidebar + top bar ───
   if (isDesktop) {
     return (
-      <PlanContext.Provider value={planValue}>
+      <PlanContext.Provider value={planValue}><LangContext.Provider value={lang}>
         <div style={{display:"flex",minHeight:"100vh",background:"#f8fafc",color:"#0f172a",fontFamily:"'Inter',system-ui,-apple-system,sans-serif"}}>
   
           {upgradeModal}
@@ -794,7 +796,7 @@ export default function LawnBid() {
             </div>
           </div>
         </div>
-      </PlanContext.Provider>
+      </LangContext.Provider></PlanContext.Provider>
     );
   }
 
@@ -818,7 +820,8 @@ export default function LawnBid() {
 
 // ─── Sidebar (desktop) ───
 function SideNav({tab,setTab,setScreen}){
-  const items = [["quotes","📋","Quotes"],["clients","👥","Clients"],["business","💰","Business"],["settings","⚙️","Settings"]];
+  const lang = useContext(LangContext);
+  const items = [["quotes","📋","nav_quotes"],["clients","👥","nav_clients"],["business","💰","nav_business"],["settings","⚙️","nav_settings"]];
   return (
     <aside style={{width:240,flexShrink:0,background:"#ffffff",borderRight:"1px solid #e2e8f0",display:"flex",flexDirection:"column",position:"sticky",top:0,height:"100vh"}}>
       <div style={{padding:"20px 20px 16px",display:"flex",alignItems:"center",gap:12,borderBottom:"1px solid #e2e8f0"}}>
@@ -826,11 +829,11 @@ function SideNav({tab,setTab,setScreen}){
         <div style={{fontSize:18,fontWeight:900,color:"#0f172a",letterSpacing:-.3}}>LawnBid</div>
       </div>
       <nav style={{padding:"12px 0",display:"flex",flexDirection:"column",gap:2}}>
-        {items.map(([t,icon,lbl])=>{
-          const active = tab===t;
+        {items.map(([tk,icon,lk])=>{
+          const active = tab===tk;
           return (
-            <button key={t} onClick={()=>{setTab(t);setScreen("home");}} style={{display:"flex",alignItems:"center",gap:12,padding:"12px 20px",minHeight:48,border:"none",background:active?"#dcfce7":"transparent",color:active?"#15803d":"#334155",borderLeft:active?"3px solid #15803d":"3px solid transparent",fontSize:14,fontWeight:active?700:600,fontFamily:"inherit",textAlign:"left",cursor:"pointer"}}>
-              <span style={{fontSize:18,filter:active?"none":"grayscale(1) opacity(.7)"}}>{icon}</span>{lbl}
+            <button key={tk} onClick={()=>{setTab(tk);setScreen("home");}} style={{display:"flex",alignItems:"center",gap:12,padding:"12px 20px",minHeight:48,border:"none",background:active?"#dcfce7":"transparent",color:active?"#15803d":"#334155",borderLeft:active?"3px solid #15803d":"3px solid transparent",fontSize:14,fontWeight:active?700:600,fontFamily:"inherit",textAlign:"left",cursor:"pointer"}}>
+              <span style={{fontSize:18,filter:active?"none":"grayscale(1) opacity(.7)"}}>{icon}</span>{t(lk,lang)}
             </button>
           );
         })}
@@ -854,14 +857,15 @@ function TopBar({title,onNew,showBack,onBack}){
 
 // ─── Bottom nav (mobile/tablet) ───
 function BottomNav({tab,screen,setTab,setScreen,bp,maxW}){
+  const lang = useContext(LangContext);
   const scale = bp==="tablet" ? 1.1 : 1;
   return (
     <div style={{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:maxW,background:"#ffffff",borderTop:"1px solid #e2e8f0",display:"flex",zIndex:100,paddingBottom:"env(safe-area-inset-bottom)"}}>
-      {[["quotes","📋","Quotes"],["clients","👥","Clients"],["business","💰","Business"],["settings","⚙️","Settings"]].map(([t,icon,lbl])=>{
-        const active = tab===t && screen==="home";
+      {[["quotes","📋","nav_quotes"],["clients","👥","nav_clients"],["business","💰","nav_business"],["settings","⚙️","nav_settings"]].map(([tk,icon,lk])=>{
+        const active = tab===tk && screen==="home";
         return (
-          <button key={t} onClick={()=>{setTab(t);setScreen("home");}} style={{flex:1,height:56,minHeight:56,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:2,border:"none",background:"none",cursor:"pointer",fontSize:10*scale,fontWeight:700,color:active?"#15803d":"#94a3b8",textTransform:"uppercase",letterSpacing:.5,fontFamily:"inherit"}}>
-            <div style={{fontSize:20*scale,lineHeight:1,filter:active?"none":"grayscale(1) opacity(.7)"}}>{icon}</div>{lbl}
+          <button key={tk} onClick={()=>{setTab(tk);setScreen("home");}} style={{flex:1,height:56,minHeight:56,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:2,border:"none",background:"none",cursor:"pointer",fontSize:10*scale,fontWeight:700,color:active?"#15803d":"#94a3b8",textTransform:"uppercase",letterSpacing:.5,fontFamily:"inherit"}}>
+            <div style={{fontSize:20*scale,lineHeight:1,filter:active?"none":"grayscale(1) opacity(.7)"}}>{icon}</div>{t(lk,lang)}
           </button>
         );
       })}
@@ -946,6 +950,7 @@ function BetaPrompt({userEmail,onDone}){
 
 // ─── Home ──────────────────────────────────────────────────────────────────────
 function HomeScreen({bp,quotes,settings,onNew,onView}){
+  const lang = useLang();
   const [filter,setFilter]=useState("all");
   const [search,setSearch]=useState("");
   const followUpDaysVal=settings?.follow_up_days||3;
@@ -968,7 +973,7 @@ function HomeScreen({bp,quotes,settings,onNew,onView}){
               <div style={{fontSize:12,color:"#64748b"}}>{quotes.length} quote{quotes.length!==1?"s":""} in database</div>
             </div>
           </div>
-          <Btn onClick={onNew} style={{height:40,minHeight:40,padding:"0 14px",fontSize:13,borderRadius:12}}>+ New Quote</Btn>
+          <Btn onClick={onNew} style={{height:40,minHeight:40,padding:"0 14px",fontSize:13,borderRadius:12}}>{t("new_quote",lang)}</Btn>
         </div>
       )}
       <div style={{display:"flex",gap:6,margin:isDesktop?"0 0 12px":"12px 0 8px",flexWrap:"wrap"}}>
@@ -977,14 +982,14 @@ function HomeScreen({bp,quotes,settings,onNew,onView}){
         ))}
       </div>
       <div style={{position:"relative",marginBottom:10}}>
-        <Inp value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search client, address, or quote ID…" style={{paddingRight:search?36:14}}/>
+        <Inp value={search} onChange={e=>setSearch(e.target.value)} placeholder={t("search_quotes",lang)} style={{paddingRight:search?36:14}}/>
         {search&&<button onClick={()=>setSearch("")} style={{position:"absolute",right:12,top:"50%",transform:"translateY(-50%)",width:24,height:24,minHeight:24,borderRadius:"50%",border:"none",background:"#e2e8f0",color:"#64748b",fontSize:14,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"inherit",padding:0}}>×</button>}
       </div>
       {shown.length===0?(
         <div style={{textAlign:"center",padding:"60px 20px",color:"#64748b"}}>
           <div style={{fontSize:48,marginBottom:12}}>📋</div>
-          <div style={{fontWeight:700,fontSize:16}}>{quotes.length===0?"No quotes yet":"No quotes match this filter"}</div>
-          {quotes.length===0&&<div style={{fontSize:13,marginTop:6}}>Tap + New Quote to get started</div>}
+          <div style={{fontWeight:700,fontSize:16}}>{quotes.length===0?t("no_quotes",lang):"No quotes match this filter"}</div>
+          {quotes.length===0&&<div style={{fontSize:13,marginTop:6}}>{t("start_first_quote",lang)}</div>}
         </div>
       ):shown.map(q=>{
         const expired = isExpired(q.expiry_date) && q.status!=="accepted" && q.status!=="declined" && q.status!=="seasonal_complete";
@@ -1029,6 +1034,7 @@ function HomeScreen({bp,quotes,settings,onNew,onView}){
 }
 
 function BusinessScreen({bp,quotes,settings,clients}){
+  const lang = useLang();
   const isDesktop = bp==="desktop";
   const [gran,setGran]=useState("week"); // day|week|month|year
   const [offset,setOffset]=useState(0); // 0=current, -1=previous, etc.
@@ -1073,7 +1079,7 @@ function BusinessScreen({bp,quotes,settings,clients}){
   );
   return (
     <div style={{padding:isDesktop?0:16}}>
-      {!isDesktop&&<div style={{fontSize:26,fontWeight:900,color:"#0f172a",marginBottom:14}}>Business</div>}
+      {!isDesktop&&<div style={{fontSize:26,fontWeight:900,color:"#0f172a",marginBottom:14}}>{t("business_title",lang)}</div>}
       <div style={{display:"flex",gap:6,marginBottom:8,flexWrap:"wrap"}}>
         {[["day","Day"],["week","Week"],["month","Month"],["year","Year"]].map(([k,lbl])=>(
           <Chip key={k} label={lbl} active={gran===k} onClick={()=>{setGran(k);setOffset(0);}}/>
@@ -1157,12 +1163,13 @@ function HomeStats({quotes}){
 
 // ─── Clients ──────────────────────────────────────────────────────────────────
 function ClientsScreen({bp,clients,quotes,onView}){
+  const lang = useLang();
   const [search,setSearch]=useState("");
   const shown=clients.filter(c=>c.name?.toLowerCase().includes(search.toLowerCase())||c.phone?.includes(search)).sort((a,b)=>a.name?.localeCompare(b.name));
   const isDesktop = bp==="desktop";
   return(
     <div style={{padding:isDesktop?0:16}}>
-      {!isDesktop && <div style={{fontSize:26,fontWeight:900,color:"#0f172a",marginBottom:14}}>Clients</div>}
+      {!isDesktop && <div style={{fontSize:26,fontWeight:900,color:"#0f172a",marginBottom:14}}>{t("clients_title",lang)}</div>}
       <Inp placeholder="Search name or phone…" value={search} onChange={e=>setSearch(e.target.value)} style={{marginBottom:14}}/>
       {shown.length===0?(
         <div style={{textAlign:"center",padding:"60px 20px",color:"#64748b"}}>
@@ -1317,6 +1324,7 @@ function ClientDetail({bp,client,quotes,onBack,onViewQuote,onUpdateClient,onDele
 // ─── Quote Detail ─────────────────────────────────────────────────────────────
 function QuoteDetail({bp,quote,allQuotes,settings,onBack,onEdit,onDuplicate,onDelete,onAccepted,onDecline,onVisitComplete}){
   const {canExportPDF,showUpgrade} = usePlan();
+  const lang = useLang();
   const [declineOpen,setDeclineOpen]=useState(false);
   const [declineReason,setDeclineReason]=useState("");
   const [visitOpen,setVisitOpen]=useState(false);
@@ -1430,12 +1438,12 @@ function QuoteDetail({bp,quote,allQuotes,settings,onBack,onEdit,onDuplicate,onDe
   );
   const actions = (
     <div style={{display:"flex",flexDirection:"column",gap:8}}>
-      <Btn onClick={share} style={{width:"100%"}}>{copied?"✓ Copied!":"📤 Resend Quote"}</Btn>
+      <Btn onClick={share} style={{width:"100%"}}>{copied?"✓ Copied!":"📤 "+t("resend_quote",lang)}</Btn>
       {canExportPDF
         ? <Btn variant="outline" onClick={downloadPDF} style={{width:"100%"}}>⬇ Download PDF</Btn>
         : <Btn variant="outline" onClick={()=>showUpgrade("PDF Quote Export")} style={{width:"100%",opacity:.7,display:"inline-flex",alignItems:"center",justifyContent:"center",gap:8}}><LockIcon size={14} color="#15803d"/>Download PDF — Pro</Btn>
       }
-      {quote.status==="sent"&&<Btn variant="outline" onClick={onAccepted} style={{width:"100%"}}>✅ Mark as Accepted</Btn>}
+      {quote.status==="sent"&&<Btn variant="outline" onClick={onAccepted} style={{width:"100%"}}>✅ {t("mark_accepted",lang)}</Btn>}
       {quote.status==="sent"&&!declineOpen&&<Btn variant="secondary" onClick={()=>setDeclineOpen(true)} style={{width:"100%"}}>Mark as Declined</Btn>}
       {declineOpen&&(
         <Card style={{border:"1.5px solid #e2e8f0",marginTop:4}}>
@@ -1497,7 +1505,7 @@ function QuoteDetail({bp,quote,allQuotes,settings,onBack,onEdit,onDuplicate,onDe
           {quote.status!=="seasonal_complete"&&<Btn variant="secondary" onClick={()=>{if(window.confirm(`End recurring service for ${quote.client_name}?`))onDecline("Service cancelled");}} style={{width:"100%",marginTop:4}}>Cancel Service</Btn>}
         </>
       )}
-      <Btn variant="warning" onClick={onEdit} style={{width:"100%"}}>✏️ {isSent?"Edit (creates V2 quote)":"Edit Quote"}</Btn>
+      <Btn variant="warning" onClick={onEdit} style={{width:"100%"}}>✏️ {isSent?t("edit_quote",lang):t("edit_quote",lang)}</Btn>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
         <Btn variant="secondary" onClick={onDuplicate}>📋 Duplicate</Btn>
         {!confirmDel?<Btn variant="danger" onClick={()=>setConfirmDel(true)}>🗑 Delete</Btn>:<Btn variant="danger" onClick={onDelete}>Confirm ✓</Btn>}
@@ -1580,6 +1588,7 @@ function PlanBadge(){
 }
 
 function SettingsScreen({bp,settings,onSave,onLogout}){
+  const lang = useLang();
   const [loc,setLoc]=useState(settings);
   const [tip,setTip]=useState(null);
   const [saved,setSaved]=useState(false);
@@ -1671,7 +1680,7 @@ function SettingsScreen({bp,settings,onSave,onLogout}){
   const [rawVals,setRawVals]=useState({});
   const formulaCard = (
       <Card>
-        <Lbl>Formula Defaults</Lbl>
+        <Lbl>{t("formula_defaults",lang)}</Lbl>
         {FIELDS.map(({key,label,pct})=>{
           const displayVal = key in rawVals ? rawVals[key] : pct ? Math.round((loc[key]??0)*100) : loc[key];
           return (
@@ -1713,7 +1722,7 @@ function SettingsScreen({bp,settings,onSave,onLogout}){
   );
   const businessCard = (
       <Card>
-        <Lbl>Business Info</Lbl>
+        <Lbl>{t("business_info",lang)}</Lbl>
         <div style={{marginBottom:14}}>
           <div style={{fontSize:13,fontWeight:600,color:"#334155",marginBottom:8}}>Company Logo</div>
           <div style={{display:"flex",alignItems:"center",gap:14}}>
@@ -1737,14 +1746,21 @@ function SettingsScreen({bp,settings,onSave,onLogout}){
             <Inp type={t} value={k==="company_phone"?formatPhone(loc[k]||""):(loc[k]||"")} onChange={e=>set(k,k==="company_phone"?formatPhone(e.target.value):e.target.value)} placeholder={ph}/>
           </div>
         ))}
+        <div style={{marginTop:14,paddingTop:14,borderTop:"1px solid #e2e8f0"}}>
+          <div style={{fontSize:13,fontWeight:600,color:"#334155",marginBottom:8}}>Language / Idioma</div>
+          <div style={{display:"flex",gap:6}}>
+            <Chip label="🇺🇸 English" active={loc.language!=="es"} onClick={()=>{set("language","en");try{localStorage.setItem("lb_language","en");}catch{}}}/>
+            <Chip label="🇲🇽 Español" active={loc.language==="es"} onClick={()=>{set("language","es");try{localStorage.setItem("lb_language","es");}catch{}}}/>
+          </div>
+        </div>
       </Card>
   );
   const footer = (
     <>
       {autoSaveErr && <div style={{fontSize:12,color:"#dc2626",background:"#fef2f2",borderLeft:"3px solid #dc2626",borderRadius:"0 8px 8px 0",padding:"8px 10px",fontWeight:500,marginBottom:10}}>⚠ {autoSaveErr}</div>}
-      <Btn onClick={save} style={{width:"100%"}}>{saved?"✓ Saved!":"Save Settings"}</Btn>
-      <div style={{textAlign:"center",fontSize:11,color:"#94a3b8",marginTop:6}}>Settings auto-save as you type</div>
-      <Btn variant="danger" onClick={onLogout} style={{width:"100%",marginTop:10}}>Log Out</Btn>
+      <Btn onClick={save} style={{width:"100%"}}>{saved?"✓ Saved!":t("save_settings",lang)}</Btn>
+      <div style={{textAlign:"center",fontSize:11,color:"#94a3b8",marginTop:6}}>{t("auto_save_note",lang)}</div>
+      <Btn variant="danger" onClick={onLogout} style={{width:"100%",marginTop:10}}>{t("log_out",lang)}</Btn>
       <div style={{textAlign:"center",fontSize:11,color:"#94a3b8",marginTop:20}}>LawnBid v{APP_VERSION} · Built for lawn care professionals</div>
     </>
   );
@@ -1769,7 +1785,7 @@ function SettingsScreen({bp,settings,onSave,onLogout}){
     <div style={{padding:16}}>
       <PlanBadge/>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
-        <div style={{fontSize:26,fontWeight:900,color:"#0f172a"}}>Settings</div>
+        <div style={{fontSize:26,fontWeight:900,color:"#0f172a"}}>{t("settings_title",lang)}</div>
         <button onClick={reset} style={{background:"none",border:"none",color:"#dc2626",fontSize:13,fontWeight:700,cursor:"pointer",minHeight:36,padding:"6px 0"}}>↺ Reset Defaults</button>
       </div>
       {formulaCard}
@@ -2023,6 +2039,7 @@ function ResetPasswordScreen({onDone}){
 
 // ─── Quote Flow ────────────────────────────────────────────────────────────────
 function QuoteFlow({bp,step,setStep,flow,setFlow,errors,setErrors,settings,clients,quotes,onSave,onCancel,saving}){
+  const lang = useLang();
   const isDesktop = bp==="desktop";
   const [sharePay,setSharePay]=useState(null);
   const [copied,setCopied]=useState(false);
@@ -2074,7 +2091,7 @@ function QuoteFlow({bp,step,setStep,flow,setFlow,errors,setErrors,settings,clien
     } else onSave(rec,cli,status);
   };
 
-  const STEPS=["Client & Address","Measurements","Quote Builder","Review & Send"];
+  const STEPS=[t("step1_title",lang),t("step2_title",lang),t("step3_title",lang),t("step4_title",lang)];
 
   return(
     <div>
@@ -2673,6 +2690,7 @@ function S3({bp,flow,set,area,perim,calc,time,settings}){
 
 function S4({bp,flow,set,setFlow,area,perim,calc,time,onSend,saving}){
   const {canAttachPhotos} = usePlan();
+  const lang = useLang();
   const [uploading,setUploading]=useState(false);
   const attachments = flow.attachments || [];
 
@@ -2740,24 +2758,24 @@ function S4({bp,flow,set,setFlow,area,perim,calc,time,onSend,saving}){
         </div>
       </Card>
       <Card>
-        <Lbl>Service Type</Lbl>
+        <Lbl>{t("service_type",lang)}</Lbl>
         <div style={{display:"flex",gap:6,marginBottom:flow.is_recurring?12:0}}>
-          <Chip label="One-time" active={!flow.is_recurring} onClick={()=>{set("is_recurring",false);set("recurring_frequency","");}}/>
-          <Chip label="Recurring" active={!!flow.is_recurring} onClick={()=>{set("is_recurring",true);set("recurring_frequency",flow.recurring_frequency||"biweekly");}}/>
+          <Chip label={t("one_time",lang)} active={!flow.is_recurring} onClick={()=>{set("is_recurring",false);set("recurring_frequency","");}}/>
+          <Chip label={t("recurring_service",lang)} active={!!flow.is_recurring} onClick={()=>{set("is_recurring",true);set("recurring_frequency",flow.recurring_frequency||"biweekly");}}/>
         </div>
         {flow.is_recurring&&(
           <div>
             <div style={{fontSize:12,fontWeight:600,color:"#334155",marginBottom:6}}>Frequency</div>
             <div style={{display:"flex",gap:6}}>
-              {[["weekly","Weekly"],["biweekly","Biweekly"],["monthly","Monthly"]].map(([k,lbl])=>(
-                <Chip key={k} label={lbl} active={flow.recurring_frequency===k} onClick={()=>set("recurring_frequency",k)}/>
+              {[["weekly","weekly"],["biweekly","biweekly"],["monthly","monthly"]].map(([k,lk])=>(
+                <Chip key={k} label={t(lk,lang)} active={flow.recurring_frequency===k} onClick={()=>set("recurring_frequency",k)}/>
               ))}
             </div>
           </div>
         )}
       </Card>
       <Card>
-        <Lbl>Notes (optional)</Lbl>
+        <Lbl>{t("notes",lang)}</Lbl>
         <textarea value={flow.notes} onChange={e=>set("notes",e.target.value)} placeholder="Add notes for this job…" style={{width:"100%",minHeight:80,border:"1.5px solid #e2e8f0",borderRadius:12,padding:"12px 14px",fontSize:14,fontFamily:"inherit",resize:"vertical",boxSizing:"border-box",outline:"none",color:"#0f172a"}}/>
       </Card>
       {!canAttachPhotos && (
@@ -2805,8 +2823,8 @@ function S4({bp,flow,set,setFlow,area,perim,calc,time,onSend,saving}){
           <div style={{width:22,height:22,background:"#ffffff",borderRadius:"50%",position:"absolute",top:2,left:flow.saveClient?20:2,transition:"left .2s",boxShadow:"0 1px 3px rgba(0,0,0,.2)"}}/>
         </div>
       </div>
-      <Btn onClick={()=>onSend("sent")} disabled={saving} style={{width:"100%",marginBottom:10,fontSize:16}}>{saving?"Saving to database…":"📤 Send Quote"}</Btn>
-      <Btn variant="outline" onClick={()=>onSend("draft")} disabled={saving} style={{width:"100%"}}>💾 Save as Draft</Btn>
+      <Btn onClick={()=>onSend("sent")} disabled={saving} style={{width:"100%",marginBottom:10,fontSize:16}}>{saving?"Saving…":"📤 "+t("send_quote",lang)}</Btn>
+      <Btn variant="outline" onClick={()=>onSend("draft")} disabled={saving} style={{width:"100%"}}>💾 {t("save_draft",lang)}</Btn>
     </div>
   );
 }
