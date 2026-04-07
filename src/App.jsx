@@ -272,20 +272,17 @@ async function generateQuotePDF(quote, settings, calc, time) {
   y += 10;
   doc.line(M, y, W - M, y); y += 14;
 
-  // Bundled: Lawn Service = mow + trim + equipment (before any multipliers)
-  const lawnServiceTotal = (calc?.mc||0) + (calc?.tc||0) + (calc?.ec||0);
-  const hasDiscount = (quote.discount_pct||0) > 0 && calc;
-  const discountAmt = hasDiscount ? calc.fl * quote.discount_pct / 100 : 0;
+  // Bundled line item: show the final price the client pays (or pre-discount if discount exists)
+  const finalPrice = quote.final_price || 0;
+  const hasDiscount = (quote.discount_pct||0) > 0;
+  // Pre-discount = final / (1 - disc/100) to reverse the discount for display
+  const preDiscountPrice = hasDiscount ? finalPrice / (1 - quote.discount_pct / 100) : finalPrice;
+  const discountAmt = hasDiscount ? preDiscountPrice - finalPrice : 0;
   doc.setFont("helvetica","normal"); doc.setFontSize(10); doc.setTextColor(...DARK);
   doc.text("Lawn Service", M, y);
-  doc.text($$(lawnServiceTotal), W - M, y, { align: "right" });
+  doc.text($$(hasDiscount ? preDiscountPrice : finalPrice), W - M, y, { align: "right" });
   y += 18;
   if (hasDiscount) {
-    doc.setDrawColor(...LINE); doc.line(M, y - 4, W - M, y - 4);
-    doc.setFont("helvetica","bold"); doc.setTextColor(...DARK);
-    doc.text("Subtotal", M, y);
-    doc.text($$(lawnServiceTotal), W - M, y, { align: "right" });
-    y += 18;
     doc.setFont("helvetica","normal"); doc.setTextColor(...MUTED);
     doc.text(`Discount (${quote.discount_pct}%)`, M, y);
     doc.text(`-${$$(discountAmt)}`, W - M, y, { align: "right" });
@@ -485,7 +482,7 @@ export default function LawnBid() {
       address:"", areaVal:"", areaUnit:"sqft", perimVal:"", perimUnit:"ft",
       crew:1, cx:settings.complexity_default, risk:settings.risk_default,
       disc:0, customDisc:"", override:null, notes:"", saveClient:true,
-      attachments:[], is_recurring:false, recurring_frequency:"",
+      attachments:[], map_polygons:[], is_recurring:false, recurring_frequency:"",
     });
     setStep(1); setErrors({}); setScreen("flow");
   }, [settings]);
@@ -504,6 +501,7 @@ export default function LawnBid() {
       crew:q.crew_size, cx:q.complexity, risk:q.risk, disc:q.discount_pct||0, customDisc:"",
       override:null, notes:q.notes||"", saveClient:true, sentAt:q.sent_at,
       attachments:Array.isArray(q.attachments)?q.attachments:[],
+      map_polygons:Array.isArray(q.map_polygons)?q.map_polygons:[],
       is_recurring:!!q.is_recurring, recurring_frequency:q.recurring_frequency||"",
     });
     setStep(2); setErrors({}); setScreen("flow");
@@ -571,6 +569,7 @@ export default function LawnBid() {
         attachments: Array.isArray(rec.attachments) ? rec.attachments : [],
         is_recurring: !!rec.is_recurring,
         recurring_frequency: rec.recurring_frequency || null,
+        map_polygons: Array.isArray(rec.map_polygons) && rec.map_polygons.length > 0 ? rec.map_polygons : undefined,
         sent_at:     status === "sent" ? now : (rec.sentAt || null),
         expiry_date: rec.isNew ? addDays(now, settingsRef.current.quote_validity_days || 30) : undefined,
       };
@@ -1985,7 +1984,8 @@ function QuoteFlow({bp,step,setStep,flow,setFlow,errors,setErrors,settings,clien
     mow_rate_used:settings.mow_rate, trim_rate_used:settings.trim_rate, equipment_cost_used:settings.equipment_cost,
     formula_price:calc?.fl||0, final_price:calc?.disp||0, status,
     clientId:flow.clientId, client_name:flow.clientName, client_phone:flow.clientPhone, client_email:flow.clientEmail,
-    notes:flow.notes, attachments:flow.attachments||[], is_recurring:!!flow.is_recurring, recurring_frequency:flow.recurring_frequency||null,
+    notes:flow.notes, attachments:flow.attachments||[], map_polygons:flow.map_polygons||[],
+    is_recurring:!!flow.is_recurring, recurring_frequency:flow.recurring_frequency||null,
     saveClient:flow.saveClient, sentAt:flow.sentAt||null,
   });
   const buildCli=()=>flow.saveClient?{name:flow.clientName,phone:flow.clientPhone,email:flow.clientEmail,default_address:flow.address,last_area_sqft:area,last_linear_ft:perim}:null;
@@ -2124,11 +2124,12 @@ function S2({bp,flow,set,errors,area,perim,onAdvance}){
   const {canUseMap,showUpgrade} = usePlan();
   const [mTab,setMTab] = useState(canUseMap?"map":"manual");
   const [mapConfirmed,setMapConfirmed] = useState(false);
-  const applyMapMeasurements = ({areaSqft, perimFt}) => {
+  const applyMapMeasurements = ({areaSqft, perimFt, polygons}) => {
     set("areaVal", String(areaSqft));
     set("areaUnit", "sqft");
     set("perimVal", String(perimFt));
     set("perimUnit", "ft");
+    if (polygons) set("map_polygons", polygons);
   };
   const areaCard = (
     <Card>
@@ -2187,13 +2188,13 @@ function S2({bp,flow,set,errors,area,perim,onAdvance}){
           </div>
         </Card>
       )}
-      {mTab==="map" && canUseMap && <MapMeasure bp={bp} address={flow.address} confirmed={mapConfirmed} setConfirmed={setMapConfirmed} onConfirm={applyMapMeasurements} onSwitchManual={()=>setMTab("manual")} onAdvance={onAdvance}/>}
+      {mTab==="map" && canUseMap && <MapMeasure bp={bp} address={flow.address} confirmed={mapConfirmed} setConfirmed={setMapConfirmed} onConfirm={applyMapMeasurements} onSwitchManual={()=>setMTab("manual")} onAdvance={onAdvance} initialPolygons={flow.map_polygons}/>}
       {mTab==="manual" && manualBlock}
     </div>
   );
 }
 
-function MapMeasure({bp,address,confirmed,setConfirmed,onConfirm,onSwitchManual,onAdvance}){
+function MapMeasure({bp,address,confirmed,setConfirmed,onConfirm,onSwitchManual,onAdvance,initialPolygons}){
   const isDesktop = bp==="desktop";
   const isTouchDevice = typeof window !== "undefined" && (("ontouchstart" in window) || (navigator.maxTouchPoints||0) > 0);
   const closeThresholdPx = isTouchDevice ? 40 : 25;
@@ -2312,7 +2313,11 @@ function MapMeasure({bp,address,confirmed,setConfirmed,onConfirm,onSwitchManual,
 
   const confirmNow = () => {
     if (polygonsRef.current.length === 0) return;
-    onConfirm({ areaSqft: totals.area, perimFt: totals.perim });
+    // Extract polygon coordinates for persistence
+    const polyCoords = polygonsRef.current.map(p =>
+      p.getPath().getArray().map(ll => ({ lat: ll.lat(), lng: ll.lng() }))
+    );
+    onConfirm({ areaSqft: totals.area, perimFt: totals.perim, polygons: polyCoords });
     setConfirmed(true);
     setSuccessOverlay(true);
     setTimeout(() => { setSuccessOverlay(false); onAdvance?.(); }, 1500);
@@ -2368,6 +2373,21 @@ function MapMeasure({bp,address,confirmed,setConfirmed,onConfirm,onSwitchManual,
           });
         }
         setMapState("ready");
+        // Restore saved polygons if any
+        if (initialPolygons && initialPolygons.length > 0 && google.maps.geometry) {
+          initialPolygons.forEach(coords => {
+            if (!Array.isArray(coords) || coords.length < 3) return;
+            const path = coords.map(c => new google.maps.LatLng(c.lat, c.lng));
+            const poly = new google.maps.Polygon({
+              paths: path, map: mapRef.current, clickable: false,
+              strokeColor:"#15803d", strokeWeight:2, fillColor:"#16a34a", fillOpacity:0.25,
+            });
+            polygonsRef.current.push(poly);
+          });
+          setPolyCount(polygonsRef.current.length);
+          recalc();
+          setConfirmed(true);
+        }
       };
       if (!address?.trim()) { setMapState("geocode-fail"); return; }
       geocoderRef.current = new google.maps.Geocoder();
@@ -2531,7 +2551,7 @@ function S3({bp,flow,set,area,perim,calc,time,settings}){
         const calcCard = calc && (
         <Card style={{background:"#0f172a",color:"#ffffff",padding:24,boxShadow:"0 4px 16px rgba(15,23,42,.12)"}}>
           <Lbl style={{color:"#64748b"}}>Calculated Bid</Lbl>
-          {flow.disc>0&&<div style={{fontSize:18,color:"#475569",textDecoration:"line-through",marginBottom:4,fontWeight:600}}>{$$(calc.fl)}</div>}
+          {flow.override!==null&&flow.override!==undefined&&<div style={{fontSize:18,color:"#475569",textDecoration:"line-through",marginBottom:4,fontWeight:600}}>{$$(calc.fin)}</div>}
           {editing?(
             <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
               <span style={{fontSize:36,color:"#4ade80",fontWeight:900}}>$</span>

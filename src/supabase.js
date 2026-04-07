@@ -5,6 +5,7 @@
 // ALTER TABLE quotes   ADD COLUMN IF NOT EXISTS expiry_date timestamptz;
 // ALTER TABLE quotes   ADD COLUMN IF NOT EXISTS attachments jsonb DEFAULT '[]';
 // ALTER TABLE quotes   ADD COLUMN IF NOT EXISTS declined_reason text;
+// ALTER TABLE quotes   ADD COLUMN IF NOT EXISTS map_polygons jsonb DEFAULT '[]';
 // ALTER TABLE quotes   ADD COLUMN IF NOT EXISTS is_recurring boolean DEFAULT false;
 // ALTER TABLE quotes   ADD COLUMN IF NOT EXISTS recurring_frequency text;
 // ALTER TABLE quotes   ADD COLUMN IF NOT EXISTS last_completed_at timestamptz;
