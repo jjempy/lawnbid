@@ -7,7 +7,8 @@
       "Bash(ls *.html public/)",
       "Bash(npm run:*)",
       "Bash(supabase functions:*)",
-      "Bash(ls supabase/functions/*/index.ts)"
+      "Bash(ls supabase/functions/*/index.ts)",
+      "Bash(grep -nE '>[A-Z][a-z]{3,}[^<{]*</' src/App.jsx)"
     ]
   }
 }

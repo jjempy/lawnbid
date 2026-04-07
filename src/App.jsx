@@ -460,6 +460,7 @@ export default function LawnBid() {
         setQuotes(q);
         setClients(c);
         if (s) setSettings(prev => ({ ...prev, ...s }));
+        if (s?.language) try { localStorage.setItem("lb_language", s.language); } catch {}
         setQuotesUsedLive(qCount);
         setReady(true);
         // Handle Stripe upgrade return
@@ -677,10 +678,10 @@ export default function LawnBid() {
   const isTablet  = bp === "tablet";
 
   const pageTitle = (() => {
-    if (screen === "flow") return flow?.parentId ? "New Revision" : flow?.existingId ? "Edit Quote" : "New Quote";
-    if (screen === "quote-detail") return "Quote Details";
-    if (screen === "client-detail") return activeC?.name || "Client";
-    return tab==="quotes" ? "Quotes" : tab==="clients" ? "Clients" : tab==="business" ? "Business" : "Settings";
+    if (screen === "flow") return flow?.parentId ? t("new_revision",lang) : flow?.existingId ? t("edit_quote_title",lang) : t("new_quote_title",lang);
+    if (screen === "quote-detail") return t("quote_details",lang);
+    if (screen === "client-detail") return activeC?.name || t("client_label",lang);
+    return tab==="quotes" ? t("nav_quotes",lang) : tab==="clients" ? t("nav_clients",lang) : tab==="business" ? t("nav_business",lang) : t("nav_settings",lang);
   })();
 
   const screenContent = screen==="flow" ? (
@@ -844,13 +845,14 @@ function SideNav({tab,setTab,setScreen}){
 
 // ─── Top bar (desktop) ───
 function TopBar({title,onNew,showBack,onBack}){
+  const lang = useContext(LangContext);
   return (
     <div style={{height:56,minHeight:56,background:"#ffffff",borderBottom:"1px solid #e2e8f0",display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 24px",position:"sticky",top:0,zIndex:10}}>
       <div style={{display:"flex",alignItems:"center",gap:10,minWidth:0}}>
         {showBack && <button onClick={onBack} style={{width:36,height:36,minHeight:36,display:"inline-flex",alignItems:"center",justifyContent:"center",background:"none",border:"none",fontSize:22,cursor:"pointer",color:"#15803d",fontFamily:"inherit",padding:0,marginLeft:-8}}>‹</button>}
         <div style={{fontSize:18,fontWeight:700,color:"#0f172a",letterSpacing:-.2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{title}</div>
       </div>
-      <Btn onClick={onNew} style={{height:40,minHeight:40,padding:"0 16px",fontSize:13,borderRadius:12}}>+ New Quote</Btn>
+      <Btn onClick={onNew} style={{height:40,minHeight:40,padding:"0 16px",fontSize:13,borderRadius:12}}>{t("new_quote",lang)}</Btn>
     </div>
   );
 }
@@ -988,7 +990,7 @@ function HomeScreen({bp,quotes,settings,onNew,onView}){
       {shown.length===0?(
         <div style={{textAlign:"center",padding:"60px 20px",color:"#64748b"}}>
           <div style={{fontSize:48,marginBottom:12}}>📋</div>
-          <div style={{fontWeight:700,fontSize:16}}>{quotes.length===0?t("no_quotes",lang):"No quotes match this filter"}</div>
+          <div style={{fontWeight:700,fontSize:16}}>{quotes.length===0?t("no_quotes",lang):t("no_match",lang)}</div>
           {quotes.length===0&&<div style={{fontSize:13,marginTop:6}}>{t("start_first_quote",lang)}</div>}
         </div>
       ):shown.map(q=>{
@@ -1000,7 +1002,7 @@ function HomeScreen({bp,quotes,settings,onNew,onView}){
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:12}}>
             <div style={{flex:1,minWidth:0}}>
               <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:2,flexWrap:"wrap"}}>
-                <div style={{fontWeight:600,fontSize:15,color:"#0f172a",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",letterSpacing:-.1}}>{q.client_name||"No client"}</div>
+                <div style={{fontWeight:600,fontSize:15,color:"#0f172a",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",letterSpacing:-.1}}>{q.client_name||t("no_client",lang)}</div>
                 {q.parent_id&&<span style={{fontSize:10,background:"#e0f2fe",color:"#0369a1",padding:"1px 5px",borderRadius:4,fontWeight:700,flexShrink:0}}>V2</span>}
                 {q.is_recurring&&<span style={{fontSize:10,background:"#dcfce7",color:"#15803d",padding:"1px 5px",borderRadius:4,fontWeight:700,flexShrink:0}}>↻ {q.recurring_frequency==="weekly"?"Weekly":q.recurring_frequency==="monthly"?"Monthly":"Biweekly"}{q.visit_count>0?` · Visit ${q.visit_count}`:""}{q.status==="seasonal_complete"?" · Season complete ✓":q.next_due_at?` · Next: ${fmtD(q.next_due_at)}`:q.status==="accepted"?" · Next visit TBD":""}</span>}
                 {expired&&!q.is_recurring&&q.status!=="seasonal_complete"&&<span style={{fontSize:10,background:"#fee2e2",color:"#dc2626",padding:"1px 6px",borderRadius:4,fontWeight:700,flexShrink:0,letterSpacing:.4}}>EXPIRED</span>}
@@ -1041,10 +1043,10 @@ function BusinessScreen({bp,quotes,settings,clients}){
   const now=new Date();
   const getRange=(g,off)=>{
     const d=new Date(now);
-    if(g==="day"){d.setDate(d.getDate()+off);const s=new Date(d.getFullYear(),d.getMonth(),d.getDate());const e=new Date(s);e.setDate(e.getDate()+1);return{s,e,label:off===0?"Today":fmtD(s)};}
-    if(g==="week"){const day=d.getDay();d.setDate(d.getDate()-day+off*7);const s=new Date(d.getFullYear(),d.getMonth(),d.getDate());const e=new Date(s);e.setDate(e.getDate()+7);return{s,e,label:off===0?"This Week":`${fmtD(s)} – ${fmtD(new Date(e.getTime()-86400000))}`};}
-    if(g==="month"){d.setMonth(d.getMonth()+off);const s=new Date(d.getFullYear(),d.getMonth(),1);const e=new Date(d.getFullYear(),d.getMonth()+1,1);return{s,e,label:off===0?"This Month":s.toLocaleDateString("en-US",{month:"long",year:"numeric"})};}
-    d.setFullYear(d.getFullYear()+off);const s=new Date(d.getFullYear(),0,1);const e=new Date(d.getFullYear()+1,0,1);return{s,e,label:off===0?"This Year":String(s.getFullYear())};
+    if(g==="day"){d.setDate(d.getDate()+off);const s=new Date(d.getFullYear(),d.getMonth(),d.getDate());const e=new Date(s);e.setDate(e.getDate()+1);return{s,e,label:off===0?t("today",lang):fmtD(s)};}
+    if(g==="week"){const day=d.getDay();d.setDate(d.getDate()-day+off*7);const s=new Date(d.getFullYear(),d.getMonth(),d.getDate());const e=new Date(s);e.setDate(e.getDate()+7);return{s,e,label:off===0?t("this_week",lang):`${fmtD(s)} – ${fmtD(new Date(e.getTime()-86400000))}`};}
+    if(g==="month"){d.setMonth(d.getMonth()+off);const s=new Date(d.getFullYear(),d.getMonth(),1);const e=new Date(d.getFullYear(),d.getMonth()+1,1);return{s,e,label:off===0?t("this_month",lang):s.toLocaleDateString("en-US",{month:"long",year:"numeric"})};}
+    d.setFullYear(d.getFullYear()+off);const s=new Date(d.getFullYear(),0,1);const e=new Date(d.getFullYear()+1,0,1);return{s,e,label:off===0?t("this_year",lang):String(s.getFullYear())};
   };
   const{s:rangeStart,e:rangeEnd,label:rangeLabel}=getRange(gran,offset);
   const inRange=quotes.filter(q=>{const d=new Date(q.created_at);return d>=rangeStart&&d<rangeEnd;});
@@ -1081,8 +1083,8 @@ function BusinessScreen({bp,quotes,settings,clients}){
     <div style={{padding:isDesktop?0:16}}>
       {!isDesktop&&<div style={{fontSize:26,fontWeight:900,color:"#0f172a",marginBottom:14}}>{t("business_title",lang)}</div>}
       <div style={{display:"flex",gap:6,marginBottom:8,flexWrap:"wrap"}}>
-        {[["day","Day"],["week","Week"],["month","Month"],["year","Year"]].map(([k,lbl])=>(
-          <Chip key={k} label={lbl} active={gran===k} onClick={()=>{setGran(k);setOffset(0);}}/>
+        {[["day","day"],["week","week"],["month","month"],["year","year"]].map(([k,lk])=>(
+          <Chip key={k} label={t(lk,lang)} active={gran===k} onClick={()=>{setGran(k);setOffset(0);}}/>
         ))}
       </div>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14,background:"#f1f5f9",borderRadius:12,padding:"6px 8px"}}>
@@ -1092,24 +1094,24 @@ function BusinessScreen({bp,quotes,settings,clients}){
       </div>
       <div style={isDesktop?{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}:{}}>
       <Card>
-        <Lbl>Revenue</Lbl>
-        <Row label="Quoted" sub="total value of quotes sent" value={$$(quoted)}/>
-        <Row label="Accepted" sub={recurringRev>0&&onetimeRev>0?`${$$(recurringRev)} recurring · ${$$(onetimeRev)} one-time`:"approved jobs, ready to execute"} value={$$(acceptedRev)} color="#15803d"/>
-        <Row label="Pending" sub="sent, awaiting client response" value={$$(pendingRev)} color="#3b82f6"/>
+        <Lbl>{t("revenue",lang)}</Lbl>
+        <Row label={t("quoted",lang)} sub={t("quoted_sub",lang)} value={$$(quoted)}/>
+        <Row label={t("accepted_revenue",lang)} sub={recurringRev>0&&onetimeRev>0?`${$$(recurringRev)} recurring · ${$$(onetimeRev)} one-time`:t("accepted_sub",lang)} value={$$(acceptedRev)} color="#15803d"/>
+        <Row label={t("pending_revenue",lang)} sub={t("pending_sub",lang)} value={$$(pendingRev)} color="#3b82f6"/>
       </Card>
       <Card>
-        <Lbl>Performance</Lbl>
-        <Row label="Close rate" value={`${closeRate}%`}/>
-        <div style={{fontSize:11,color:"#94a3b8",marginTop:-4,marginBottom:6}}>sent quotes that became accepted jobs{sentAndAccepted>0?` (${acceptedQ.length} of ${sentAndAccepted})`:""}</div>
+        <Lbl>{t("performance",lang)}</Lbl>
+        <Row label={t("close_rate_pct",lang)} value={`${closeRate}%`}/>
+        <div style={{fontSize:11,color:"#94a3b8",marginTop:-4,marginBottom:6}}>{t("close_rate_sub",lang)}{sentAndAccepted>0?` (${acceptedQ.length} of ${sentAndAccepted})`:""}</div>
         <div style={{fontSize:13,color:"#334155",lineHeight:1.6}}>
           {acceptedQ.length} jobs{impliedHourly>0?` · ~$${impliedHourly}/hr implied gross`:""}{impliedMargin>0?` · ~${impliedMargin}% margin`:""}
         </div>
-        {impliedMargin>0&&<div style={{fontSize:10,color:"#94a3b8",marginTop:2}}>estimated profit after costs</div>}
+        {impliedMargin>0&&<div style={{fontSize:10,color:"#94a3b8",marginTop:2}}>{t("margin_sub",lang)}</div>}
       </Card>
       </div>
       {topClients.length>0&&(
         <Card>
-          <Lbl>Top Clients</Lbl>
+          <Lbl>{t("top_clients",lang)}</Lbl>
           {topClients.map(([name,{rev,jobs,phone}],i)=>(
             <div key={name} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 0",borderBottom:i<topClients.length-1?"1px solid #f1f5f9":"none",fontSize:13}}>
               <span style={{fontWeight:600,color:"#0f172a",minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1}}>{i+1}. {name}</span>
@@ -1120,7 +1122,7 @@ function BusinessScreen({bp,quotes,settings,clients}){
               </div>
             </div>
           ))}
-          <div style={{fontSize:10,color:"#94a3b8",marginTop:8}}>Top clients by accepted revenue · tap number to call</div>
+          <div style={{fontSize:10,color:"#94a3b8",marginTop:8}}>{t("top_clients_sub",lang)}</div>
         </Card>
       )}
     </div>
@@ -1128,16 +1130,17 @@ function BusinessScreen({bp,quotes,settings,clients}){
 }
 
 function HomeStats({quotes}){
+  const lang = useLang();
   const total = quotes.length;
   const drafts = quotes.filter(q=>q.status==="draft").length;
   const sent = quotes.filter(q=>q.status==="sent").length;
   const accepted = quotes.filter(q=>q.status==="accepted");
   const revenue = accepted.reduce((s,q)=>s+(q.final_price||0),0);
   const rows = [
-    {lbl:"Total Quotes",v:total.toString(),color:"#0f172a"},
-    {lbl:"Drafts",v:drafts.toString(),color:"#f59e0b"},
-    {lbl:"Sent",v:sent.toString(),color:"#3b82f6"},
-    {lbl:"Accepted",v:accepted.length.toString(),color:"#16a34a"},
+    {lbl:t("total_quotes",lang),v:total.toString(),color:"#0f172a"},
+    {lbl:t("drafts",lang),v:drafts.toString(),color:"#f59e0b"},
+    {lbl:t("sent",lang),v:sent.toString(),color:"#3b82f6"},
+    {lbl:t("accepted",lang),v:accepted.length.toString(),color:"#16a34a"},
   ];
   return (
     <div style={{position:"sticky",top:80,alignSelf:"start"}}>
@@ -1153,7 +1156,7 @@ function HomeStats({quotes}){
         </div>
       </Card>
       <Card style={{background:"#0f172a"}}>
-        <div style={{fontSize:11,fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:1}}>Revenue (Accepted)</div>
+        <div style={{fontSize:11,fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:1}}>{t("revenue_accepted",lang)}</div>
         <div style={{fontSize:36,fontWeight:900,color:"#4ade80",letterSpacing:-1.2,marginTop:6,lineHeight:1}}>{$$(revenue)}</div>
         <div style={{fontSize:12,color:"#94a3b8",marginTop:6,fontWeight:500}}>{accepted.length} accepted quote{accepted.length!==1?"s":""}</div>
       </Card>
@@ -1204,6 +1207,7 @@ function ClientsScreen({bp,clients,quotes,onView}){
 
 // ─── Client Detail ────────────────────────────────────────────────────────────
 function ClientDetail({bp,client,quotes,onBack,onViewQuote,onUpdateClient,onDeleteClient}){
+  const lang = useLang();
   const [delStep,setDelStep]=useState(0);
   const sorted=[...quotes].sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));
   const total=quotes.reduce((s,q)=>s+(q.final_price||0),0);
@@ -1221,7 +1225,7 @@ function ClientDetail({bp,client,quotes,onBack,onViewQuote,onUpdateClient,onDele
   const contactCard = editing ? (
     <Card>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-        <Lbl style={{marginBottom:0}}>Edit Contact</Lbl>
+        <Lbl style={{marginBottom:0}}>{t("edit_client",lang)}</Lbl>
       </div>
       {[["name","Name *"],["phone","Phone"],["email","Email"],["default_address","Address"]].map(([k,lbl])=>(
         <div key={k} style={{marginBottom:10}}>
@@ -1231,15 +1235,15 @@ function ClientDetail({bp,client,quotes,onBack,onViewQuote,onUpdateClient,onDele
       ))}
       {editMsg&&<div style={{fontSize:12,color:"#dc2626",marginBottom:8}}>⚠ {editMsg}</div>}
       <div style={{display:"flex",gap:8}}>
-        <Btn onClick={saveEdit} style={{flex:1,height:40,minHeight:40,fontSize:13}}>Save</Btn>
-        <Btn variant="secondary" onClick={()=>{setEditing(false);setEditForm({name:client.name||"",phone:client.phone||"",email:client.email||"",default_address:client.default_address||""});setEditMsg("");}} style={{flex:1,height:40,minHeight:40,fontSize:13}}>Cancel</Btn>
+        <Btn onClick={saveEdit} style={{flex:1,height:40,minHeight:40,fontSize:13}}>{t("save",lang)}</Btn>
+        <Btn variant="secondary" onClick={()=>{setEditing(false);setEditForm({name:client.name||"",phone:client.phone||"",email:client.email||"",default_address:client.default_address||""});setEditMsg("");}} style={{flex:1,height:40,minHeight:40,fontSize:13}}>{t("cancel",lang)}</Btn>
       </div>
     </Card>
   ) : (
     <Card>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
-        <Lbl>Contact</Lbl>
-        <button onClick={()=>setEditing(true)} style={{background:"none",border:"none",color:"#15803d",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit",padding:"2px 4px",minHeight:24}}>Edit</button>
+        <Lbl>{t("contact",lang)}</Lbl>
+        <button onClick={()=>setEditing(true)} style={{background:"none",border:"none",color:"#15803d",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit",padding:"2px 4px",minHeight:24}}>{t("edit_client",lang)}</button>
       </div>
       <div style={{fontWeight:700,fontSize:18,marginBottom:4}}>{client.name}</div>
       {client.phone&&<a href={`tel:${client.phone}`} style={{display:"block",fontSize:15,color:"#16a34a",textDecoration:"none",marginBottom:4}}>📞 {formatPhone(client.phone)}</a>}
@@ -1249,7 +1253,7 @@ function ClientDetail({bp,client,quotes,onBack,onViewQuote,onUpdateClient,onDele
   );
   const measurementsCard = client.last_area_sqft && (
     <Card>
-      <Lbl>Last Job Measurements</Lbl>
+      <Lbl>{t("last_measurements",lang)}</Lbl>
       <div style={{display:"flex",gap:32}}>
         <div><div style={{fontSize:10,color:"#94a3b8",textTransform:"uppercase",fontWeight:700,letterSpacing:1}}>Area</div><div style={{fontSize:20,fontWeight:800,color:"#0f172a",letterSpacing:-.3,marginTop:2}}>{fmtArea(client.last_area_sqft)}</div></div>
         <div><div style={{fontSize:10,color:"#94a3b8",textTransform:"uppercase",fontWeight:700,letterSpacing:1}}>Perimeter</div><div style={{fontSize:20,fontWeight:800,color:"#0f172a",letterSpacing:-.3,marginTop:2}}>{Math.round(client.last_linear_ft||0).toLocaleString()} ft</div></div>
@@ -1259,7 +1263,7 @@ function ClientDetail({bp,client,quotes,onBack,onViewQuote,onUpdateClient,onDele
   const historyBlock = (
     <>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-        <div style={{fontWeight:700,fontSize:16}}>Quote History</div>
+        <div style={{fontWeight:700,fontSize:16}}>{t("quote_history",lang)}</div>
         <div style={{fontSize:13,color:"#64748b"}}>{quotes.length} · {$$(total)} total</div>
       </div>
       {sorted.length===0?(
@@ -1284,7 +1288,7 @@ function ClientDetail({bp,client,quotes,onBack,onViewQuote,onUpdateClient,onDele
         </Card>
       ))}
       <div style={{marginTop:16}}>
-        {delStep===0&&<Btn variant="danger" onClick={()=>setDelStep(1)} style={{width:"100%"}}>Delete Client</Btn>}
+        {delStep===0&&<Btn variant="danger" onClick={()=>setDelStep(1)} style={{width:"100%"}}>{t("delete_client",lang)}</Btn>}
         {delStep===1&&<Card style={{border:"1.5px solid #fecaca"}}>
           <div style={{fontSize:14,fontWeight:700,color:"#dc2626",marginBottom:6}}>⚠️ Delete {client.name}?</div>
           <div style={{fontSize:13,color:"#64748b",lineHeight:1.5,marginBottom:12}}>This will permanently delete this client and all {quotes.length} quote{quotes.length!==1?"s":""} associated with them. This cannot be undone.</div>
@@ -1365,7 +1369,7 @@ function QuoteDetail({bp,quote,allQuotes,settings,onBack,onEdit,onDuplicate,onDe
   );
   const clientCard = quote.client_name && (
     <Card>
-      <Lbl>Client</Lbl>
+      <Lbl>{t("client_label",lang)}</Lbl>
       <div style={{fontWeight:700,fontSize:16,marginBottom:4}}>{quote.client_name}</div>
       {quote.client_phone&&<a href={`tel:${quote.client_phone}`} style={{display:"block",fontSize:14,color:"#16a34a",textDecoration:"none",marginBottom:2}}>📞 {formatPhone(quote.client_phone)}</a>}
       {quote.client_email&&<div style={{fontSize:14,color:"#64748b"}}>✉ {quote.client_email}</div>}
@@ -1373,7 +1377,7 @@ function QuoteDetail({bp,quote,allQuotes,settings,onBack,onEdit,onDuplicate,onDe
   );
   const jobDetailsCard = (
     <Card>
-      <Lbl>Job Details</Lbl>
+      <Lbl>{t("job_details",lang)}</Lbl>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
         {[{l:"Address",v:quote.address,full:true},{l:"Area",v:fmtArea(quote.area_sqft)},{l:"Perimeter",v:`${Math.round(quote.linear_ft).toLocaleString()} ft`},{l:"Crew",v:`${quote.crew_size} worker${quote.crew_size>1?"s":""}`},{l:"Complexity",v:COMPLEXITY.find(o=>o.value===quote.complexity)?.label},{l:"Risk",v:RISK.find(o=>o.value===quote.risk)?.label},{l:"Discount",v:(quote.discount_pct||0)>0?`${quote.discount_pct}%`:"None"},{l:"Created",v:fmtTS(quote.created_at),full:true},{l:"Sent",v:quote.sent_at?fmtTS(quote.sent_at):"Not sent",full:true},{l:"Expires",v:quote.expiry_date?`${fmtD(quote.expiry_date)}${isExpired(quote.expiry_date)?" (expired)":""}`:"—",full:true}]
           .map(({l,v,full})=>(
@@ -1387,21 +1391,21 @@ function QuoteDetail({bp,quote,allQuotes,settings,onBack,onEdit,onDuplicate,onDe
   );
   const breakdownCard = calc && (
     <Card>
-      <Lbl>Formula Breakdown</Lbl>
+      <Lbl>{t("formula_breakdown",lang)}</Lbl>
       {calc.bd.map((r,i)=>(
         <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",padding:"5px 0",borderBottom:r.subtotal?"1.5px solid #e2e8f0":"1px solid #f1f5f9",fontWeight:r.subtotal?700:400,color:r.subtotal?"#0f172a":r.modifier?"#64748b":"#334155"}}>
           <div><div style={{fontSize:13}}>{r.label}</div>{r.note&&<div style={{fontSize:10,color:"#cbd5e1"}}>{r.note}</div>}</div>
           <div style={{fontSize:13,fontWeight:600}}>{r.modifier&&r.value>0?"+":""}{$$(r.value)}</div>
         </div>
       ))}
-      <div style={{display:"flex",justifyContent:"space-between",marginTop:10,fontSize:18,fontWeight:900,color:"#16a34a"}}><span>FINAL BID</span><span>{$$(quote.final_price)}</span></div>
+      <div style={{display:"flex",justifyContent:"space-between",marginTop:10,fontSize:18,fontWeight:900,color:"#16a34a"}}><span>{t("final_bid",lang)}</span><span>{$$(quote.final_price)}</span></div>
       {quote.mow_rate_used&&<div style={{marginTop:10,padding:"8px 10px",background:"#f8fafc",borderRadius:8,fontSize:11,color:"#64748b"}}>Rates at quoting time: mow ${quote.mow_rate_used}/20k · trim ${quote.trim_rate_used}/3k · equip ${quote.equipment_cost_used}/hr</div>}
     </Card>
   );
-  const notesCard = quote.notes && <Card><Lbl>Notes</Lbl><div style={{fontSize:14,color:"#334155",lineHeight:1.5}}>{quote.notes}</div></Card>;
+  const notesCard = quote.notes && <Card><Lbl>{t("notes",lang)}</Lbl><div style={{fontSize:14,color:"#334155",lineHeight:1.5}}>{quote.notes}</div></Card>;
   const attachmentsCard = attachments.length>0 && (
     <Card>
-      <Lbl>Attachments ({attachments.length})</Lbl>
+      <Lbl>{t("attachments",lang)} ({attachments.length})</Lbl>
       <div style={{display:"grid",gridTemplateColumns:"repeat(3, 1fr)",gap:8}}>
         {attachments.map(att=>{
           const isImg = att.type?.startsWith("image/");
@@ -1421,7 +1425,7 @@ function QuoteDetail({bp,quote,allQuotes,settings,onBack,onEdit,onDuplicate,onDe
   );
   const threadCard = versions.length>0 && (
     <Card>
-      <Lbl>Quote Thread</Lbl>
+      <Lbl>{t("quote_thread",lang)}</Lbl>
       {versions.sort((a,b)=>new Date(a.created_at)-new Date(b.created_at)).map((v,i,arr)=>(
         <div key={v.quote_id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 0",borderBottom:i<arr.length-1?"1px solid #e2e8f0":"none"}}>
           <div style={{display:"flex",alignItems:"center",gap:8}}><QID id={v.quote_id}/><Badge status={v.status}/></div>
@@ -1507,8 +1511,8 @@ function QuoteDetail({bp,quote,allQuotes,settings,onBack,onEdit,onDuplicate,onDe
       )}
       <Btn variant="warning" onClick={onEdit} style={{width:"100%"}}>✏️ {isSent?t("edit_quote",lang):t("edit_quote",lang)}</Btn>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-        <Btn variant="secondary" onClick={onDuplicate}>📋 Duplicate</Btn>
-        {!confirmDel?<Btn variant="danger" onClick={()=>setConfirmDel(true)}>🗑 Delete</Btn>:<Btn variant="danger" onClick={onDelete}>Confirm ✓</Btn>}
+        <Btn variant="secondary" onClick={onDuplicate}>📋 {t("duplicate",lang)}</Btn>
+        {!confirmDel?<Btn variant="danger" onClick={()=>setConfirmDel(true)}>🗑 {t("delete",lang)}</Btn>:<Btn variant="danger" onClick={onDelete}>{t("delete_confirm",lang)}</Btn>}
       </div>
       {confirmDel&&<Btn variant="secondary" onClick={()=>setConfirmDel(false)} style={{width:"100%"}}>Cancel</Btn>}
     </div>
@@ -1699,19 +1703,19 @@ function SettingsScreen({bp,settings,onSave,onLogout}){
           );
         })}
         <div style={{marginBottom:12}}>
-          <Lbl>Complexity Default</Lbl>
+          <Lbl>{t("complexity_default",lang)}</Lbl>
           <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{COMPLEXITY.map(o=><Chip key={o.value} label={`${o.label} (${o.value}×)`} active={loc.complexity_default===o.value} onClick={()=>set("complexity_default",o.value)}/>)}</div>
         </div>
         <div>
-          <Lbl>Risk Default</Lbl>
+          <Lbl>{t("risk_default",lang)}</Lbl>
           <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{RISK.map(o=><Chip key={o.value} label={`${o.label} (${o.value}×)`} active={loc.risk_default===o.value} onClick={()=>set("risk_default",o.value)}/>)}</div>
         </div>
         <div style={{marginTop:16,paddingTop:14,borderTop:"1px solid #e2e8f0"}}>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
-            <span style={{fontSize:13,fontWeight:600,color:"#334155"}}>Follow-up Reminders</span>
+            <span style={{fontSize:13,fontWeight:600,color:"#334155"}}>{t("follow_up_label",lang)}</span>
             <div style={{display:"flex",alignItems:"center",gap:8}}>
               <Inp type="number" min="1" max="30" value={loc.follow_up_days||3} onChange={e=>set("follow_up_days",parseInt(e.target.value)||3)} style={{width:56,height:36,padding:"0 8px",fontSize:14,textAlign:"center",borderRadius:8,opacity:loc.follow_up_enabled===false?.4:1}}/>
-              <span style={{fontSize:12,color:"#64748b"}}>days</span>
+              <span style={{fontSize:12,color:"#64748b"}}>{t("remind_after",lang)}</span>
               <div onClick={()=>set("follow_up_enabled",!loc.follow_up_enabled)} style={{width:44,height:26,borderRadius:13,background:loc.follow_up_enabled!==false?"#15803d":"#cbd5e1",cursor:"pointer",position:"relative",transition:"background .2s",flexShrink:0}}>
                 <div style={{width:22,height:22,background:"#ffffff",borderRadius:"50%",position:"absolute",top:2,left:loc.follow_up_enabled!==false?20:2,transition:"left .2s",boxShadow:"0 1px 3px rgba(0,0,0,.2)"}}/>
               </div>
@@ -1724,7 +1728,7 @@ function SettingsScreen({bp,settings,onSave,onLogout}){
       <Card>
         <Lbl>{t("business_info",lang)}</Lbl>
         <div style={{marginBottom:14}}>
-          <div style={{fontSize:13,fontWeight:600,color:"#334155",marginBottom:8}}>Company Logo</div>
+          <div style={{fontSize:13,fontWeight:600,color:"#334155",marginBottom:8}}>{t("company_logo",lang)}</div>
           <div style={{display:"flex",alignItems:"center",gap:14}}>
             {loc.company_logo_base64
               ? <img src={loc.company_logo_base64} alt="Logo" onError={onLogoImgError} style={{width:64,height:64,borderRadius:"50%",objectFit:"cover",border:"1.5px solid #e2e8f0"}}/>
@@ -1732,10 +1736,10 @@ function SettingsScreen({bp,settings,onSave,onLogout}){
             }
             <div style={{display:"flex",flexDirection:"column",gap:6}}>
               <label style={{height:36,minHeight:36,padding:"0 14px",borderRadius:12,border:"1.5px solid #15803d",background:"#ffffff",color:"#15803d",fontSize:13,fontWeight:600,cursor:"pointer",display:"inline-flex",alignItems:"center",justifyContent:"center",fontFamily:"inherit"}}>
-                {loc.company_logo_base64?"Replace Logo":"Upload Logo"}
+                {loc.company_logo_base64?t("replace_logo",lang):t("upload_logo",lang)}
                 <input type="file" accept="image/png,image/jpeg,image/webp" onChange={onLogo} style={{display:"none"}}/>
               </label>
-              {loc.company_logo_base64 && <button onClick={removeLogo} style={{background:"none",border:"none",color:"#dc2626",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit",textAlign:"left",padding:0}}>Remove</button>}
+              {loc.company_logo_base64 && <button onClick={removeLogo} style={{background:"none",border:"none",color:"#dc2626",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit",textAlign:"left",padding:0}}>{t("remove_logo",lang)}</button>}
               {logoMsg && <div style={{fontSize:12,color:logoMsg.startsWith("Logo saved")?"#15803d":"#dc2626",fontWeight:600}}>{logoMsg}</div>}
             </div>
           </div>
@@ -1747,7 +1751,7 @@ function SettingsScreen({bp,settings,onSave,onLogout}){
           </div>
         ))}
         <div style={{marginTop:14,paddingTop:14,borderTop:"1px solid #e2e8f0"}}>
-          <div style={{fontSize:13,fontWeight:600,color:"#334155",marginBottom:8}}>Language / Idioma</div>
+          <div style={{fontSize:13,fontWeight:600,color:"#334155",marginBottom:8}}>{t("language",lang)}</div>
           <div style={{display:"flex",gap:6}}>
             <Chip label="🇺🇸 English" active={loc.language!=="es"} onClick={()=>{set("language","en");try{localStorage.setItem("lb_language","en");}catch{}}}/>
             <Chip label="🇲🇽 Español" active={loc.language==="es"} onClick={()=>{set("language","es");try{localStorage.setItem("lb_language","es");}catch{}}}/>
@@ -1770,7 +1774,7 @@ function SettingsScreen({bp,settings,onSave,onLogout}){
       <div>
         <PlanBadge/>
         <div style={{display:"flex",justifyContent:"flex-end",marginBottom:12}}>
-          <button onClick={reset} style={{background:"none",border:"none",color:"#dc2626",fontSize:13,fontWeight:700,cursor:"pointer",padding:"8px 12px",minHeight:36}}>↺ Reset Defaults</button>
+          <button onClick={reset} style={{background:"none",border:"none",color:"#dc2626",fontSize:13,fontWeight:700,cursor:"pointer",padding:"8px 12px",minHeight:36}}>{"↺ "+t("reset_defaults",lang)}</button>
         </div>
         <div style={{display:"grid",gridTemplateColumns:"minmax(0,1fr) minmax(0,1fr)",gap:24,marginBottom:16}}>
           <div style={{minWidth:0}}>{formulaCard}</div>
@@ -1786,7 +1790,7 @@ function SettingsScreen({bp,settings,onSave,onLogout}){
       <PlanBadge/>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
         <div style={{fontSize:26,fontWeight:900,color:"#0f172a"}}>{t("settings_title",lang)}</div>
-        <button onClick={reset} style={{background:"none",border:"none",color:"#dc2626",fontSize:13,fontWeight:700,cursor:"pointer",minHeight:36,padding:"6px 0"}}>↺ Reset Defaults</button>
+        <button onClick={reset} style={{background:"none",border:"none",color:"#dc2626",fontSize:13,fontWeight:700,cursor:"pointer",minHeight:36,padding:"6px 0"}}>{"↺ "+t("reset_defaults",lang)}</button>
       </div>
       {formulaCard}
       {businessCard}
@@ -2112,7 +2116,7 @@ function QuoteFlow({bp,step,setStep,flow,setFlow,errors,setErrors,settings,clien
         <div style={{background:"#fff",padding:"calc(12px + env(safe-area-inset-top)) 16px 12px",borderBottom:"1px solid #e2e8f0",display:"flex",alignItems:"center",gap:12,position:"sticky",top:0,zIndex:10}}>
           <button onClick={step===1?onCancel:()=>setStep(s=>s-1)} style={{width:40,height:40,minHeight:40,display:"inline-flex",alignItems:"center",justifyContent:"center",background:"none",border:"none",fontSize:24,cursor:"pointer",color:"#15803d",fontFamily:"inherit",lineHeight:1,padding:0,marginLeft:-8}}>‹</button>
           <div style={{flex:1,minWidth:0}}>
-            <div style={{fontWeight:700,fontSize:15}}>{flow.parentId?"New V2 Quote":"New Quote"} — Step {step} of 4</div>
+            <div style={{fontWeight:700,fontSize:15}}>{flow.parentId?t("new_revision",lang):t("new_quote_title",lang)} — {t("step_of",lang)+" "+step+" "+t("of",lang)+" 4"}</div>
             <div style={{fontSize:12,color:"#64748b"}}>{STEPS[step-1]}{flow.parentId?` · Revision of ${flow.parentId}`:""}</div>
           </div>
           <button onClick={onCancel} style={{width:40,height:40,minHeight:40,display:"inline-flex",alignItems:"center",justifyContent:"center",background:"none",border:"none",fontSize:16,color:"#94a3b8",cursor:"pointer",fontFamily:"inherit"}}>✕</button>
@@ -2138,8 +2142,8 @@ function QuoteFlow({bp,step,setStep,flow,setFlow,errors,setErrors,settings,clien
         {step===2&&<S2 bp={bp} flow={flow} set={set} errors={errors} area={area} perim={perim} onAdvance={()=>setStep(3)}/>}
         {step===3&&<S3 bp={bp} flow={flow} set={set} area={area} perim={perim} calc={calc} time={time} settings={settings}/>}
         {step===4&&<S4 bp={bp} flow={flow} set={set} setFlow={setFlow} area={area} perim={perim} calc={calc} time={time} onSend={handleSend} saving={saving}/>}
-        {step<4&&<Btn onClick={next} style={{width:"100%",marginTop:8}}>Next →</Btn>}
-        {isDesktop&&step>1&&<Btn variant="secondary" onClick={()=>setStep(s=>s-1)} style={{width:"100%",marginTop:8}}>← Back</Btn>}
+        {step<4&&<Btn onClick={next} style={{width:"100%",marginTop:8}}>{t("next_btn",lang)}</Btn>}
+        {isDesktop&&step>1&&<Btn variant="secondary" onClick={()=>setStep(s=>s-1)} style={{width:"100%",marginTop:8}}>{t("back_btn",lang)}</Btn>}
       </div>
     </div>
   );
@@ -2284,6 +2288,7 @@ function S2({bp,flow,set,errors,area,perim,onAdvance}){
 }
 
 function MapMeasure({bp,address,confirmed,setConfirmed,onConfirm,onSwitchManual,onAdvance,initialPolygons}){
+  const lang = useLang();
   const isDesktop = bp==="desktop";
   const isTouchDevice = typeof window !== "undefined" && (("ontouchstart" in window) || (navigator.maxTouchPoints||0) > 0);
   const closeThresholdPx = isTouchDevice ? 40 : 25;
@@ -2528,7 +2533,7 @@ function MapMeasure({bp,address,confirmed,setConfirmed,onConfirm,onSwitchManual,
           <div style={{position:"absolute",inset:0,background:"rgba(248,250,252,.95)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:12,padding:20,textAlign:"center"}}>
             <div style={{fontSize:32}}>📍</div>
             <div style={{fontSize:14,color:"#334155",fontWeight:500,maxWidth:320}}>Could not locate this address on the map. Try the Manual tab or check the address in Step 1.</div>
-            <Btn onClick={onSwitchManual}>Switch to Manual</Btn>
+            <Btn onClick={onSwitchManual}>{t("switch_to_manual",lang)}</Btn>
           </div>
         )}
         {/* Persistent instruction pill */}
@@ -2650,7 +2655,7 @@ function S3({bp,flow,set,area,perim,calc,time,settings}){
           ):(
             <div onClick={()=>setEditing(true)} style={{fontSize:"var(--price-hero)",fontWeight:900,color:"#ffffff",letterSpacing:-2,cursor:"pointer",lineHeight:1,marginBottom:4}}>{$$(calc.disp)}</div>
           )}
-          {editing?<button onClick={()=>{setEditing(false);set("override",null);}} style={{fontSize:12,color:"#4ade80",background:"none",border:"none",cursor:"pointer",marginBottom:14,fontFamily:"inherit",fontWeight:600,padding:0,minHeight:32}}>← reset to formula</button>:<div style={{fontSize:12,color:"#64748b",marginBottom:14,fontWeight:500}}>Tap price to override</div>}
+          {editing?<button onClick={()=>{setEditing(false);set("override",null);}} style={{fontSize:12,color:"#4ade80",background:"none",border:"none",cursor:"pointer",marginBottom:14,fontFamily:"inherit",fontWeight:600,padding:0,minHeight:32}}>{t("reset_formula",lang)}</button>:<div style={{fontSize:12,color:"#64748b",marginBottom:14,fontWeight:500}}>{t("tap_override",lang)}</div>}
           {calc.minA&&<div style={{fontSize:12,color:"#fbbf24",marginBottom:12,fontWeight:500}}>⚠ Minimum bid applied (formula: {$$(calc.ar)})</div>}
           <div style={{borderTop:"1px solid #1e293b",paddingTop:14}}>
             <Lbl style={{color:"#64748b"}}>{t("breakdown",lang)}</Lbl>
@@ -2660,7 +2665,7 @@ function S3({bp,flow,set,area,perim,calc,time,settings}){
                 <div style={{fontSize:13,fontWeight:600}}>{r.modifier&&r.value>0?"+":""}{$$(r.value)}</div>
               </div>
             ))}
-            <div style={{display:"flex",justifyContent:"space-between",marginTop:12,fontSize:16,fontWeight:900,color:"#4ade80",letterSpacing:.3}}><span>FINAL BID</span><span>{$$(calc.disp)}</span></div>
+            <div style={{display:"flex",justifyContent:"space-between",marginTop:12,fontSize:16,fontWeight:900,color:"#4ade80",letterSpacing:.3}}><span>{t("final_bid",lang)}</span><span>{$$(calc.disp)}</span></div>
           </div>
           {time&&(
             <div style={{borderTop:"1px solid #1e293b",paddingTop:14,marginTop:14}}>
@@ -2740,13 +2745,13 @@ function S4({bp,flow,set,setFlow,area,perim,calc,time,onSend,saving}){
   return(
     <div>
       <Card>
-        <Lbl>Client</Lbl>
+        <Lbl>{t("client_label",lang)}</Lbl>
         <div style={{fontWeight:700,fontSize:16}}>{flow.clientName}</div>
         <div style={{fontSize:14,color:"#64748b",marginTop:2}}>{flow.clientPhone}</div>
         {flow.clientEmail&&<div style={{fontSize:14,color:"#64748b"}}>{flow.clientEmail}</div>}
       </Card>
       <Card>
-        <Lbl>Quote Summary</Lbl>
+        <Lbl>{t("quote_summary",lang)}</Lbl>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:16}}>
           {[{l:"Address",v:flow.address,full:true},{l:"Area",v:fmtArea(area)},{l:"Perimeter",v:`${Math.round(perim).toLocaleString()} ft`},{l:"Crew",v:`${flow.crew} worker${flow.crew>1?"s":""}`},{l:"Complexity",v:COMPLEXITY.find(o=>o.value===flow.cx)?.label},{l:"Risk",v:RISK.find(o=>o.value===flow.risk)?.label},{l:"Est. Time",v:time?fmtT(time.adj):"—"},{l:"Discount",v:flow.disc>0?`${flow.disc}%`:"None"}]
             .map(({l,v,full})=>(
@@ -2769,7 +2774,7 @@ function S4({bp,flow,set,setFlow,area,perim,calc,time,onSend,saving}){
         </div>
         {flow.is_recurring&&(
           <div>
-            <div style={{fontSize:12,fontWeight:600,color:"#334155",marginBottom:6}}>Frequency</div>
+            <div style={{fontSize:12,fontWeight:600,color:"#334155",marginBottom:6}}>{t("frequency",lang)}</div>
             <div style={{display:"flex",gap:6}}>
               {[["weekly","weekly"],["biweekly","biweekly"],["monthly","monthly"]].map(([k,lk])=>(
                 <Chip key={k} label={t(lk,lang)} active={flow.recurring_frequency===k} onClick={()=>set("recurring_frequency",k)}/>
@@ -2822,7 +2827,7 @@ function S4({bp,flow,set,setFlow,area,perim,calc,time,onSend,saving}){
         )}
       </Card>}
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",background:"#ffffff",borderRadius:16,padding:"14px 18px",marginBottom:12,boxShadow:CARD_SHADOW}}>
-        <div><div style={{fontWeight:600,fontSize:14,color:"#0f172a"}}>Save to client list</div><div style={{fontSize:12,color:"#64748b",marginTop:2}}>Remembers address & measurements</div></div>
+        <div><div style={{fontWeight:600,fontSize:14,color:"#0f172a"}}>{t("save_to_client",lang)}</div><div style={{fontSize:12,color:"#64748b",marginTop:2}}>{t("save_to_client_desc",lang)}</div></div>
         <div onClick={()=>set("saveClient",!flow.saveClient)} style={{width:44,height:26,borderRadius:13,background:flow.saveClient?"#15803d":"#cbd5e1",cursor:"pointer",position:"relative",transition:"background .2s",flexShrink:0}}>
           <div style={{width:22,height:22,background:"#ffffff",borderRadius:"50%",position:"absolute",top:2,left:flow.saveClient?20:2,transition:"left .2s",boxShadow:"0 1px 3px rgba(0,0,0,.2)"}}/>
         </div>
