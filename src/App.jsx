@@ -36,7 +36,7 @@ const DEFAULT_SETTINGS = {
   minimum_bid: 55, complexity_default: 1.0, risk_default: 1.0,
   profit_margin: 0.30,
   quote_validity_days: 30,
-  follow_up_days: 3,
+  follow_up_days: 3, follow_up_enabled: true,
   company_name: "", company_phone: "", company_email: "", company_logo_base64: "",
   plan: "free", quote_count_this_month: 0, quote_count_reset_at: new Date().toISOString(),
 };
@@ -52,7 +52,7 @@ const COMPLEXITY = [
   { label: "Simple",    value: 1.0,  desc: "Open lawn, no obstacles" },
   { label: "Moderate",  value: 1.3,  desc: "Some trees, beds, tight spaces" },
   { label: "Complex",   value: 1.6,  desc: "Heavy tree cover, dense landscaping" },
-  { label: "V.Complex", value: 2.0,  desc: "Heavily wooded, narrow gates" },
+  { label: "Very Complex", value: 2.0,  desc: "Heavily wooded, narrow gates" },
 ];
 const RISK = [
   { label: "Low",      value: 1.0,  desc: "Flat, open, dry" },
@@ -332,16 +332,24 @@ async function generateQuotePDF(quote, settings, calc, time) {
 
 function quoteText(q, s) {
   return [
-    "LAWN CARE QUOTE",
-    s.company_name?`${s.company_name}${s.company_phone?" | "+s.company_phone:""}`:"",
-    "",`Quote ID: ${q.quote_id}`,`Date: ${fmtTS(q.created_at)}`,
-    q.parent_id?`Revision of: ${q.parent_id}`:"",
-    "",`Client: ${q.client_name||"—"}`,`Property: ${q.address}`,
-    "","Service: Lawn Mowing, Trimming & Edging",
+    q.is_recurring ? "LAWN SERVICE AGREEMENT" : "LAWN CARE QUOTE",
+    s.company_name ? `${s.company_name}${s.company_phone?" | "+formatPhone(s.company_phone):""}` : "",
+    "",
+    `Quote ID: ${q.quote_id}`,
+    `Date: ${fmtTS(q.created_at)}`,
+    q.parent_id ? `Revision of: ${q.parent_id}` : "",
+    "",
+    `Client: ${q.client_name||"—"}`,
+    `Property: ${q.address}`,
+    "",
+    "Service: Lawn Mowing, Trimming & Edging",
+    q.is_recurring ? `Frequency: ${q.recurring_frequency==="weekly"?"Weekly":q.recurring_frequency==="monthly"?"Monthly":"Biweekly"}` : "",
     `Area: ${fmtArea(q.area_sqft)}`,
     `Perimeter: ${Math.round(q.linear_ft).toLocaleString()} linear ft`,
-    "",`TOTAL: ${$$(q.final_price)}`,
-    "",s.company_phone?`To accept, call ${s.company_phone}.`:"To accept, please reply.",
+    "",
+    `TOTAL: ${$$(q.final_price)}`,
+    "",
+    s.company_phone ? `To accept, reply or call ${formatPhone(s.company_phone)}.` : "To accept, please reply.",
   ].filter(Boolean).join("\n");
 }
 
@@ -757,7 +765,7 @@ export default function LawnBid() {
           {toastBanner}
             <TopBar title={pageTitle} onNew={startNew} showBack={screen==="quote-detail"||screen==="client-detail"||screen==="flow"} onBack={screen==="flow"?goHome:()=>setScreen(screen==="quote-detail"&&selC&&tab==="clients"?"client-detail":"home")}/>
             <div className="lb-scroll" style={{flex:1,padding:"24px"}}>
-              <div style={{maxWidth:900,margin:"0 auto",width:"100%"}}>
+              <div style={{maxWidth:1100,margin:"0 auto",width:"100%"}}>
                 {screenContent}
               </div>
             </div>
@@ -871,7 +879,8 @@ function HomeScreen({bp,quotes,settings,onNew,onView}){
   const [filter,setFilter]=useState("all");
   const [search,setSearch]=useState("");
   const followUpDaysVal=settings?.follow_up_days||3;
-  const isFollowUp=q=>q.status==="sent"&&q.created_at&&(Date.now()-new Date(q.created_at).getTime())>followUpDaysVal*86400000;
+  const followUpOn=settings?.follow_up_enabled!==false;
+  const isFollowUp=q=>followUpOn&&q.status==="sent"&&q.created_at&&(Date.now()-new Date(q.created_at).getTime())>followUpDaysVal*86400000;
   const filtered=filter==="all"?quotes:filter==="followup"?quotes.filter(isFollowUp):filter==="recurring"?quotes.filter(q=>q.is_recurring):quotes.filter(q=>q.status===filter);
   const shown=(search.trim()?filtered.filter(q=>{const s=search.toLowerCase();return (q.client_name||"").toLowerCase().includes(s)||(q.address||"").toLowerCase().includes(s)||(q.quote_id||"").toLowerCase().includes(s);}):filtered).sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));
   const isDesktop = bp==="desktop";
@@ -891,8 +900,8 @@ function HomeScreen({bp,quotes,settings,onNew,onView}){
           <Btn onClick={onNew} style={{height:40,minHeight:40,padding:"0 14px",fontSize:13,borderRadius:12}}>+ New Quote</Btn>
         </div>
       )}
-      <div className="lb-scroll" style={{display:"flex",gap:6,margin:isDesktop?"0 0 12px":"12px 0 8px",overflowX:"auto",paddingBottom:4}}>
-        {["all","draft","sent","accepted","declined","recurring","followup"].map(f=>(
+      <div style={{display:"flex",gap:6,margin:isDesktop?"0 0 12px":"12px 0 8px",flexWrap:"wrap"}}>
+        {["all","draft","sent","accepted","declined","recurring",...(followUpOn?["followup"]:[])].map(f=>(
           <Chip key={f} label={f==="all"?`All (${quotes.length})`:f==="followup"?`⭐ Follow-up (${quotes.filter(isFollowUp).length})`:f==="recurring"?`↻ Recurring (${quotes.filter(q=>q.is_recurring).length})`:`${f[0].toUpperCase()+f.slice(1)} (${quotes.filter(q=>q.status===f).length})`} active={filter===f} onClick={()=>setFilter(f)}/>
         ))}
       </div>
@@ -950,10 +959,18 @@ function HomeScreen({bp,quotes,settings,onNew,onView}){
 
 function BusinessScreen({bp,quotes,settings,clients}){
   const isDesktop = bp==="desktop";
-  const [period,setPeriod]=useState("30");
-  const days=parseInt(period);
-  const since=new Date(Date.now()-days*86400000);
-  const inRange=quotes.filter(q=>new Date(q.created_at)>=since);
+  const [gran,setGran]=useState("week"); // day|week|month|year
+  const [offset,setOffset]=useState(0); // 0=current, -1=previous, etc.
+  const now=new Date();
+  const getRange=(g,off)=>{
+    const d=new Date(now);
+    if(g==="day"){d.setDate(d.getDate()+off);const s=new Date(d.getFullYear(),d.getMonth(),d.getDate());const e=new Date(s);e.setDate(e.getDate()+1);return{s,e,label:off===0?"Today":fmtD(s)};}
+    if(g==="week"){const day=d.getDay();d.setDate(d.getDate()-day+off*7);const s=new Date(d.getFullYear(),d.getMonth(),d.getDate());const e=new Date(s);e.setDate(e.getDate()+7);return{s,e,label:off===0?"This Week":`${fmtD(s)} – ${fmtD(new Date(e.getTime()-86400000))}`};}
+    if(g==="month"){d.setMonth(d.getMonth()+off);const s=new Date(d.getFullYear(),d.getMonth(),1);const e=new Date(d.getFullYear(),d.getMonth()+1,1);return{s,e,label:off===0?"This Month":s.toLocaleDateString("en-US",{month:"long",year:"numeric"})};}
+    d.setFullYear(d.getFullYear()+off);const s=new Date(d.getFullYear(),0,1);const e=new Date(d.getFullYear()+1,0,1);return{s,e,label:off===0?"This Year":String(s.getFullYear())};
+  };
+  const{s:rangeStart,e:rangeEnd,label:rangeLabel}=getRange(gran,offset);
+  const inRange=quotes.filter(q=>{const d=new Date(q.created_at);return d>=rangeStart&&d<rangeEnd;});
   const quoted=inRange.reduce((s,q)=>s+(q.final_price||0),0);
   const acceptedQ=inRange.filter(q=>q.status==="accepted"||q.status==="seasonal_complete");
   // Recurring: count final_price × visit_count. One-time: count final_price once.
@@ -986,11 +1003,17 @@ function BusinessScreen({bp,quotes,settings,clients}){
   return (
     <div style={{padding:isDesktop?0:16}}>
       {!isDesktop&&<div style={{fontSize:26,fontWeight:900,color:"#0f172a",marginBottom:14}}>Business</div>}
-      <div className="lb-scroll" style={{display:"flex",gap:6,marginBottom:14,background:"#f1f5f9",borderRadius:12,padding:4,overflowX:"auto"}}>
-        {[["7","7 days"],["30","30 days"],["90","90 days"],["365","12 months"]].map(([k,lbl])=>(
-          <button key={k} onClick={()=>setPeriod(k)} style={{flex:1,height:36,minHeight:36,border:"none",borderRadius:9,background:period===k?"#ffffff":"transparent",color:period===k?"#0f172a":"#64748b",fontWeight:period===k?700:600,fontSize:12,cursor:"pointer",fontFamily:"inherit",boxShadow:period===k?"0 1px 3px rgba(0,0,0,.08)":"none",whiteSpace:"nowrap",padding:"0 10px"}}>{lbl}</button>
+      <div style={{display:"flex",gap:6,marginBottom:8,flexWrap:"wrap"}}>
+        {[["day","Day"],["week","Week"],["month","Month"],["year","Year"]].map(([k,lbl])=>(
+          <Chip key={k} label={lbl} active={gran===k} onClick={()=>{setGran(k);setOffset(0);}}/>
         ))}
       </div>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14,background:"#f1f5f9",borderRadius:12,padding:"6px 8px"}}>
+        <button onClick={()=>setOffset(o=>o-1)} style={{width:36,height:36,minHeight:36,border:"none",borderRadius:8,background:"#ffffff",color:"#0f172a",fontSize:18,fontWeight:700,cursor:"pointer",fontFamily:"inherit",boxShadow:"0 1px 2px rgba(0,0,0,.06)"}}>←</button>
+        <button onClick={()=>setOffset(0)} style={{background:"none",border:"none",fontSize:13,fontWeight:700,color:"#0f172a",cursor:"pointer",fontFamily:"inherit",padding:"4px 8px",minHeight:32}}>{rangeLabel}</button>
+        <button onClick={()=>setOffset(o=>o+1)} disabled={offset>=0} style={{width:36,height:36,minHeight:36,border:"none",borderRadius:8,background:offset>=0?"#e2e8f0":"#ffffff",color:offset>=0?"#94a3b8":"#0f172a",fontSize:18,fontWeight:700,cursor:offset>=0?"default":"pointer",fontFamily:"inherit",boxShadow:offset>=0?"none":"0 1px 2px rgba(0,0,0,.06)"}}>→</button>
+      </div>
+      <div style={isDesktop?{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}:{}}>
       <Card>
         <Lbl>Revenue</Lbl>
         <Row label="Quoted" sub="total value of quotes sent" value={$$(quoted)}/>
@@ -1006,10 +1029,7 @@ function BusinessScreen({bp,quotes,settings,clients}){
         </div>
         {impliedMargin>0&&<div style={{fontSize:10,color:"#94a3b8",marginTop:2}}>estimated profit after costs</div>}
       </Card>
-      <Card>
-        <Lbl>Activity</Lbl>
-        <div style={{fontSize:13,color:"#64748b",padding:"8px 0",borderBottom:"1px solid #f1f5f9"}}>⏳ {pending} pending · awaiting client response</div>
-      </Card>
+      </div>
       {topClients.length>0&&(
         <Card>
           <Lbl>Top Clients</Lbl>
@@ -1526,7 +1546,7 @@ function SettingsScreen({bp,settings,onSave,onLogout}){
     quote_validity_days:"How many days your quotes stay active before expiring. After this period, the quote shows as EXPIRED and you'll need to resend with updated pricing. 30 days is standard.",
     follow_up_days:"How many days after sending a quote you want a follow-up reminder. Quotes older than this show a nudge on the home screen. 3 days is a good default.",
   };
-  const FIELDS=[{key:"mow_rate",label:"Mow Rate ($/20k sqft)"},{key:"trim_rate",label:"Trim Rate ($/3k linear ft)"},{key:"equipment_cost",label:"Equipment Cost ($/hr)"},{key:"hourly_rate",label:"Hourly Rate ($/worker/hr)"},{key:"minimum_bid",label:"Minimum Bid ($)"},{key:"profit_margin",label:"Profit Margin (%)",pct:true},{key:"quote_validity_days",label:"Quote Valid For (days)"},{key:"follow_up_days",label:"Follow-up Reminder (days)"}];
+  const FIELDS=[{key:"mow_rate",label:"Mow Rate ($/20k sqft)"},{key:"trim_rate",label:"Trim Rate ($/3k linear ft)"},{key:"equipment_cost",label:"Equipment Cost ($/hr)"},{key:"hourly_rate",label:"Hourly Rate ($/worker/hr)"},{key:"minimum_bid",label:"Minimum Bid ($)"},{key:"profit_margin",label:"Profit Margin (%)",pct:true},{key:"quote_validity_days",label:"Quote Valid For (days)"}];
   const [logoMsg,setLogoMsg]=useState("");
   const compressLogo = (file) => new Promise((resolve) => {
     const img = new Image();
@@ -1605,6 +1625,18 @@ function SettingsScreen({bp,settings,onSave,onLogout}){
         <div>
           <Lbl>Risk Default</Lbl>
           <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{RISK.map(o=><Chip key={o.value} label={`${o.label} (${o.value}×)`} active={loc.risk_default===o.value} onClick={()=>set("risk_default",o.value)}/>)}</div>
+        </div>
+        <div style={{marginTop:16,paddingTop:14,borderTop:"1px solid #e2e8f0"}}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
+            <span style={{fontSize:13,fontWeight:600,color:"#334155"}}>Follow-up Reminders</span>
+            <div style={{display:"flex",alignItems:"center",gap:8}}>
+              <Inp type="number" min="1" max="30" value={loc.follow_up_days||3} onChange={e=>set("follow_up_days",parseInt(e.target.value)||3)} style={{width:56,height:36,padding:"0 8px",fontSize:14,textAlign:"center",borderRadius:8,opacity:loc.follow_up_enabled===false?.4:1}}/>
+              <span style={{fontSize:12,color:"#64748b"}}>days</span>
+              <div onClick={()=>set("follow_up_enabled",!loc.follow_up_enabled)} style={{width:44,height:26,borderRadius:13,background:loc.follow_up_enabled!==false?"#15803d":"#cbd5e1",cursor:"pointer",position:"relative",transition:"background .2s",flexShrink:0}}>
+                <div style={{width:22,height:22,background:"#ffffff",borderRadius:"50%",position:"absolute",top:2,left:loc.follow_up_enabled!==false?20:2,transition:"left .2s",boxShadow:"0 1px 3px rgba(0,0,0,.2)"}}/>
+              </div>
+            </div>
+          </div>
         </div>
       </Card>
   );
