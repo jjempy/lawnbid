@@ -569,6 +569,8 @@ export default function LawnBid() {
         parent_id:   rec.parentId || null,
         notes:       rec.notes,
         attachments: Array.isArray(rec.attachments) ? rec.attachments : [],
+        is_recurring: !!rec.is_recurring,
+        recurring_frequency: rec.recurring_frequency || null,
         sent_at:     status === "sent" ? now : (rec.sentAt || null),
         expiry_date: rec.isNew ? addDays(now, settingsRef.current.quote_validity_days || 30) : undefined,
       };
@@ -881,7 +883,8 @@ function HomeScreen({bp,quotes,settings,onNew,onView}){
   const followUpDaysVal=settings?.follow_up_days||3;
   const followUpOn=settings?.follow_up_enabled!==false;
   const isFollowUp=q=>followUpOn&&q.status==="sent"&&q.created_at&&(Date.now()-new Date(q.created_at).getTime())>followUpDaysVal*86400000;
-  const filtered=filter==="all"?quotes:filter==="followup"?quotes.filter(isFollowUp):filter==="recurring"?quotes.filter(q=>q.is_recurring):quotes.filter(q=>q.status===filter);
+  const isRecurring=q=>q.is_recurring===true||q.is_recurring==="true";
+  const filtered=filter==="all"?quotes:filter==="followup"?quotes.filter(isFollowUp):filter==="recurring"?quotes.filter(isRecurring):quotes.filter(q=>q.status===filter);
   const shown=(search.trim()?filtered.filter(q=>{const s=search.toLowerCase();return (q.client_name||"").toLowerCase().includes(s)||(q.address||"").toLowerCase().includes(s)||(q.quote_id||"").toLowerCase().includes(s);}):filtered).sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));
   const isDesktop = bp==="desktop";
   const showDetailRow = bp!=="mobile";
@@ -902,7 +905,7 @@ function HomeScreen({bp,quotes,settings,onNew,onView}){
       )}
       <div style={{display:"flex",gap:6,margin:isDesktop?"0 0 12px":"12px 0 8px",flexWrap:"wrap"}}>
         {["all","draft","sent","accepted","declined","recurring",...(followUpOn?["followup"]:[])].map(f=>(
-          <Chip key={f} label={f==="all"?`All (${quotes.length})`:f==="followup"?`⭐ Follow-up (${quotes.filter(isFollowUp).length})`:f==="recurring"?`↻ Recurring (${quotes.filter(q=>q.is_recurring).length})`:`${f[0].toUpperCase()+f.slice(1)} (${quotes.filter(q=>q.status===f).length})`} active={filter===f} onClick={()=>setFilter(f)}/>
+          <Chip key={f} label={f==="all"?`All (${quotes.length})`:f==="followup"?`⭐ Follow-up (${quotes.filter(isFollowUp).length})`:f==="recurring"?`↻ Recurring (${quotes.filter(isRecurring).length})`:`${f[0].toUpperCase()+f.slice(1)} (${quotes.filter(q=>q.status===f).length})`} active={filter===f} onClick={()=>setFilter(f)}/>
         ))}
       </div>
       <div style={{position:"relative",marginBottom:10}}>
