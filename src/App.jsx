@@ -97,8 +97,8 @@ const MAX_FILE_BYTES = 10 * 1024 * 1024; // 10MB
 const ALLOWED_EXT = ["jpg","jpeg","png","pdf","txt","heic"];
 const ATTACH_ACCEPT = ".jpg,.jpeg,.png,.pdf,.txt,.heic,image/jpeg,image/png,application/pdf,text/plain,image/heic";
 
-const STATUS_COLOR = { draft:"#f59e0b", sent:"#3b82f6", accepted:"#16a34a", declined:"#94a3b8" };
-const STATUS_BG    = { draft:"#fffbeb", sent:"#eff6ff", accepted:"#f0fdf4", declined:"#f8fafc" };
+const STATUS_COLOR = { draft:"#f59e0b", sent:"#3b82f6", accepted:"#16a34a", declined:"#94a3b8", seasonal_complete:"#16a34a" };
+const STATUS_BG    = { draft:"#fffbeb", sent:"#eff6ff", accepted:"#f0fdf4", declined:"#f8fafc", seasonal_complete:"#f0fdf4" };
 const DECLINE_REASONS = ["Price too high","Went with competitor","No response","Client changed mind","Other"];
 
 const uid = () => Math.random().toString(36).slice(2,8).toUpperCase();
@@ -662,15 +662,28 @@ export default function LawnBid() {
       onDuplicate={()=>editQuote(activeQ,true)}
       onDelete={()=>handleDeleteQuote(activeQ.quote_id)}
       onAccepted={()=>handleAccepted(activeQ.quote_id)}
-      onVisitComplete={async(dateStr,schedule)=>{
+      onVisitComplete={async(dateStr,schedule,manualDate)=>{
         const freq=activeQ.recurring_frequency;
         const addFreq=(base)=>{const d=new Date(base);if(freq==="weekly")d.setDate(d.getDate()+7);else if(freq==="monthly")d.setMonth(d.getMonth()+1);else d.setDate(d.getDate()+14);return d.toISOString();};
-        const baseForNext=schedule==="original"?(activeQ.next_due_at||activeQ.created_at):dateStr;
-        const next=addFreq(baseForNext);
-        const updates={last_completed_at:new Date(dateStr).toISOString(),visit_count:(activeQ.visit_count||0)+1,next_due_at:next};
-        try{await updateQuoteStatus(activeQ.quote_id,"accepted",updates);
-        setQuotes(prev=>prev.map(q=>q.quote_id===activeQ.quote_id?{...q,...updates}:q));
-        setToast("Visit marked complete.");}catch(e){alert(dbErrorMessage(e));}
+        let updates={};
+        if(schedule==="set_next_date"){
+          // Just setting next date, no visit completion
+          updates={next_due_at:new Date(manualDate).toISOString()};
+        }else if(schedule==="end"){
+          // End of season
+          updates={status:"seasonal_complete",last_completed_at:new Date(dateStr).toISOString(),visit_count:(activeQ.visit_count||0)+1,next_due_at:null};
+        }else if(schedule==="manual"){
+          // Complete visit but schedule manually later
+          updates={last_completed_at:new Date(dateStr).toISOString(),visit_count:(activeQ.visit_count||0)+1,next_due_at:null};
+        }else{
+          // original or completion
+          const baseForNext=schedule==="original"?(activeQ.next_due_at||activeQ.created_at):dateStr;
+          updates={last_completed_at:new Date(dateStr).toISOString(),visit_count:(activeQ.visit_count||0)+1,next_due_at:addFreq(baseForNext)};
+        }
+        const newStatus=schedule==="end"?"seasonal_complete":"accepted";
+        try{await updateQuoteStatus(activeQ.quote_id,newStatus,updates);
+        setQuotes(prev=>prev.map(q=>q.quote_id===activeQ.quote_id?{...q,status:newStatus,...updates}:q));
+        setToast(schedule==="end"?"Season complete — service ended.":schedule==="set_next_date"?"Next visit date set.":"Visit marked complete.");}catch(e){alert(dbErrorMessage(e));}
       }}
       onDecline={async(reason)=>{
         try{await updateQuoteStatus(activeQ.quote_id,"declined",{declined_reason:reason});
@@ -894,7 +907,7 @@ function HomeScreen({bp,quotes,settings,onNew,onView}){
           {quotes.length===0&&<div style={{fontSize:13,marginTop:6}}>Tap + New Quote to get started</div>}
         </div>
       ):shown.map(q=>{
-        const expired = isExpired(q.expiry_date) && q.status!=="accepted" && q.status!=="declined";
+        const expired = isExpired(q.expiry_date) && q.status!=="accepted" && q.status!=="declined" && q.status!=="seasonal_complete";
         const followUpDays = settings?.follow_up_days || 3;
         const needsFollowUp = q.status==="sent" && q.created_at && (Date.now()-new Date(q.created_at).getTime())>followUpDays*86400000;
         return (
@@ -904,8 +917,8 @@ function HomeScreen({bp,quotes,settings,onNew,onView}){
               <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:2,flexWrap:"wrap"}}>
                 <div style={{fontWeight:600,fontSize:15,color:"#0f172a",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",letterSpacing:-.1}}>{q.client_name||"No client"}</div>
                 {q.parent_id&&<span style={{fontSize:10,background:"#e0f2fe",color:"#0369a1",padding:"1px 5px",borderRadius:4,fontWeight:700,flexShrink:0}}>V2</span>}
-                {q.is_recurring&&<span style={{fontSize:10,background:"#dcfce7",color:"#15803d",padding:"1px 5px",borderRadius:4,fontWeight:700,flexShrink:0}}>↻ {q.recurring_frequency==="weekly"?"Weekly":q.recurring_frequency==="monthly"?"Monthly":"Biweekly"}</span>}
-                {expired&&!q.is_recurring&&<span style={{fontSize:10,background:"#fee2e2",color:"#dc2626",padding:"1px 6px",borderRadius:4,fontWeight:700,flexShrink:0,letterSpacing:.4}}>EXPIRED</span>}
+                {q.is_recurring&&<span style={{fontSize:10,background:"#dcfce7",color:"#15803d",padding:"1px 5px",borderRadius:4,fontWeight:700,flexShrink:0}}>↻ {q.recurring_frequency==="weekly"?"Weekly":q.recurring_frequency==="monthly"?"Monthly":"Biweekly"}{q.visit_count>0?` · Visit ${q.visit_count}`:""}{q.status==="seasonal_complete"?" · Season complete ✓":q.next_due_at?` · Next: ${fmtD(q.next_due_at)}`:q.status==="accepted"?" · Next visit TBD":""}</span>}
+                {expired&&!q.is_recurring&&q.status!=="seasonal_complete"&&<span style={{fontSize:10,background:"#fee2e2",color:"#dc2626",padding:"1px 6px",borderRadius:4,fontWeight:700,flexShrink:0,letterSpacing:.4}}>EXPIRED</span>}
                 {needsFollowUp&&<span style={{fontSize:12,flexShrink:0}} title="Follow-up needed">⭐</span>}
               </div>
               <div style={{fontSize:13,color:"#64748b",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontWeight:400}}>{q.address}</div>
@@ -942,8 +955,11 @@ function BusinessScreen({bp,quotes,settings,clients}){
   const since=new Date(Date.now()-days*86400000);
   const inRange=quotes.filter(q=>new Date(q.created_at)>=since);
   const quoted=inRange.reduce((s,q)=>s+(q.final_price||0),0);
-  const acceptedQ=inRange.filter(q=>q.status==="accepted");
-  const acceptedRev=acceptedQ.reduce((s,q)=>s+(q.final_price||0),0);
+  const acceptedQ=inRange.filter(q=>q.status==="accepted"||q.status==="seasonal_complete");
+  // Recurring: count final_price × visit_count. One-time: count final_price once.
+  const recurringRev=acceptedQ.filter(q=>q.is_recurring).reduce((s,q)=>s+(q.final_price||0)*Math.max(1,q.visit_count||1),0);
+  const onetimeRev=acceptedQ.filter(q=>!q.is_recurring).reduce((s,q)=>s+(q.final_price||0),0);
+  const acceptedRev=recurringRev+onetimeRev;
   const pendingQ=inRange.filter(q=>q.status==="sent");
   const pendingRev=pendingQ.reduce((s,q)=>s+(q.final_price||0),0);
   const sentAndAccepted=inRange.filter(q=>q.status==="sent"||q.status==="accepted").length;
@@ -978,7 +994,7 @@ function BusinessScreen({bp,quotes,settings,clients}){
       <Card>
         <Lbl>Revenue</Lbl>
         <Row label="Quoted" sub="total value of quotes sent" value={$$(quoted)}/>
-        <Row label="Accepted" sub="approved jobs, ready to execute" value={$$(acceptedRev)} color="#15803d"/>
+        <Row label="Accepted" sub={recurringRev>0&&onetimeRev>0?`${$$(recurringRev)} recurring · ${$$(onetimeRev)} one-time`:"approved jobs, ready to execute"} value={$$(acceptedRev)} color="#15803d"/>
         <Row label="Pending" sub="sent, awaiting client response" value={$$(pendingRev)} color="#3b82f6"/>
       </Card>
       <Card>
@@ -1215,6 +1231,8 @@ function QuoteDetail({bp,quote,allQuotes,settings,onBack,onEdit,onDuplicate,onDe
   const [visitOpen,setVisitOpen]=useState(false);
   const [visitDate,setVisitDate]=useState(new Date().toISOString().slice(0,10));
   const [visitSchedule,setVisitSchedule]=useState("original");
+  const [nextDateOpen,setNextDateOpen]=useState(false);
+  const [nextDateVal,setNextDateVal]=useState(new Date().toISOString().slice(0,10));
   const [confirmDel,setConfirmDel]=useState(false);
   const [copied,setCopied]=useState(false);
   const [lightbox,setLightbox]=useState(null);
@@ -1344,13 +1362,13 @@ function QuoteDetail({bp,quote,allQuotes,settings,onBack,onEdit,onDuplicate,onDe
         </Card>
       )}
       {quote.status==="declined"&&quote.declined_reason&&<div style={{fontSize:12,color:"#94a3b8",marginTop:4}}>Declined: {quote.declined_reason}</div>}
-      {quote.is_recurring&&quote.status==="accepted"&&(
+      {quote.is_recurring&&(quote.status==="accepted"||quote.status==="seasonal_complete")&&(
         <>
           <Card style={{marginTop:8}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <div>
                 <div style={{fontSize:13,fontWeight:700,color:"#0f172a"}}>↻ {quote.recurring_frequency==="weekly"?"Weekly":quote.recurring_frequency==="monthly"?"Monthly":"Biweekly"} Service</div>
-                <div style={{fontSize:12,color:"#64748b",marginTop:2}}>Visit {quote.visit_count||0}{quote.next_due_at?` · Next: ${fmtD(quote.next_due_at)}`:""}</div>
+                <div style={{fontSize:12,color:"#64748b",marginTop:2}}>Visit {quote.visit_count||0}{quote.status==="seasonal_complete"?" · Season complete ✓":quote.next_due_at?` · Next: ${fmtD(quote.next_due_at)}`:" · Next visit TBD"}</div>
                 {quote.last_completed_at&&<div style={{fontSize:11,color:"#94a3b8",marginTop:2}}>Last completed: {fmtD(quote.last_completed_at)}</div>}
               </div>
             </div>
