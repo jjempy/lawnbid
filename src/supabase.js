@@ -4,6 +4,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // ALTER TABLE quotes   ADD COLUMN IF NOT EXISTS expiry_date timestamptz;
 // ALTER TABLE quotes   ADD COLUMN IF NOT EXISTS attachments jsonb DEFAULT '[]';
+// ALTER TABLE quotes   ADD COLUMN IF NOT EXISTS declined_reason text;
+// ALTER TABLE settings ADD COLUMN IF NOT EXISTS follow_up_days integer DEFAULT 3;
 // ALTER TABLE settings ADD COLUMN IF NOT EXISTS profit_margin decimal DEFAULT 0.30;
 // ALTER TABLE settings ADD COLUMN IF NOT EXISTS company_logo_base64 text;
 // ALTER TABLE settings ADD COLUMN IF NOT EXISTS plan text DEFAULT 'free';

@@ -36,6 +36,7 @@ const DEFAULT_SETTINGS = {
   minimum_bid: 55, complexity_default: 1.0, risk_default: 1.0,
   profit_margin: 0.30,
   quote_validity_days: 30,
+  follow_up_days: 3,
   company_name: "", company_phone: "", company_email: "", company_logo_base64: "",
   plan: "free", quote_count_this_month: 0, quote_count_reset_at: new Date().toISOString(),
 };
@@ -96,8 +97,9 @@ const MAX_FILE_BYTES = 10 * 1024 * 1024; // 10MB
 const ALLOWED_EXT = ["jpg","jpeg","png","pdf","txt","heic"];
 const ATTACH_ACCEPT = ".jpg,.jpeg,.png,.pdf,.txt,.heic,image/jpeg,image/png,application/pdf,text/plain,image/heic";
 
-const STATUS_COLOR = { draft:"#f59e0b", sent:"#3b82f6", accepted:"#16a34a" };
-const STATUS_BG    = { draft:"#fffbeb", sent:"#eff6ff", accepted:"#f0fdf4" };
+const STATUS_COLOR = { draft:"#f59e0b", sent:"#3b82f6", accepted:"#16a34a", declined:"#94a3b8" };
+const STATUS_BG    = { draft:"#fffbeb", sent:"#eff6ff", accepted:"#f0fdf4", declined:"#f8fafc" };
+const DECLINE_REASONS = ["Price too high","Went with competitor","No response","Client changed mind","Other"];
 
 const uid = () => Math.random().toString(36).slice(2,8).toUpperCase();
 
@@ -125,6 +127,7 @@ const fmtT = h => { if(!h||h<=0) return "—"; const hr=Math.floor(h),m=Math.rou
 const fmtD = iso => new Date(iso).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"});
 const fmtTS= iso => new Date(iso).toLocaleString("en-US",{month:"short",day:"numeric",year:"numeric",hour:"numeric",minute:"2-digit"});
 const fmtArea = (sqft) => { if(!sqft) return "—"; return `${Math.round(sqft).toLocaleString()} sqft (${(sqft/43560).toFixed(2)} ac)`; };
+const formatPhone = (val) => { const d=(val||"").replace(/\D/g,"").slice(0,10); if(d.length<4)return d; if(d.length<7)return `(${d.slice(0,3)}) ${d.slice(3)}`; return `(${d.slice(0,3)}) ${d.slice(3,6)}-${d.slice(6)}`; };
 const isExpired = iso => iso && new Date(iso) < new Date();
 const addDays = (iso, days) => new Date(new Date(iso).getTime() + (days||30)*86400000).toISOString();
 
@@ -269,30 +272,25 @@ async function generateQuotePDF(quote, settings, calc, time) {
   y += 10;
   doc.line(M, y, W - M, y); y += 14;
 
-  const pdfItems = (calc?.bd || []).filter(r => {
-    const lbl = (r.label || "").toLowerCase();
-    if (lbl.includes("complexity") || lbl.includes("risk") || lbl.includes("profit margin")) return false;
-    if (lbl.includes("discount") && (!r.value || r.value === 0)) return false;
-    return true;
-  }).map(r => ({
-    ...r,
-    label: r.label?.replace("Subtotal (costs)","Subtotal").replace("Trim (perimeter)","Trim & Edge").replace("Mow (area)","Mow") || r.label,
-  }));
+  // Bundled: Lawn Service = mow + trim + equipment (before any multipliers)
+  const lawnServiceTotal = (calc?.mc||0) + (calc?.tc||0) + (calc?.ec||0);
+  const hasDiscount = (quote.discount_pct||0) > 0 && calc;
+  const discountAmt = hasDiscount ? calc.fl * quote.discount_pct / 100 : 0;
   doc.setFont("helvetica","normal"); doc.setFontSize(10); doc.setTextColor(...DARK);
-  pdfItems.forEach(r => {
-    if (r.subtotal) {
-      doc.setDrawColor(...LINE); doc.line(M, y - 4, W - M, y - 4);
-      doc.setFont("helvetica","bold"); doc.setTextColor(...DARK);
-    } else if (r.modifier) {
-      doc.setFont("helvetica","normal"); doc.setTextColor(...MUTED);
-    } else {
-      doc.setFont("helvetica","normal"); doc.setTextColor(...DARK);
-    }
-    doc.text(r.label, M, y);
-    const amt = `${r.modifier && r.value>0 ? "+" : ""}${$$(r.value)}`;
-    doc.text(amt, W - M, y, { align: "right" });
+  doc.text("Lawn Service", M, y);
+  doc.text($$(lawnServiceTotal), W - M, y, { align: "right" });
+  y += 18;
+  if (hasDiscount) {
+    doc.setDrawColor(...LINE); doc.line(M, y - 4, W - M, y - 4);
+    doc.setFont("helvetica","bold"); doc.setTextColor(...DARK);
+    doc.text("Subtotal", M, y);
+    doc.text($$(lawnServiceTotal), W - M, y, { align: "right" });
     y += 18;
-  });
+    doc.setFont("helvetica","normal"); doc.setTextColor(...MUTED);
+    doc.text(`Discount (${quote.discount_pct}%)`, M, y);
+    doc.text(`-${$$(discountAmt)}`, W - M, y, { align: "right" });
+    y += 18;
+  }
 
   y += 6;
   doc.setDrawColor(...DARK); doc.setLineWidth(1.2); doc.line(M, y, W - M, y); y += 26;
@@ -660,7 +658,12 @@ export default function LawnBid() {
       onEdit={()=>editQuote(activeQ, activeQ.status==="sent"||activeQ.status==="accepted")}
       onDuplicate={()=>editQuote(activeQ,true)}
       onDelete={()=>handleDeleteQuote(activeQ.quote_id)}
-      onAccepted={()=>handleAccepted(activeQ.quote_id)}/>
+      onAccepted={()=>handleAccepted(activeQ.quote_id)}
+      onDecline={async(reason)=>{
+        try{await updateQuoteStatus(activeQ.quote_id,"declined",{declined_reason:reason});
+        setQuotes(prev=>prev.map(q=>q.quote_id===activeQ.quote_id?{...q,status:"declined",declined_reason:reason}:q));
+        }catch(e){alert(dbErrorMessage(e));}
+      }}/>
   ):screen==="client-detail"&&activeC ? (
     <ClientDetail bp={bp} client={activeC} quotes={quotes.filter(q=>q.client_id===activeC.id)}
       onBack={()=>{setTab("clients");setScreen("home");}}
@@ -670,7 +673,7 @@ export default function LawnBid() {
         setClients(prev=>prev.map(c=>c.id===activeC.id?{...c,...updates}:c));
       }}/>
   ):tab==="quotes" ? (
-    <HomeScreen bp={bp} quotes={quotes} onNew={startNew} onView={qid=>{setSelQ(qid);setScreen("quote-detail");}}/>
+    <HomeScreen bp={bp} quotes={quotes} settings={settings} onNew={startNew} onView={qid=>{setSelQ(qid);setScreen("quote-detail");}}/>
   ):tab==="clients" ? (
     <ClientsScreen bp={bp} clients={clients} quotes={quotes} onView={cid=>{setSelC(cid);setScreen("client-detail");}}/>
   ):(
@@ -817,7 +820,7 @@ function UpgradeModal({feature,onClose}){
 }
 
 // ─── Home ──────────────────────────────────────────────────────────────────────
-function HomeScreen({bp,quotes,onNew,onView}){
+function HomeScreen({bp,quotes,settings,onNew,onView}){
   const [filter,setFilter]=useState("all");
   const shown=(filter==="all"?quotes:quotes.filter(q=>q.status===filter)).sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));
   const isDesktop = bp==="desktop";
@@ -837,8 +840,9 @@ function HomeScreen({bp,quotes,onNew,onView}){
           <Btn onClick={onNew} style={{height:40,minHeight:40,padding:"0 14px",fontSize:13,borderRadius:12}}>+ New Quote</Btn>
         </div>
       )}
+      <BusinessSnapshot quotes={quotes} settings={settings}/>
       <div className="lb-scroll" style={{display:"flex",gap:6,margin:isDesktop?"0 0 12px":"12px 0 8px",overflowX:"auto",paddingBottom:4}}>
-        {["all","draft","sent","accepted"].map(f=>(
+        {["all","draft","sent","accepted","declined"].map(f=>(
           <Chip key={f} label={f==="all"?`All (${quotes.length})`:`${f[0].toUpperCase()+f.slice(1)} (${quotes.filter(q=>q.status===f).length})`} active={filter===f} onClick={()=>setFilter(f)}/>
         ))}
       </div>
@@ -849,7 +853,9 @@ function HomeScreen({bp,quotes,onNew,onView}){
           {quotes.length===0&&<div style={{fontSize:13,marginTop:6}}>Tap + New Quote to get started</div>}
         </div>
       ):shown.map(q=>{
-        const expired = isExpired(q.expiry_date) && q.status!=="accepted";
+        const expired = isExpired(q.expiry_date) && q.status!=="accepted" && q.status!=="declined";
+        const followUpDays = settings?.follow_up_days || 3;
+        const needsFollowUp = q.status==="sent" && q.created_at && (Date.now()-new Date(q.created_at).getTime())>followUpDays*86400000;
         return (
         <Card key={q.quote_id} style={{cursor:"pointer",padding:"16px 18px",marginBottom:8,borderLeft:`3px solid ${STATUS_COLOR[q.status]||"#e2e8f0"}`}} onClick={()=>onView(q.quote_id)}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:12}}>
@@ -858,6 +864,7 @@ function HomeScreen({bp,quotes,onNew,onView}){
                 <div style={{fontWeight:600,fontSize:15,color:"#0f172a",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",letterSpacing:-.1}}>{q.client_name||"No client"}</div>
                 {q.parent_id&&<span style={{fontSize:10,background:"#e0f2fe",color:"#0369a1",padding:"1px 5px",borderRadius:4,fontWeight:700,flexShrink:0}}>V2</span>}
                 {expired&&<span style={{fontSize:10,background:"#fee2e2",color:"#dc2626",padding:"1px 6px",borderRadius:4,fontWeight:700,flexShrink:0,letterSpacing:.4}}>EXPIRED</span>}
+                {needsFollowUp&&<span style={{fontSize:10,background:"#fff7ed",color:"#ea580c",padding:"1px 6px",borderRadius:4,fontWeight:700,flexShrink:0}}>↩ Follow up</span>}
               </div>
               <div style={{fontSize:13,color:"#64748b",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontWeight:400}}>{q.address}</div>
               {showDetailRow && (
@@ -880,6 +887,64 @@ function HomeScreen({bp,quotes,onNew,onView}){
       </div>
       {isDesktop && <HomeStats quotes={quotes}/>}
     </div>
+  );
+}
+
+function BusinessSnapshot({quotes,settings}){
+  const [open,setOpen]=useState(false);
+  const now=new Date();const monthStart=new Date(now.getFullYear(),now.getMonth(),1);
+  const thisMonth=quotes.filter(q=>new Date(q.created_at)>=monthStart);
+  const quoted=thisMonth.reduce((s,q)=>s+(q.final_price||0),0);
+  const acceptedQ=thisMonth.filter(q=>q.status==="accepted");
+  const acceptedRev=acceptedQ.reduce((s,q)=>s+(q.final_price||0),0);
+  const sentAndAccepted=thisMonth.filter(q=>q.status==="sent"||q.status==="accepted").length;
+  const closeRate=sentAndAccepted>0?Math.round(acceptedQ.length/sentAndAccepted*100):0;
+  const followUpDays=settings?.follow_up_days||3;
+  const followUp=quotes.filter(q=>q.status==="sent"&&(Date.now()-new Date(q.created_at).getTime())>followUpDays*86400000).length;
+  const pending=quotes.filter(q=>q.status==="sent").length;
+  // Best client all time
+  const clientRevMap={};
+  quotes.filter(q=>q.status==="accepted"&&q.client_name).forEach(q=>{clientRevMap[q.client_name]=(clientRevMap[q.client_name]||0)+(q.final_price||0);});
+  const bestClient=Object.entries(clientRevMap).sort((a,b)=>b[1]-a[1])[0];
+  // Implied hourly
+  const totalHours=acceptedQ.reduce((s,q)=>{const t=calcTime(q.area_sqft,q.linear_ft,q.crew_size,q.complexity);return s+(t?t.adj:0);},0);
+  const impliedHourly=totalHours>0?Math.round(acceptedRev/totalHours):0;
+  return (
+    <Card style={{padding:0,overflow:"hidden",marginBottom:10}}>
+      <button onClick={()=>setOpen(o=>!o)} style={{width:"100%",display:"flex",justifyContent:"space-between",alignItems:"center",padding:"12px 16px",background:"none",border:"none",cursor:"pointer",fontFamily:"inherit"}}>
+        <span style={{fontSize:13,fontWeight:700,color:"#0f172a"}}>Business Snapshot</span>
+        <span style={{fontSize:11,color:"#94a3b8",fontWeight:600}}>{open?"▲":"▼"}</span>
+      </button>
+      {open&&(
+        <div style={{padding:"0 16px 14px",fontSize:13}}>
+          <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
+            <span style={{color:"#64748b"}}>Quoted this month</span>
+            <span style={{fontWeight:700,color:"#0f172a"}}>{$$(quoted)}</span>
+          </div>
+          <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
+            <span style={{color:"#64748b"}}>Accepted</span>
+            <span style={{fontWeight:700,color:"#15803d"}}>{$$(acceptedRev)}</span>
+          </div>
+          <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
+            <span style={{color:"#64748b"}}>Close rate</span>
+            <span style={{fontWeight:700,color:"#0f172a"}}>{closeRate}%</span>
+          </div>
+          <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
+            <span style={{color:"#64748b"}}>Jobs this month</span>
+            <span style={{fontWeight:700,color:"#0f172a"}}>{acceptedQ.length}</span>
+          </div>
+          {impliedHourly>0&&<div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
+            <span style={{color:"#64748b"}}>~Implied hourly</span>
+            <span style={{fontWeight:700,color:"#0f172a"}}>${impliedHourly}/hr</span>
+          </div>}
+          <div style={{display:"flex",gap:12,marginTop:8,marginBottom:6}}>
+            {followUp>0&&<span style={{fontSize:12,color:"#ea580c",fontWeight:600}}>↩ Follow up ({followUp})</span>}
+            {pending>0&&<span style={{fontSize:12,color:"#3b82f6",fontWeight:600}}>Pending ({pending})</span>}
+          </div>
+          {bestClient&&<div style={{fontSize:12,color:"#64748b",marginTop:4}}>Best client: <span style={{fontWeight:600,color:"#0f172a"}}>{bestClient[0]}</span> {$$(bestClient[1])}</div>}
+        </div>
+      )}
+    </Card>
   );
 }
 
@@ -980,7 +1045,7 @@ function ClientDetail({bp,client,quotes,onBack,onViewQuote,onUpdateClient}){
       {[["name","Name *"],["phone","Phone"],["email","Email"],["default_address","Address"]].map(([k,lbl])=>(
         <div key={k} style={{marginBottom:10}}>
           <div style={{fontSize:12,fontWeight:600,color:"#334155",marginBottom:3}}>{lbl}</div>
-          <Inp value={editForm[k]} onChange={e=>setEditForm(f=>({...f,[k]:e.target.value}))} placeholder={lbl}/>
+          <Inp value={k==="phone"?formatPhone(editForm[k]):editForm[k]} onChange={e=>setEditForm(f=>({...f,[k]:k==="phone"?formatPhone(e.target.value):e.target.value}))} placeholder={lbl}/>
         </div>
       ))}
       {editMsg&&<div style={{fontSize:12,color:"#dc2626",marginBottom:8}}>⚠ {editMsg}</div>}
@@ -1064,8 +1129,10 @@ function ClientDetail({bp,client,quotes,onBack,onViewQuote,onUpdateClient}){
 }
 
 // ─── Quote Detail ─────────────────────────────────────────────────────────────
-function QuoteDetail({bp,quote,allQuotes,settings,onBack,onEdit,onDuplicate,onDelete,onAccepted}){
+function QuoteDetail({bp,quote,allQuotes,settings,onBack,onEdit,onDuplicate,onDelete,onAccepted,onDecline}){
   const {canExportPDF,showUpgrade} = usePlan();
+  const [declineOpen,setDeclineOpen]=useState(false);
+  const [declineReason,setDeclineReason]=useState("");
   const [confirmDel,setConfirmDel]=useState(false);
   const [copied,setCopied]=useState(false);
   const [lightbox,setLightbox]=useState(null);
@@ -1178,6 +1245,23 @@ function QuoteDetail({bp,quote,allQuotes,settings,onBack,onEdit,onDuplicate,onDe
         : <Btn variant="outline" onClick={()=>showUpgrade("PDF Quote Export")} style={{width:"100%",opacity:.7,display:"inline-flex",alignItems:"center",justifyContent:"center",gap:8}}><LockIcon size={14} color="#15803d"/>Download PDF — Pro</Btn>
       }
       {quote.status==="sent"&&<Btn variant="outline" onClick={onAccepted} style={{width:"100%"}}>✅ Mark as Accepted</Btn>}
+      {quote.status==="sent"&&!declineOpen&&<Btn variant="secondary" onClick={()=>setDeclineOpen(true)} style={{width:"100%"}}>Mark as Declined</Btn>}
+      {declineOpen&&(
+        <Card style={{border:"1.5px solid #e2e8f0",marginTop:4}}>
+          <div style={{fontSize:13,fontWeight:700,color:"#0f172a",marginBottom:8}}>Why was this declined?</div>
+          {DECLINE_REASONS.map(r=>(
+            <label key={r} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 0",cursor:"pointer",fontSize:13,color:"#334155"}}>
+              <input type="radio" name="decline" value={r} checked={declineReason===r} onChange={()=>setDeclineReason(r)} style={{accentColor:"#15803d"}}/>
+              {r}
+            </label>
+          ))}
+          <div style={{display:"flex",gap:8,marginTop:10}}>
+            <Btn variant="secondary" onClick={()=>{onDecline(declineReason||"No reason given");setDeclineOpen(false);}} disabled={!declineReason} style={{flex:1,height:40,minHeight:40,fontSize:13}}>Mark Declined</Btn>
+            <Btn variant="secondary" onClick={()=>{setDeclineOpen(false);setDeclineReason("");}} style={{flex:1,height:40,minHeight:40,fontSize:13}}>Cancel</Btn>
+          </div>
+        </Card>
+      )}
+      {quote.status==="declined"&&quote.declined_reason&&<div style={{fontSize:12,color:"#94a3b8",marginTop:4}}>Declined: {quote.declined_reason}</div>}
       <Btn variant="warning" onClick={onEdit} style={{width:"100%"}}>✏️ {isSent?"Edit (creates V2 quote)":"Edit Quote"}</Btn>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
         <Btn variant="secondary" onClick={onDuplicate}>📋 Duplicate</Btn>
@@ -1296,8 +1380,9 @@ function SettingsScreen({bp,settings,onSave,onLogout}){
     minimum_bid:"No quote goes below this amount. Set it high enough to cover your drive time, loading, and admin on every job. Most operators use $45–75. A job that takes 15 minutes still costs you time to schedule, drive, and invoice.",
     profit_margin:"Your target profit percentage. At 30%, a job that costs you $93 to do bills at $132 — $39 is your profit. This is true margin (not markup). Industry standard for lawn care is 25–40%. Start at 30% and adjust based on your local market.",
     quote_validity_days:"How many days your quotes stay active before expiring. After this period, the quote shows as EXPIRED and you'll need to resend with updated pricing. 30 days is standard.",
+    follow_up_days:"How many days after sending a quote you want a follow-up reminder. Quotes older than this show a nudge on the home screen. 3 days is a good default.",
   };
-  const FIELDS=[{key:"mow_rate",label:"Mow Rate ($/20k sqft)"},{key:"trim_rate",label:"Trim Rate ($/3k linear ft)"},{key:"equipment_cost",label:"Equipment Cost ($/hr)"},{key:"hourly_rate",label:"Hourly Rate ($/worker/hr)"},{key:"minimum_bid",label:"Minimum Bid ($)"},{key:"profit_margin",label:"Profit Margin (%)",pct:true},{key:"quote_validity_days",label:"Quote Valid For (days)"}];
+  const FIELDS=[{key:"mow_rate",label:"Mow Rate ($/20k sqft)"},{key:"trim_rate",label:"Trim Rate ($/3k linear ft)"},{key:"equipment_cost",label:"Equipment Cost ($/hr)"},{key:"hourly_rate",label:"Hourly Rate ($/worker/hr)"},{key:"minimum_bid",label:"Minimum Bid ($)"},{key:"profit_margin",label:"Profit Margin (%)",pct:true},{key:"quote_validity_days",label:"Quote Valid For (days)"},{key:"follow_up_days",label:"Follow-up Reminder (days)"}];
   const [logoMsg,setLogoMsg]=useState("");
   const compressLogo = (file) => new Promise((resolve) => {
     const img = new Image();
@@ -1348,22 +1433,24 @@ function SettingsScreen({bp,settings,onSave,onLogout}){
     catch(err) { console.error("[LawnBid] Logo remove failed:", err); }
   };
   const isDesktop = bp==="desktop";
+  const [rawVals,setRawVals]=useState({});
   const formulaCard = (
       <Card>
         <Lbl>Formula Defaults</Lbl>
         {FIELDS.map(({key,label,pct})=>{
-          const val = pct ? Math.round((loc[key] ?? 0) * 100) : loc[key];
-          const onChange = pct
-            ? e => { const n = Math.min(80, Math.max(0, parseFloat(e.target.value)||0)); set(key, n/100); }
-            : e => set(key, parseFloat(e.target.value)||0);
+          const displayVal = key in rawVals ? rawVals[key] : pct ? Math.round((loc[key]??0)*100) : loc[key];
           return (
           <div key={key} style={{marginBottom:14}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
               <span style={{fontSize:13,fontWeight:600,color:"#334155"}}>{label}</span>
               <button onClick={()=>setTip(tip===key?null:key)} style={{width:20,height:20,borderRadius:"50%",border:"1.5px solid #d1d5db",background:"none",fontSize:10,cursor:"pointer",color:"#64748b",fontFamily:"inherit"}}>?</button>
             </div>
-            {tip===key&&<div style={{background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:8,padding:"8px 12px",fontSize:12,color:"#166534",marginBottom:6}}>{TIPS[key]}</div>}
-            <Inp type="number" min={pct?0:undefined} max={pct?80:undefined} value={val} onChange={onChange}/>
+            {tip===key&&<div style={{background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:8,padding:"8px 12px",fontSize:12,color:"#166534",marginBottom:6,lineHeight:1.5}}>{TIPS[key]}</div>}
+            <Inp type="number" min={pct?0:undefined} max={pct?80:undefined} value={displayVal}
+              onFocus={()=>setRawVals(rv=>({...rv,[key]:String(pct?Math.round((loc[key]??0)*100):loc[key]??"")})) }
+              onChange={e=>setRawVals(rv=>({...rv,[key]:e.target.value}))}
+              onBlur={e=>{const v=parseFloat(e.target.value);const f=isNaN(v)?0:pct?Math.min(80,Math.max(0,v)):v;set(key,pct?f/100:f);setRawVals(rv=>{const n={...rv};delete n[key];return n;});}}
+            />
           </div>
           );
         })}
@@ -1397,10 +1484,10 @@ function SettingsScreen({bp,settings,onSave,onLogout}){
             </div>
           </div>
         </div>
-        {[["company_name","Company Name","text","Your Company"],["company_phone","Phone","tel","(555) 000-0000"],["company_email","Email","email","you@example.com"]].map(([k,lbl,t,ph])=>(
+        {[["company_name","Company Name","text","Your Company"],["company_phone","Phone","tel","(555) 555-5555"],["company_email","Email","email","you@example.com"]].map(([k,lbl,t,ph])=>(
           <div key={k} style={{marginBottom:12}}>
             <div style={{fontSize:13,fontWeight:600,color:"#334155",marginBottom:4}}>{lbl}</div>
-            <Inp type={t} value={loc[k]||""} onChange={e=>set(k,e.target.value)} placeholder={ph}/>
+            <Inp type={t} value={k==="company_phone"?formatPhone(loc[k]||""):(loc[k]||"")} onChange={e=>set(k,k==="company_phone"?formatPhone(e.target.value):e.target.value)} placeholder={ph}/>
           </div>
         ))}
       </Card>
@@ -1835,7 +1922,7 @@ function S1({flow,set,errors,clients}){
         {flow.clientId&&<div style={{background:"#f0fdf4",borderRadius:8,padding:"6px 10px",fontSize:12,color:"#166534",marginBottom:10}}>✓ Existing client — measurements pre-filled from last quote</div>}
         <div style={{marginBottom:12}}>
           <div style={{fontSize:13,fontWeight:600,color:"#334155",marginBottom:4}}>Phone *</div>
-          <Inp type="tel" value={flow.clientPhone} onChange={e=>set("clientPhone",e.target.value)} placeholder="(555) 000-0000"/>
+          <Inp type="tel" value={formatPhone(flow.clientPhone)} onChange={e=>set("clientPhone",formatPhone(e.target.value))} placeholder="(555) 555-5555"/>
           <ErrMsg msg={errors.clientPhone}/>
         </div>
         <div>
