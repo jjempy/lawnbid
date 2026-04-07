@@ -1641,14 +1641,14 @@ function SettingsScreen({bp,settings,onSave,onLogout,onLangChange}){
   };
   const reset=async()=>{if(confirm("Reset formula settings to defaults?")){const ns={...loc,...DEFAULT_SETTINGS};setLoc(ns);try{await onSave(ns);}catch(e){console.error("[LawnBid] Settings reset failed:",e);}}};
   const TIPS={
-    mow_rate:"What you charge to mow a standard half-acre lawn (20,000 sqft). If you quote $110 for a typical half-acre cut, set this to $110. The formula scales this rate up or down based on actual property size.",
-    trim_rate:"What you charge for one hour of trimming and edging. Most crews trim about 3,000 linear feet per hour. If you charge $18 for that hour of trimming work, set $18. This automatically adjusts based on how much edge your client has.",
-    equipment_cost:"Your true hourly cost to run your equipment — what it costs YOU, not what you charge. Add up: fuel ($3–5/hr) + maintenance ($2–3/hr) + depreciation (mower cost ÷ expected hours). Most owner-operators are between $8–18/hr. This is passed through to the quote as a real cost.",
-    hourly_rate:"Your true cost per worker per hour including wages, payroll taxes (~7.65%), and workers comp. Used only for time estimates — not directly in the price. Example: $17/hr wage + $1.30 taxes + $2 workers comp = $20.30/hr.",
-    minimum_bid:"No quote goes below this amount. Set it high enough to cover your drive time, loading, and admin on every job. Most operators use $45–75. A job that takes 15 minutes still costs you time to schedule, drive, and invoice.",
-    profit_margin:"Your target profit percentage. At 30%, a job that costs you $93 to do bills at $132 — $39 is your profit. This is true margin (not markup). Industry standard for lawn care is 25–40%. Start at 30% and adjust based on your local market.",
-    quote_validity_days:"How many days your quotes stay active before expiring. After this period, the quote shows as EXPIRED and you'll need to resend with updated pricing. 30 days is standard.",
-    follow_up_days:"How many days after sending a quote you want a follow-up reminder. Quotes older than this show a nudge on the home screen. 3 days is a good default.",
+    mow_rate:t("tip_mow_rate",lang),
+    trim_rate:t("tip_trim_rate",lang),
+    equipment_cost:t("tip_equipment_cost",lang),
+    hourly_rate:t("tip_hourly_rate",lang),
+    minimum_bid:t("tip_minimum_bid",lang),
+    profit_margin:t("tip_profit_margin",lang),
+    quote_validity_days:t("tip_quote_validity_days",lang),
+    follow_up_days:t("tip_follow_up_days",lang),
   };
   const FIELDS=[{key:"mow_rate",lk:"mow_rate_label"},{key:"trim_rate",lk:"trim_rate_label"},{key:"equipment_cost",lk:"equipment_cost_label"},{key:"hourly_rate",lk:"hourly_rate_label"},{key:"minimum_bid",lk:"minimum_bid_label"},{key:"profit_margin",lk:"profit_margin_label",pct:true},{key:"quote_validity_days",lk:"quote_valid_days"}];
   const [logoMsg,setLogoMsg]=useState("");
