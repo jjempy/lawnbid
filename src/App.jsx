@@ -215,7 +215,7 @@ async function generateQuotePDF(quote, settings, calc, time) {
   if (contact) doc.text(contact, textX, y + 40);
   // Right side: QUOTE label
   doc.setFont("helvetica","bold"); doc.setFontSize(22); doc.setTextColor(...PRIMARY);
-  doc.text("QUOTE", W - M, y + 22, { align: "right" });
+  doc.text(quote.is_recurring?"SERVICE AGREEMENT":"QUOTE", W - M, y + 22, { align: "right" });
   doc.setFont("helvetica","normal"); doc.setFontSize(10); doc.setTextColor(...MUTED);
   doc.text(`#${quote.quote_id}`, W - M, y + 40, { align: "right" });
 
@@ -321,7 +321,9 @@ async function generateQuotePDF(quote, settings, calc, time) {
   const footerY = doc.internal.pageSize.getHeight() - M;
   doc.setDrawColor(...LINE); doc.line(M, footerY - 24, W - M, footerY - 24);
   doc.setFont("helvetica","normal"); doc.setFontSize(9); doc.setTextColor(...MUTED);
-  const footerText = `Quote valid until ${expiryStr}. To accept${settings.company_phone?` reply or call ${settings.company_phone}`:" please reply"}.`;
+  const footerText = quote.is_recurring
+    ? `Recurring ${quote.recurring_frequency||"biweekly"} service. Valid until cancelled.${settings.company_phone?" Call "+formatPhone(settings.company_phone)+" to cancel.":""}`
+    : `Quote valid until ${expiryStr}. To accept${settings.company_phone?` reply or call ${formatPhone(settings.company_phone)}`:" please reply"}.`;
   doc.text(footerText, M, footerY - 8, { maxWidth: W - M*2 });
 
   const safeName = (quote.client_name || "client").replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "");
@@ -475,7 +477,7 @@ export default function LawnBid() {
       address:"", areaVal:"", areaUnit:"sqft", perimVal:"", perimUnit:"ft",
       crew:1, cx:settings.complexity_default, risk:settings.risk_default,
       disc:0, customDisc:"", override:null, notes:"", saveClient:true,
-      attachments:[],
+      attachments:[], is_recurring:false, recurring_frequency:"",
     });
     setStep(1); setErrors({}); setScreen("flow");
   }, [settings]);
@@ -494,6 +496,7 @@ export default function LawnBid() {
       crew:q.crew_size, cx:q.complexity, risk:q.risk, disc:q.discount_pct||0, customDisc:"",
       override:null, notes:q.notes||"", saveClient:true, sentAt:q.sent_at,
       attachments:Array.isArray(q.attachments)?q.attachments:[],
+      is_recurring:!!q.is_recurring, recurring_frequency:q.recurring_frequency||"",
     });
     setStep(2); setErrors({}); setScreen("flow");
   }, []);
@@ -659,6 +662,16 @@ export default function LawnBid() {
       onDuplicate={()=>editQuote(activeQ,true)}
       onDelete={()=>handleDeleteQuote(activeQ.quote_id)}
       onAccepted={()=>handleAccepted(activeQ.quote_id)}
+      onVisitComplete={async(dateStr,schedule)=>{
+        const freq=activeQ.recurring_frequency;
+        const addFreq=(base)=>{const d=new Date(base);if(freq==="weekly")d.setDate(d.getDate()+7);else if(freq==="monthly")d.setMonth(d.getMonth()+1);else d.setDate(d.getDate()+14);return d.toISOString();};
+        const baseForNext=schedule==="original"?(activeQ.next_due_at||activeQ.created_at):dateStr;
+        const next=addFreq(baseForNext);
+        const updates={last_completed_at:new Date(dateStr).toISOString(),visit_count:(activeQ.visit_count||0)+1,next_due_at:next};
+        try{await updateQuoteStatus(activeQ.quote_id,"accepted",updates);
+        setQuotes(prev=>prev.map(q=>q.quote_id===activeQ.quote_id?{...q,...updates}:q));
+        setToast("Visit marked complete.");}catch(e){alert(dbErrorMessage(e));}
+      }}
       onDecline={async(reason)=>{
         try{await updateQuoteStatus(activeQ.quote_id,"declined",{declined_reason:reason});
         setQuotes(prev=>prev.map(q=>q.quote_id===activeQ.quote_id?{...q,status:"declined",declined_reason:reason}:q));
@@ -680,13 +693,23 @@ export default function LawnBid() {
           await updateQuotesForClient(activeC.id,qFields);
           setQuotes(prev=>prev.map(q=>q.client_id===activeC.id?{...q,...qFields}:q));
         }
+      }}
+      onDeleteClient={async()=>{
+        try{
+          await supabase.from("quotes").delete().eq("client_id",activeC.id);
+          await supabase.from("clients").delete().eq("id",activeC.id);
+          setQuotes(prev=>prev.filter(q=>q.client_id!==activeC.id));
+          setClients(prev=>prev.filter(c=>c.id!==activeC.id));
+          setTab("clients"); setScreen("home");
+          setToast("Client and all associated quotes deleted.");
+        }catch(e){alert(dbErrorMessage(e));}
       }}/>
   ):tab==="quotes" ? (
     <HomeScreen bp={bp} quotes={quotes} settings={settings} onNew={startNew} onView={qid=>{setSelQ(qid);setScreen("quote-detail");}}/>
   ):tab==="clients" ? (
     <ClientsScreen bp={bp} clients={clients} quotes={quotes} onView={cid=>{setSelC(cid);setScreen("client-detail");}}/>
   ):tab==="business" ? (
-    <BusinessScreen bp={bp} quotes={quotes} settings={settings} onGoToQuotes={(filter)=>{setTab("quotes");setScreen("home");}}/>
+    <BusinessScreen bp={bp} quotes={quotes} settings={settings} clients={clients}/>
   ):(
     <SettingsScreen bp={bp} settings={settings} onSave={handleSaveSettings} onLogout={()=>supabase.auth.signOut()}/>
   );
@@ -834,7 +857,9 @@ function UpgradeModal({feature,onClose}){
 function HomeScreen({bp,quotes,settings,onNew,onView}){
   const [filter,setFilter]=useState("all");
   const [search,setSearch]=useState("");
-  const filtered=filter==="all"?quotes:quotes.filter(q=>q.status===filter);
+  const followUpDaysVal=settings?.follow_up_days||3;
+  const isFollowUp=q=>q.status==="sent"&&q.created_at&&(Date.now()-new Date(q.created_at).getTime())>followUpDaysVal*86400000;
+  const filtered=filter==="all"?quotes:filter==="followup"?quotes.filter(isFollowUp):filter==="recurring"?quotes.filter(q=>q.is_recurring):quotes.filter(q=>q.status===filter);
   const shown=(search.trim()?filtered.filter(q=>{const s=search.toLowerCase();return (q.client_name||"").toLowerCase().includes(s)||(q.address||"").toLowerCase().includes(s)||(q.quote_id||"").toLowerCase().includes(s);}):filtered).sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));
   const isDesktop = bp==="desktop";
   const showDetailRow = bp!=="mobile";
@@ -854,8 +879,8 @@ function HomeScreen({bp,quotes,settings,onNew,onView}){
         </div>
       )}
       <div className="lb-scroll" style={{display:"flex",gap:6,margin:isDesktop?"0 0 12px":"12px 0 8px",overflowX:"auto",paddingBottom:4}}>
-        {["all","draft","sent","accepted","declined"].map(f=>(
-          <Chip key={f} label={f==="all"?`All (${quotes.length})`:`${f[0].toUpperCase()+f.slice(1)} (${quotes.filter(q=>q.status===f).length})`} active={filter===f} onClick={()=>setFilter(f)}/>
+        {["all","draft","sent","accepted","declined","recurring","followup"].map(f=>(
+          <Chip key={f} label={f==="all"?`All (${quotes.length})`:f==="followup"?`⭐ Follow-up (${quotes.filter(isFollowUp).length})`:f==="recurring"?`↻ Recurring (${quotes.filter(q=>q.is_recurring).length})`:`${f[0].toUpperCase()+f.slice(1)} (${quotes.filter(q=>q.status===f).length})`} active={filter===f} onClick={()=>setFilter(f)}/>
         ))}
       </div>
       <div style={{position:"relative",marginBottom:10}}>
@@ -879,8 +904,9 @@ function HomeScreen({bp,quotes,settings,onNew,onView}){
               <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:2,flexWrap:"wrap"}}>
                 <div style={{fontWeight:600,fontSize:15,color:"#0f172a",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",letterSpacing:-.1}}>{q.client_name||"No client"}</div>
                 {q.parent_id&&<span style={{fontSize:10,background:"#e0f2fe",color:"#0369a1",padding:"1px 5px",borderRadius:4,fontWeight:700,flexShrink:0}}>V2</span>}
-                {expired&&<span style={{fontSize:10,background:"#fee2e2",color:"#dc2626",padding:"1px 6px",borderRadius:4,fontWeight:700,flexShrink:0,letterSpacing:.4}}>EXPIRED</span>}
-                {needsFollowUp&&<span style={{fontSize:10,background:"#fff7ed",color:"#ea580c",padding:"1px 6px",borderRadius:4,fontWeight:700,flexShrink:0}}>↩ Follow up</span>}
+                {q.is_recurring&&<span style={{fontSize:10,background:"#dcfce7",color:"#15803d",padding:"1px 5px",borderRadius:4,fontWeight:700,flexShrink:0}}>↻ {q.recurring_frequency==="weekly"?"Weekly":q.recurring_frequency==="monthly"?"Monthly":"Biweekly"}</span>}
+                {expired&&!q.is_recurring&&<span style={{fontSize:10,background:"#fee2e2",color:"#dc2626",padding:"1px 6px",borderRadius:4,fontWeight:700,flexShrink:0,letterSpacing:.4}}>EXPIRED</span>}
+                {needsFollowUp&&<span style={{fontSize:12,flexShrink:0}} title="Follow-up needed">⭐</span>}
               </div>
               <div style={{fontSize:13,color:"#64748b",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontWeight:400}}>{q.address}</div>
               {showDetailRow && (()=>{
@@ -909,90 +935,79 @@ function HomeScreen({bp,quotes,settings,onNew,onView}){
   );
 }
 
-function BusinessScreen({bp,quotes,settings,onGoToQuotes}){
+function BusinessScreen({bp,quotes,settings,clients}){
   const isDesktop = bp==="desktop";
-  const [period,setPeriod]=useState("month");
-  const now=new Date();
-  const rangeStart = period==="month"?new Date(now.getFullYear(),now.getMonth(),1)
-    :period==="last"?new Date(now.getFullYear(),now.getMonth()-1,1)
-    :new Date(now.getFullYear(),0,1);
-  const rangeEnd = period==="last"?new Date(now.getFullYear(),now.getMonth(),1):now;
-  const inRange=quotes.filter(q=>{const d=new Date(q.created_at);return d>=rangeStart&&d<rangeEnd;});
+  const [period,setPeriod]=useState("30");
+  const days=parseInt(period);
+  const since=new Date(Date.now()-days*86400000);
+  const inRange=quotes.filter(q=>new Date(q.created_at)>=since);
   const quoted=inRange.reduce((s,q)=>s+(q.final_price||0),0);
   const acceptedQ=inRange.filter(q=>q.status==="accepted");
   const acceptedRev=acceptedQ.reduce((s,q)=>s+(q.final_price||0),0);
-  const pendingRev=inRange.filter(q=>q.status==="sent").reduce((s,q)=>s+(q.final_price||0),0);
+  const pendingQ=inRange.filter(q=>q.status==="sent");
+  const pendingRev=pendingQ.reduce((s,q)=>s+(q.final_price||0),0);
   const sentAndAccepted=inRange.filter(q=>q.status==="sent"||q.status==="accepted").length;
   const closeRate=sentAndAccepted>0?Math.round(acceptedQ.length/sentAndAccepted*100):0;
   const totalHrs=acceptedQ.reduce((s,q)=>{const t=calcTime(q.area_sqft,q.linear_ft,q.crew_size,q.complexity);return s+(t?t.adj:0);},0);
   const impliedHourly=totalHrs>0?Math.round(acceptedRev/totalHrs):0;
   const totalCosts=acceptedQ.reduce((s,q)=>{const c=calcQ(q.area_sqft,q.linear_ft,q.complexity,q.risk,0,settings||DEFAULT_SETTINGS);return s+(c?c.sub:0);},0);
   const impliedMargin=acceptedRev>0?Math.round((acceptedRev-totalCosts)/acceptedRev*100):0;
-  const followUpDays=settings?.follow_up_days||3;
-  const followUp=quotes.filter(q=>q.status==="sent"&&(Date.now()-new Date(q.created_at).getTime())>followUpDays*86400000).length;
   const pending=quotes.filter(q=>q.status==="sent").length;
-  // Top clients
+  // Top clients with phone
   const clientMap={};
   quotes.filter(q=>q.status==="accepted"&&q.client_name).forEach(q=>{
-    if(!clientMap[q.client_name]) clientMap[q.client_name]={rev:0,jobs:0};
+    if(!clientMap[q.client_name]) clientMap[q.client_name]={rev:0,jobs:0,phone:q.client_phone||"",clientId:q.client_id};
     clientMap[q.client_name].rev+=(q.final_price||0); clientMap[q.client_name].jobs++;
+    if(q.client_phone) clientMap[q.client_name].phone=q.client_phone;
   });
   const topClients=Object.entries(clientMap).sort((a,b)=>b[1].rev-a[1].rev).slice(0,5);
-  const Row=({label,value,color})=>(
+  const Row=({label,sub,value,color})=>(
     <div style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderBottom:"1px solid #f1f5f9"}}>
-      <span style={{fontSize:13,color:"#64748b"}}>{label}</span>
+      <div><div style={{fontSize:13,color:"#64748b"}}>{label}</div>{sub&&<div style={{fontSize:10,color:"#94a3b8"}}>{sub}</div>}</div>
       <span style={{fontSize:14,fontWeight:700,color:color||"#0f172a"}}>{value}</span>
     </div>
   );
   return (
     <div style={{padding:isDesktop?0:16}}>
       {!isDesktop&&<div style={{fontSize:26,fontWeight:900,color:"#0f172a",marginBottom:14}}>Business</div>}
-      <div style={{display:"flex",gap:6,marginBottom:14,background:"#f1f5f9",borderRadius:12,padding:4}}>
-        {[["month","This Month"],["last","Last Month"],["year","This Year"]].map(([k,lbl])=>(
-          <button key={k} onClick={()=>setPeriod(k)} style={{flex:1,height:36,minHeight:36,border:"none",borderRadius:9,background:period===k?"#ffffff":"transparent",color:period===k?"#0f172a":"#64748b",fontWeight:period===k?700:600,fontSize:13,cursor:"pointer",fontFamily:"inherit",boxShadow:period===k?"0 1px 3px rgba(0,0,0,.08)":"none"}}>{lbl}</button>
+      <div className="lb-scroll" style={{display:"flex",gap:6,marginBottom:14,background:"#f1f5f9",borderRadius:12,padding:4,overflowX:"auto"}}>
+        {[["7","7 days"],["30","30 days"],["90","90 days"],["365","12 months"]].map(([k,lbl])=>(
+          <button key={k} onClick={()=>setPeriod(k)} style={{flex:1,height:36,minHeight:36,border:"none",borderRadius:9,background:period===k?"#ffffff":"transparent",color:period===k?"#0f172a":"#64748b",fontWeight:period===k?700:600,fontSize:12,cursor:"pointer",fontFamily:"inherit",boxShadow:period===k?"0 1px 3px rgba(0,0,0,.08)":"none",whiteSpace:"nowrap",padding:"0 10px"}}>{lbl}</button>
         ))}
       </div>
       <Card>
         <Lbl>Revenue</Lbl>
-        <Row label="Total quoted" value={$$(quoted)}/>
-        <Row label="Accepted" value={$$(acceptedRev)} color="#15803d"/>
-        <Row label="Pending" value={$$(pendingRev)} color="#3b82f6"/>
+        <Row label="Quoted" sub="total value of quotes sent" value={$$(quoted)}/>
+        <Row label="Accepted" sub="approved jobs, ready to execute" value={$$(acceptedRev)} color="#15803d"/>
+        <Row label="Pending" sub="sent, awaiting client response" value={$$(pendingRev)} color="#3b82f6"/>
       </Card>
       <Card>
         <Lbl>Performance</Lbl>
         <Row label="Close rate" value={`${closeRate}%`}/>
-        <div style={{fontSize:11,color:"#94a3b8",marginTop:-4,marginBottom:6}}>Sent quotes that became accepted jobs{sentAndAccepted>0?` (${acceptedQ.length} of ${sentAndAccepted})`:""}</div>
+        <div style={{fontSize:11,color:"#94a3b8",marginTop:-4,marginBottom:6}}>sent quotes that became accepted jobs{sentAndAccepted>0?` (${acceptedQ.length} of ${sentAndAccepted})`:""}</div>
         <div style={{fontSize:13,color:"#334155",lineHeight:1.6}}>
-          {acceptedQ.length} jobs{impliedHourly>0?` · ~$${impliedHourly}/hr implied gross`:""}{impliedMargin>0?` · ~${impliedMargin}% implied margin`:""}
+          {acceptedQ.length} jobs{impliedHourly>0?` · ~$${impliedHourly}/hr implied gross`:""}{impliedMargin>0?` · ~${impliedMargin}% margin`:""}
         </div>
+        {impliedMargin>0&&<div style={{fontSize:10,color:"#94a3b8",marginTop:2}}>estimated profit after costs</div>}
       </Card>
       <Card>
         <Lbl>Activity</Lbl>
-        {followUp>0&&<button onClick={onGoToQuotes} style={{display:"flex",justifyContent:"space-between",alignItems:"center",width:"100%",padding:"10px 0",border:"none",background:"none",cursor:"pointer",fontFamily:"inherit",borderBottom:"1px solid #f1f5f9"}}>
-          <span style={{fontSize:13,color:"#ea580c",fontWeight:600}}>↩ {followUp} quote{followUp>1?"s":""} need follow-up</span>
-          <span style={{color:"#94a3b8"}}>→</span>
-        </button>}
-        {pending>0&&<button onClick={onGoToQuotes} style={{display:"flex",justifyContent:"space-between",alignItems:"center",width:"100%",padding:"10px 0",border:"none",background:"none",cursor:"pointer",fontFamily:"inherit"}}>
-          <span style={{fontSize:13,color:"#3b82f6",fontWeight:600}}>⏳ {pending} quote{pending>1?"s":""} pending response</span>
-          <span style={{color:"#94a3b8"}}>→</span>
-        </button>}
-        {followUp===0&&pending===0&&<div style={{fontSize:13,color:"#94a3b8",padding:"10px 0"}}>All caught up</div>}
+        <div style={{fontSize:13,color:"#64748b",padding:"8px 0",borderBottom:"1px solid #f1f5f9"}}>⏳ {pending} pending · awaiting client response</div>
       </Card>
       {topClients.length>0&&(
         <Card>
           <Lbl>Top Clients</Lbl>
-          {topClients.map(([name,{rev,jobs}],i)=>(
-            <div key={name} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 0",borderBottom:i<topClients.length-1?"1px solid #f1f5f9":"none"}}>
-              <div style={{minWidth:0,flex:1}}>
-                <span style={{fontSize:13,fontWeight:600,color:"#0f172a"}}>{i+1}. {name}</span>
-              </div>
-              <div style={{textAlign:"right",flexShrink:0}}>
-                <div style={{fontSize:13,fontWeight:700,color:"#0f172a"}}>{$$(rev)}</div>
-                <div style={{fontSize:11,color:"#94a3b8"}}>{jobs} job{jobs>1?"s":""}</div>
+          {topClients.map(([name,{rev,jobs,phone}],i)=>(
+            <div key={name} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 0",borderBottom:i<topClients.length-1?"1px solid #f1f5f9":"none",fontSize:13}}>
+              <span style={{fontWeight:600,color:"#0f172a",minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1}}>{i+1}. {name}</span>
+              <div style={{display:"flex",alignItems:"center",gap:10,flexShrink:0}}>
+                <span style={{fontWeight:700,color:"#0f172a"}}>{$$(rev)}</span>
+                <span style={{fontSize:11,color:"#94a3b8"}}>{jobs} job{jobs>1?"s":""}</span>
+                {phone&&<a href={`tel:${phone.replace(/\D/g,"")}`} style={{fontSize:11,color:"#15803d",textDecoration:"none",fontWeight:600}} onClick={e=>e.stopPropagation()}>{formatPhone(phone)}</a>}
               </div>
             </div>
           ))}
-          <div style={{fontSize:11,color:"#94a3b8",marginTop:8}}>Your best clients — great for referrals and upsell opportunities</div>
+          <div style={{fontSize:10,color:"#94a3b8",marginTop:8}}>Top clients by accepted revenue · tap number to call</div>
         </Card>
       )}
     </div>
@@ -1074,7 +1089,8 @@ function ClientsScreen({bp,clients,quotes,onView}){
 }
 
 // ─── Client Detail ────────────────────────────────────────────────────────────
-function ClientDetail({bp,client,quotes,onBack,onViewQuote,onUpdateClient}){
+function ClientDetail({bp,client,quotes,onBack,onViewQuote,onUpdateClient,onDeleteClient}){
+  const [delStep,setDelStep]=useState(0);
   const sorted=[...quotes].sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));
   const total=quotes.reduce((s,q)=>s+(q.final_price||0),0);
   const isDesktop = bp==="desktop";
@@ -1153,6 +1169,18 @@ function ClientDetail({bp,client,quotes,onBack,onViewQuote,onUpdateClient}){
           </div>
         </Card>
       ))}
+      <div style={{marginTop:16}}>
+        {delStep===0&&<Btn variant="danger" onClick={()=>setDelStep(1)} style={{width:"100%"}}>Delete Client</Btn>}
+        {delStep===1&&<Card style={{border:"1.5px solid #fecaca"}}>
+          <div style={{fontSize:14,fontWeight:700,color:"#dc2626",marginBottom:6}}>⚠️ Delete {client.name}?</div>
+          <div style={{fontSize:13,color:"#64748b",lineHeight:1.5,marginBottom:12}}>This will permanently delete this client and all {quotes.length} quote{quotes.length!==1?"s":""} associated with them. This cannot be undone.</div>
+          <div style={{display:"flex",gap:8}}><Btn variant="secondary" onClick={()=>setDelStep(0)} style={{flex:1,height:40,minHeight:40,fontSize:13}}>Cancel</Btn><Btn variant="danger" onClick={()=>setDelStep(2)} style={{flex:1,height:40,minHeight:40,fontSize:13}}>Yes, Delete Everything</Btn></div>
+        </Card>}
+        {delStep===2&&<Card style={{border:"1.5px solid #dc2626"}}>
+          <div style={{fontSize:14,fontWeight:700,color:"#dc2626",marginBottom:8}}>Are you absolutely sure?</div>
+          <div style={{display:"flex",gap:8}}><Btn variant="secondary" onClick={()=>setDelStep(0)} style={{flex:1,height:40,minHeight:40,fontSize:13}}>Cancel</Btn><Btn variant="danger" onClick={onDeleteClient} style={{flex:1,height:40,minHeight:40,fontSize:13}}>🗑 Confirm Delete</Btn></div>
+        </Card>}
+      </div>
     </>
   );
 
@@ -1180,10 +1208,13 @@ function ClientDetail({bp,client,quotes,onBack,onViewQuote,onUpdateClient}){
 }
 
 // ─── Quote Detail ─────────────────────────────────────────────────────────────
-function QuoteDetail({bp,quote,allQuotes,settings,onBack,onEdit,onDuplicate,onDelete,onAccepted,onDecline}){
+function QuoteDetail({bp,quote,allQuotes,settings,onBack,onEdit,onDuplicate,onDelete,onAccepted,onDecline,onVisitComplete}){
   const {canExportPDF,showUpgrade} = usePlan();
   const [declineOpen,setDeclineOpen]=useState(false);
   const [declineReason,setDeclineReason]=useState("");
+  const [visitOpen,setVisitOpen]=useState(false);
+  const [visitDate,setVisitDate]=useState(new Date().toISOString().slice(0,10));
+  const [visitSchedule,setVisitSchedule]=useState("original");
   const [confirmDel,setConfirmDel]=useState(false);
   const [copied,setCopied]=useState(false);
   const [lightbox,setLightbox]=useState(null);
@@ -1313,6 +1344,50 @@ function QuoteDetail({bp,quote,allQuotes,settings,onBack,onEdit,onDuplicate,onDe
         </Card>
       )}
       {quote.status==="declined"&&quote.declined_reason&&<div style={{fontSize:12,color:"#94a3b8",marginTop:4}}>Declined: {quote.declined_reason}</div>}
+      {quote.is_recurring&&quote.status==="accepted"&&(
+        <>
+          <Card style={{marginTop:8}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <div>
+                <div style={{fontSize:13,fontWeight:700,color:"#0f172a"}}>↻ {quote.recurring_frequency==="weekly"?"Weekly":quote.recurring_frequency==="monthly"?"Monthly":"Biweekly"} Service</div>
+                <div style={{fontSize:12,color:"#64748b",marginTop:2}}>Visit {quote.visit_count||0}{quote.next_due_at?` · Next: ${fmtD(quote.next_due_at)}`:""}</div>
+                {quote.last_completed_at&&<div style={{fontSize:11,color:"#94a3b8",marginTop:2}}>Last completed: {fmtD(quote.last_completed_at)}</div>}
+              </div>
+            </div>
+          </Card>
+          {!visitOpen&&!nextDateOpen&&<Btn onClick={()=>setVisitOpen(true)} style={{width:"100%",marginTop:4}}>✓ Mark Visit Complete</Btn>}
+          {!quote.next_due_at&&quote.status==="accepted"&&!visitOpen&&!nextDateOpen&&(
+            <Btn variant="outline" onClick={()=>setNextDateOpen(true)} style={{width:"100%",marginTop:4}}>Set Next Visit Date</Btn>
+          )}
+          {nextDateOpen&&(
+            <Card style={{marginTop:4,border:"1.5px solid #e2e8f0"}}>
+              <div style={{fontSize:13,fontWeight:700,color:"#0f172a",marginBottom:8}}>Set next visit date</div>
+              <Inp type="date" value={nextDateVal} onChange={e=>setNextDateVal(e.target.value)} style={{marginBottom:10}}/>
+              <div style={{display:"flex",gap:8}}>
+                <Btn onClick={()=>{onVisitComplete(null,"set_next_date",nextDateVal);setNextDateOpen(false);}} style={{flex:1,height:40,minHeight:40,fontSize:13}}>Set Date</Btn>
+                <Btn variant="secondary" onClick={()=>setNextDateOpen(false)} style={{flex:1,height:40,minHeight:40,fontSize:13}}>Cancel</Btn>
+              </div>
+            </Card>
+          )}
+          {visitOpen&&(
+            <Card style={{marginTop:4,border:"1.5px solid #bbf7d0"}}>
+              <div style={{fontSize:13,fontWeight:700,color:"#0f172a",marginBottom:8}}>Visit completed on</div>
+              <Inp type="date" value={visitDate} onChange={e=>setVisitDate(e.target.value)} style={{marginBottom:10}}/>
+              <div style={{fontSize:12,fontWeight:600,color:"#334155",marginBottom:6}}>Next visit:</div>
+              {[["original","Keep original schedule"],["completion","Calculate from completion date"],["manual","Schedule manually later"],["end","End service — season complete"]].map(([k,lbl])=>(
+                <label key={k} style={{display:"flex",alignItems:"center",gap:8,fontSize:13,color:k==="end"?"#dc2626":"#334155",marginBottom:4,cursor:"pointer"}}>
+                  <input type="radio" name="visitSch" checked={visitSchedule===k} onChange={()=>setVisitSchedule(k)} style={{accentColor:k==="end"?"#dc2626":"#15803d"}}/> {lbl}
+                </label>
+              ))}
+              <div style={{display:"flex",gap:8,marginTop:10}}>
+                <Btn onClick={()=>{onVisitComplete(visitDate,visitSchedule);setVisitOpen(false);setVisitSchedule("original");}} style={{flex:1,height:40,minHeight:40,fontSize:13}}>Mark Complete</Btn>
+                <Btn variant="secondary" onClick={()=>setVisitOpen(false)} style={{flex:1,height:40,minHeight:40,fontSize:13}}>Cancel</Btn>
+              </div>
+            </Card>
+          )}
+          {quote.status!=="seasonal_complete"&&<Btn variant="secondary" onClick={()=>{if(window.confirm(`End recurring service for ${quote.client_name}?`))onDecline("Service cancelled");}} style={{width:"100%",marginTop:4}}>Cancel Service</Btn>}
+        </>
+      )}
       <Btn variant="warning" onClick={onEdit} style={{width:"100%"}}>✏️ {isSent?"Edit (creates V2 quote)":"Edit Quote"}</Btn>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
         <Btn variant="secondary" onClick={onDuplicate}>📋 Duplicate</Btn>
@@ -1857,7 +1932,8 @@ function QuoteFlow({bp,step,setStep,flow,setFlow,errors,setErrors,settings,clien
     mow_rate_used:settings.mow_rate, trim_rate_used:settings.trim_rate, equipment_cost_used:settings.equipment_cost,
     formula_price:calc?.fl||0, final_price:calc?.disp||0, status,
     clientId:flow.clientId, client_name:flow.clientName, client_phone:flow.clientPhone, client_email:flow.clientEmail,
-    notes:flow.notes, attachments:flow.attachments||[], saveClient:flow.saveClient, sentAt:flow.sentAt||null,
+    notes:flow.notes, attachments:flow.attachments||[], is_recurring:!!flow.is_recurring, recurring_frequency:flow.recurring_frequency||null,
+    saveClient:flow.saveClient, sentAt:flow.sentAt||null,
   });
   const buildCli=()=>flow.saveClient?{name:flow.clientName,phone:flow.clientPhone,email:flow.clientEmail,default_address:flow.address,last_area_sqft:area,last_linear_ft:perim}:null;
 
@@ -2368,26 +2444,7 @@ function MapMeasure({bp,address,confirmed,setConfirmed,onConfirm,onSwitchManual,
 function S3({bp,flow,set,area,perim,calc,time,settings}){
   const [editing,setEditing]=useState(false);
   const isDesktop = bp==="desktop";
-  const crewTimeCard = time && (
-    <Card>
-      <Lbl>⏱ Estimated Time</Lbl>
-      <div style={{fontSize:36,fontWeight:900,color:"#0f172a",lineHeight:1,letterSpacing:-1}}>{fmtT(time.adj)}</div>
-      <div style={{fontSize:13,color:"#64748b",fontWeight:500,marginTop:4}}>{flow.crew}-person crew · {flow.crew>=2?"parallel work":"sequential"}</div>
-      <div style={{display:"flex",gap:16,marginTop:6,fontSize:12,color:"#475569",fontWeight:500}}>
-        <span>Mow: {fmtT(time.mh)}</span><span>Trim: {fmtT(time.th)}</span>
-      </div>
-      <div style={{display:"flex",gap:6,marginTop:14}}>
-        {time.crew_times.map(({n,t})=>(
-          <button key={n} onClick={()=>set("crew",n)} style={{flex:1,textAlign:"center",padding:"10px 4px",borderRadius:12,border:"none",background:n===flow.crew?"#15803d":"#f1f5f9",color:n===flow.crew?"#ffffff":"#475569",cursor:"pointer",fontFamily:"inherit"}}>
-            <div style={{fontSize:14,fontWeight:700}}>{n}</div>
-            <div style={{fontSize:11,fontWeight:600,marginTop:2}}>{fmtT(t)}</div>
-          </button>
-        ))}
-      </div>
-    </Card>
-  );
   const leftCol = (<>
-      {crewTimeCard}
       <Card>
         <Lbl>Job Complexity</Lbl>
         <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:8}}>{COMPLEXITY.map(o=><Chip key={o.value} label={`${o.label} (${o.value}×)`} active={flow.cx===o.value} onClick={()=>set("cx",o.value)}/>)}</div>
@@ -2442,6 +2499,20 @@ function S3({bp,flow,set,area,perim,calc,time,settings}){
             ))}
             <div style={{display:"flex",justifyContent:"space-between",marginTop:12,fontSize:16,fontWeight:900,color:"#4ade80",letterSpacing:.3}}><span>FINAL BID</span><span>{$$(calc.disp)}</span></div>
           </div>
+          {time&&(
+            <div style={{borderTop:"1px solid #1e293b",paddingTop:14,marginTop:14}}>
+              <Lbl style={{color:"#64748b"}}>⏱ Crew & Time</Lbl>
+              <div style={{display:"flex",gap:6,marginBottom:8}}>
+                {time.crew_times.map(({n,t})=>(
+                  <button key={n} onClick={()=>set("crew",n)} style={{flex:1,textAlign:"center",padding:"8px 4px",borderRadius:10,border:n===flow.crew?"none":"1px solid rgba(255,255,255,.15)",background:n===flow.crew?"#15803d":"transparent",color:n===flow.crew?"#ffffff":"#94a3b8",cursor:"pointer",fontFamily:"inherit"}}>
+                    <div style={{fontSize:14,fontWeight:700}}>{n}</div>
+                    <div style={{fontSize:10,fontWeight:600,marginTop:2}}>{fmtT(t)}</div>
+                  </button>
+                ))}
+              </div>
+              <div style={{fontSize:12,color:"#94a3b8",fontWeight:500}}>{flow.crew}-person crew · {flow.crew>=2?"parallel work":"sequential"}</div>
+            </div>
+          )}
         </Card>
         );
         if (isDesktop) {
@@ -2525,6 +2596,23 @@ function S4({bp,flow,set,setFlow,area,perim,calc,time,onSend,saving}){
           <span style={{fontWeight:700,fontSize:15,color:"#0f172a"}}>Total</span>
           <span style={{fontSize:32,fontWeight:900,color:"#0f172a",letterSpacing:-.8}}>{calc?$$(calc.disp):"—"}</span>
         </div>
+      </Card>
+      <Card>
+        <Lbl>Service Type</Lbl>
+        <div style={{display:"flex",gap:6,marginBottom:flow.is_recurring?12:0}}>
+          <Chip label="One-time" active={!flow.is_recurring} onClick={()=>{set("is_recurring",false);set("recurring_frequency","");}}/>
+          <Chip label="Recurring" active={!!flow.is_recurring} onClick={()=>{set("is_recurring",true);set("recurring_frequency",flow.recurring_frequency||"biweekly");}}/>
+        </div>
+        {flow.is_recurring&&(
+          <div>
+            <div style={{fontSize:12,fontWeight:600,color:"#334155",marginBottom:6}}>Frequency</div>
+            <div style={{display:"flex",gap:6}}>
+              {[["weekly","Weekly"],["biweekly","Biweekly"],["monthly","Monthly"]].map(([k,lbl])=>(
+                <Chip key={k} label={lbl} active={flow.recurring_frequency===k} onClick={()=>set("recurring_frequency",k)}/>
+              ))}
+            </div>
+          </div>
+        )}
       </Card>
       <Card>
         <Lbl>Notes (optional)</Lbl>
