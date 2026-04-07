@@ -55,10 +55,12 @@ export async function upsertQuote(quote) {
     parent_id: parentId || null,
     user_id: await currentUserId(),
   }
+  // Remove undefined/function values that Supabase can't store
+  Object.keys(record).forEach(k => { if (record[k] === undefined || typeof record[k] === 'function') delete record[k] })
   const { error } = await supabase
     .from('quotes')
     .upsert(record, { onConflict: 'quote_id' })
-  if (error) throw error
+  if (error) { console.error('[LawnBid] upsertQuote error:', error.message, error.details, error.code); throw error }
 }
 
 export async function deleteQuote(quoteId) {
@@ -70,11 +72,13 @@ export async function deleteQuote(quoteId) {
 }
 
 export async function updateQuoteStatus(quoteId, status, extraFields = {}) {
+  const payload = { status, updated_at: new Date().toISOString(), user_id: await currentUserId(), ...extraFields }
+  Object.keys(payload).forEach(k => { if (payload[k] === undefined) delete payload[k] })
   const { error } = await supabase
     .from('quotes')
-    .update({ status, updated_at: new Date().toISOString(), user_id: await currentUserId(), ...extraFields })
+    .update(payload)
     .eq('quote_id', quoteId)
-  if (error) throw error
+  if (error) { console.error('[LawnBid] updateQuoteStatus error:', error.message, error.details, error.code); throw error }
 }
 
 // ─── Clients ──────────────────────────────────────────────────────────────────────
@@ -89,10 +93,21 @@ export async function loadClients() {
 
 export async function upsertClient(client) {
   const record = { ...client, user_id: await currentUserId() }
+  Object.keys(record).forEach(k => { if (record[k] === undefined) delete record[k] })
   const { error } = await supabase
     .from('clients')
     .upsert(record, { onConflict: 'id' })
-  if (error) throw error
+  if (error) { console.error('[LawnBid] upsertClient error:', error.message, error.details, error.code); throw error }
+}
+
+export async function updateQuotesForClient(clientId, fields) {
+  const userId = await currentUserId()
+  const { error } = await supabase
+    .from('quotes')
+    .update(fields)
+    .eq('client_id', clientId)
+    .eq('user_id', userId)
+  if (error) console.warn('[LawnBid] updateQuotesForClient error:', error.message)
 }
 
 // ─── Settings ─────────────────────────────────────────────────────────────────────
@@ -109,10 +124,12 @@ export async function loadSettings() {
 
 export async function saveSettings(settings) {
   const { id: _id, ...rest } = settings
+  const record = { id: 1, ...rest, user_id: await currentUserId() }
+  Object.keys(record).forEach(k => { if (record[k] === undefined || typeof record[k] === 'function') delete record[k] })
   const { error } = await supabase
     .from('settings')
-    .upsert({ id: 1, ...rest, user_id: await currentUserId() }, { onConflict: 'id' })
-  if (error) throw error
+    .upsert(record, { onConflict: 'id' })
+  if (error) { console.error('[LawnBid] saveSettings error:', error.message, error.details, error.code); throw error }
 }
 
 // ─── Quote Attachments ────────────────────────────────────────────────────────────

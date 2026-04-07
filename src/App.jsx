@@ -5,7 +5,7 @@ import supabase, {
   loadSettings, saveSettings as dbSaveSettings,
   nextQuoteId,
   uploadQuoteFile, deleteQuoteFile,
-  countRecentQuotes,
+  countRecentQuotes, updateQuotesForClient,
 } from "./supabase.js";
 
 // ─── Stripe checkout ────────────────────────────────────────────────────────────
@@ -243,7 +243,7 @@ async function generateQuotePDF(quote, settings, calc, time) {
   doc.setFont("helvetica","bold"); doc.setFontSize(12); doc.setTextColor(...DARK);
   doc.text(quote.client_name || "—", M + 14, y + 34);
   doc.setFont("helvetica","normal"); doc.setFontSize(10); doc.setTextColor(...MUTED);
-  if (quote.client_phone) doc.text(quote.client_phone, M + 14, y + 50);
+  if (quote.client_phone) doc.text(formatPhone(quote.client_phone), M + 14, y + 50);
   doc.text(quote.address || "", M + 14, y + 66, { maxWidth: W - M*2 - 28 });
   y += 96;
 
@@ -645,7 +645,7 @@ export default function LawnBid() {
     if (screen === "flow") return flow?.parentId ? "New Revision" : flow?.existingId ? "Edit Quote" : "New Quote";
     if (screen === "quote-detail") return "Quote Details";
     if (screen === "client-detail") return activeC?.name || "Client";
-    return tab==="quotes" ? "Quotes" : tab==="clients" ? "Clients" : "Settings";
+    return tab==="quotes" ? "Quotes" : tab==="clients" ? "Clients" : tab==="business" ? "Business" : "Settings";
   })();
 
   const screenContent = screen==="flow" ? (
@@ -671,11 +671,22 @@ export default function LawnBid() {
       onUpdateClient={async(updates)=>{
         await upsertClient({...activeC,...updates});
         setClients(prev=>prev.map(c=>c.id===activeC.id?{...c,...updates}:c));
+        // Propagate name/phone/email changes to all associated quotes
+        const qFields={};
+        if(updates.name!==undefined) qFields.client_name=updates.name;
+        if(updates.phone!==undefined) qFields.client_phone=updates.phone;
+        if(updates.email!==undefined) qFields.client_email=updates.email;
+        if(Object.keys(qFields).length>0){
+          await updateQuotesForClient(activeC.id,qFields);
+          setQuotes(prev=>prev.map(q=>q.client_id===activeC.id?{...q,...qFields}:q));
+        }
       }}/>
   ):tab==="quotes" ? (
     <HomeScreen bp={bp} quotes={quotes} settings={settings} onNew={startNew} onView={qid=>{setSelQ(qid);setScreen("quote-detail");}}/>
   ):tab==="clients" ? (
     <ClientsScreen bp={bp} clients={clients} quotes={quotes} onView={cid=>{setSelC(cid);setScreen("client-detail");}}/>
+  ):tab==="business" ? (
+    <BusinessScreen bp={bp} quotes={quotes} settings={settings} onGoToQuotes={(filter)=>{setTab("quotes");setScreen("home");}}/>
   ):(
     <SettingsScreen bp={bp} settings={settings} onSave={handleSaveSettings} onLogout={()=>supabase.auth.signOut()}/>
   );
@@ -740,7 +751,7 @@ export default function LawnBid() {
 
 // ─── Sidebar (desktop) ───
 function SideNav({tab,setTab,setScreen}){
-  const items = [["quotes","📋","Quotes"],["clients","👥","Clients"],["settings","⚙️","Settings"]];
+  const items = [["quotes","📋","Quotes"],["clients","👥","Clients"],["business","💰","Business"],["settings","⚙️","Settings"]];
   return (
     <aside style={{width:240,flexShrink:0,background:"#ffffff",borderRight:"1px solid #e2e8f0",display:"flex",flexDirection:"column",position:"sticky",top:0,height:"100vh"}}>
       <div style={{padding:"20px 20px 16px",display:"flex",alignItems:"center",gap:12,borderBottom:"1px solid #e2e8f0"}}>
@@ -779,7 +790,7 @@ function BottomNav({tab,screen,setTab,setScreen,bp,maxW}){
   const scale = bp==="tablet" ? 1.1 : 1;
   return (
     <div style={{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:maxW,background:"#ffffff",borderTop:"1px solid #e2e8f0",display:"flex",zIndex:100,paddingBottom:"env(safe-area-inset-bottom)"}}>
-      {[["quotes","📋","Quotes"],["clients","👥","Clients"],["settings","⚙️","Settings"]].map(([t,icon,lbl])=>{
+      {[["quotes","📋","Quotes"],["clients","👥","Clients"],["business","💰","Business"],["settings","⚙️","Settings"]].map(([t,icon,lbl])=>{
         const active = tab===t && screen==="home";
         return (
           <button key={t} onClick={()=>{setTab(t);setScreen("home");}} style={{flex:1,height:56,minHeight:56,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:2,border:"none",background:"none",cursor:"pointer",fontSize:10*scale,fontWeight:700,color:active?"#15803d":"#94a3b8",textTransform:"uppercase",letterSpacing:.5,fontFamily:"inherit"}}>
@@ -822,7 +833,9 @@ function UpgradeModal({feature,onClose}){
 // ─── Home ──────────────────────────────────────────────────────────────────────
 function HomeScreen({bp,quotes,settings,onNew,onView}){
   const [filter,setFilter]=useState("all");
-  const shown=(filter==="all"?quotes:quotes.filter(q=>q.status===filter)).sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));
+  const [search,setSearch]=useState("");
+  const filtered=filter==="all"?quotes:quotes.filter(q=>q.status===filter);
+  const shown=(search.trim()?filtered.filter(q=>{const s=search.toLowerCase();return (q.client_name||"").toLowerCase().includes(s)||(q.address||"").toLowerCase().includes(s)||(q.quote_id||"").toLowerCase().includes(s);}):filtered).sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));
   const isDesktop = bp==="desktop";
   const showDetailRow = bp!=="mobile";
   return(
@@ -840,11 +853,14 @@ function HomeScreen({bp,quotes,settings,onNew,onView}){
           <Btn onClick={onNew} style={{height:40,minHeight:40,padding:"0 14px",fontSize:13,borderRadius:12}}>+ New Quote</Btn>
         </div>
       )}
-      <BusinessSnapshot quotes={quotes} settings={settings}/>
       <div className="lb-scroll" style={{display:"flex",gap:6,margin:isDesktop?"0 0 12px":"12px 0 8px",overflowX:"auto",paddingBottom:4}}>
         {["all","draft","sent","accepted","declined"].map(f=>(
           <Chip key={f} label={f==="all"?`All (${quotes.length})`:`${f[0].toUpperCase()+f.slice(1)} (${quotes.filter(q=>q.status===f).length})`} active={filter===f} onClick={()=>setFilter(f)}/>
         ))}
+      </div>
+      <div style={{position:"relative",marginBottom:10}}>
+        <Inp value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search client, address, or quote ID…" style={{paddingRight:search?36:14}}/>
+        {search&&<button onClick={()=>setSearch("")} style={{position:"absolute",right:12,top:"50%",transform:"translateY(-50%)",width:24,height:24,minHeight:24,borderRadius:"50%",border:"none",background:"#e2e8f0",color:"#64748b",fontSize:14,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"inherit",padding:0}}>×</button>}
       </div>
       {shown.length===0?(
         <div style={{textAlign:"center",padding:"60px 20px",color:"#64748b"}}>
@@ -867,12 +883,15 @@ function HomeScreen({bp,quotes,settings,onNew,onView}){
                 {needsFollowUp&&<span style={{fontSize:10,background:"#fff7ed",color:"#ea580c",padding:"1px 6px",borderRadius:4,fontWeight:700,flexShrink:0}}>↩ Follow up</span>}
               </div>
               <div style={{fontSize:13,color:"#64748b",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontWeight:400}}>{q.address}</div>
-              {showDetailRow && (
-                <div style={{display:"flex",gap:14,marginTop:6,fontSize:12,color:"#475569",fontWeight:500}}>
+              {showDetailRow && (()=>{
+                const qt=calcTime(q.area_sqft,q.linear_ft,q.crew_size,q.complexity);
+                return (
+                <div style={{display:"flex",gap:14,marginTop:6,fontSize:12,color:"#475569",fontWeight:500,flexWrap:"wrap"}}>
                   <span><span style={{color:"#94a3b8"}}>Area </span>{fmtArea(q.area_sqft)}</span>
                   <span><span style={{color:"#94a3b8"}}>Perim </span>{Math.round(q.linear_ft).toLocaleString()} ft</span>
-                </div>
-              )}
+                  {qt&&<span>⏱ {fmtT(qt.adj)}</span>}
+                </div>);
+              })()}
               <div style={{display:"flex",alignItems:"center",gap:8,marginTop:6}}>
                 <QID id={q.quote_id}/><span style={{fontSize:11,color:"#94a3b8",fontWeight:500}}>{fmtD(q.created_at)}</span>
               </div>
@@ -890,61 +909,93 @@ function HomeScreen({bp,quotes,settings,onNew,onView}){
   );
 }
 
-function BusinessSnapshot({quotes,settings}){
-  const [open,setOpen]=useState(false);
-  const now=new Date();const monthStart=new Date(now.getFullYear(),now.getMonth(),1);
-  const thisMonth=quotes.filter(q=>new Date(q.created_at)>=monthStart);
-  const quoted=thisMonth.reduce((s,q)=>s+(q.final_price||0),0);
-  const acceptedQ=thisMonth.filter(q=>q.status==="accepted");
+function BusinessScreen({bp,quotes,settings,onGoToQuotes}){
+  const isDesktop = bp==="desktop";
+  const [period,setPeriod]=useState("month");
+  const now=new Date();
+  const rangeStart = period==="month"?new Date(now.getFullYear(),now.getMonth(),1)
+    :period==="last"?new Date(now.getFullYear(),now.getMonth()-1,1)
+    :new Date(now.getFullYear(),0,1);
+  const rangeEnd = period==="last"?new Date(now.getFullYear(),now.getMonth(),1):now;
+  const inRange=quotes.filter(q=>{const d=new Date(q.created_at);return d>=rangeStart&&d<rangeEnd;});
+  const quoted=inRange.reduce((s,q)=>s+(q.final_price||0),0);
+  const acceptedQ=inRange.filter(q=>q.status==="accepted");
   const acceptedRev=acceptedQ.reduce((s,q)=>s+(q.final_price||0),0);
-  const sentAndAccepted=thisMonth.filter(q=>q.status==="sent"||q.status==="accepted").length;
+  const pendingRev=inRange.filter(q=>q.status==="sent").reduce((s,q)=>s+(q.final_price||0),0);
+  const sentAndAccepted=inRange.filter(q=>q.status==="sent"||q.status==="accepted").length;
   const closeRate=sentAndAccepted>0?Math.round(acceptedQ.length/sentAndAccepted*100):0;
+  const totalHrs=acceptedQ.reduce((s,q)=>{const t=calcTime(q.area_sqft,q.linear_ft,q.crew_size,q.complexity);return s+(t?t.adj:0);},0);
+  const impliedHourly=totalHrs>0?Math.round(acceptedRev/totalHrs):0;
+  const totalCosts=acceptedQ.reduce((s,q)=>{const c=calcQ(q.area_sqft,q.linear_ft,q.complexity,q.risk,0,settings||DEFAULT_SETTINGS);return s+(c?c.sub:0);},0);
+  const impliedMargin=acceptedRev>0?Math.round((acceptedRev-totalCosts)/acceptedRev*100):0;
   const followUpDays=settings?.follow_up_days||3;
   const followUp=quotes.filter(q=>q.status==="sent"&&(Date.now()-new Date(q.created_at).getTime())>followUpDays*86400000).length;
   const pending=quotes.filter(q=>q.status==="sent").length;
-  // Best client all time
-  const clientRevMap={};
-  quotes.filter(q=>q.status==="accepted"&&q.client_name).forEach(q=>{clientRevMap[q.client_name]=(clientRevMap[q.client_name]||0)+(q.final_price||0);});
-  const bestClient=Object.entries(clientRevMap).sort((a,b)=>b[1]-a[1])[0];
-  // Implied hourly
-  const totalHours=acceptedQ.reduce((s,q)=>{const t=calcTime(q.area_sqft,q.linear_ft,q.crew_size,q.complexity);return s+(t?t.adj:0);},0);
-  const impliedHourly=totalHours>0?Math.round(acceptedRev/totalHours):0;
+  // Top clients
+  const clientMap={};
+  quotes.filter(q=>q.status==="accepted"&&q.client_name).forEach(q=>{
+    if(!clientMap[q.client_name]) clientMap[q.client_name]={rev:0,jobs:0};
+    clientMap[q.client_name].rev+=(q.final_price||0); clientMap[q.client_name].jobs++;
+  });
+  const topClients=Object.entries(clientMap).sort((a,b)=>b[1].rev-a[1].rev).slice(0,5);
+  const Row=({label,value,color})=>(
+    <div style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderBottom:"1px solid #f1f5f9"}}>
+      <span style={{fontSize:13,color:"#64748b"}}>{label}</span>
+      <span style={{fontSize:14,fontWeight:700,color:color||"#0f172a"}}>{value}</span>
+    </div>
+  );
   return (
-    <Card style={{padding:0,overflow:"hidden",marginBottom:10}}>
-      <button onClick={()=>setOpen(o=>!o)} style={{width:"100%",display:"flex",justifyContent:"space-between",alignItems:"center",padding:"12px 16px",background:"none",border:"none",cursor:"pointer",fontFamily:"inherit"}}>
-        <span style={{fontSize:13,fontWeight:700,color:"#0f172a"}}>Business Snapshot</span>
-        <span style={{fontSize:11,color:"#94a3b8",fontWeight:600}}>{open?"▲":"▼"}</span>
-      </button>
-      {open&&(
-        <div style={{padding:"0 16px 14px",fontSize:13}}>
-          <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
-            <span style={{color:"#64748b"}}>Quoted this month</span>
-            <span style={{fontWeight:700,color:"#0f172a"}}>{$$(quoted)}</span>
-          </div>
-          <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
-            <span style={{color:"#64748b"}}>Accepted</span>
-            <span style={{fontWeight:700,color:"#15803d"}}>{$$(acceptedRev)}</span>
-          </div>
-          <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
-            <span style={{color:"#64748b"}}>Close rate</span>
-            <span style={{fontWeight:700,color:"#0f172a"}}>{closeRate}%</span>
-          </div>
-          <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
-            <span style={{color:"#64748b"}}>Jobs this month</span>
-            <span style={{fontWeight:700,color:"#0f172a"}}>{acceptedQ.length}</span>
-          </div>
-          {impliedHourly>0&&<div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
-            <span style={{color:"#64748b"}}>~Implied hourly</span>
-            <span style={{fontWeight:700,color:"#0f172a"}}>${impliedHourly}/hr</span>
-          </div>}
-          <div style={{display:"flex",gap:12,marginTop:8,marginBottom:6}}>
-            {followUp>0&&<span style={{fontSize:12,color:"#ea580c",fontWeight:600}}>↩ Follow up ({followUp})</span>}
-            {pending>0&&<span style={{fontSize:12,color:"#3b82f6",fontWeight:600}}>Pending ({pending})</span>}
-          </div>
-          {bestClient&&<div style={{fontSize:12,color:"#64748b",marginTop:4}}>Best client: <span style={{fontWeight:600,color:"#0f172a"}}>{bestClient[0]}</span> {$$(bestClient[1])}</div>}
+    <div style={{padding:isDesktop?0:16}}>
+      {!isDesktop&&<div style={{fontSize:26,fontWeight:900,color:"#0f172a",marginBottom:14}}>Business</div>}
+      <div style={{display:"flex",gap:6,marginBottom:14,background:"#f1f5f9",borderRadius:12,padding:4}}>
+        {[["month","This Month"],["last","Last Month"],["year","This Year"]].map(([k,lbl])=>(
+          <button key={k} onClick={()=>setPeriod(k)} style={{flex:1,height:36,minHeight:36,border:"none",borderRadius:9,background:period===k?"#ffffff":"transparent",color:period===k?"#0f172a":"#64748b",fontWeight:period===k?700:600,fontSize:13,cursor:"pointer",fontFamily:"inherit",boxShadow:period===k?"0 1px 3px rgba(0,0,0,.08)":"none"}}>{lbl}</button>
+        ))}
+      </div>
+      <Card>
+        <Lbl>Revenue</Lbl>
+        <Row label="Total quoted" value={$$(quoted)}/>
+        <Row label="Accepted" value={$$(acceptedRev)} color="#15803d"/>
+        <Row label="Pending" value={$$(pendingRev)} color="#3b82f6"/>
+      </Card>
+      <Card>
+        <Lbl>Performance</Lbl>
+        <Row label="Close rate" value={`${closeRate}%`}/>
+        <div style={{fontSize:11,color:"#94a3b8",marginTop:-4,marginBottom:6}}>Sent quotes that became accepted jobs{sentAndAccepted>0?` (${acceptedQ.length} of ${sentAndAccepted})`:""}</div>
+        <div style={{fontSize:13,color:"#334155",lineHeight:1.6}}>
+          {acceptedQ.length} jobs{impliedHourly>0?` · ~$${impliedHourly}/hr implied gross`:""}{impliedMargin>0?` · ~${impliedMargin}% implied margin`:""}
         </div>
+      </Card>
+      <Card>
+        <Lbl>Activity</Lbl>
+        {followUp>0&&<button onClick={onGoToQuotes} style={{display:"flex",justifyContent:"space-between",alignItems:"center",width:"100%",padding:"10px 0",border:"none",background:"none",cursor:"pointer",fontFamily:"inherit",borderBottom:"1px solid #f1f5f9"}}>
+          <span style={{fontSize:13,color:"#ea580c",fontWeight:600}}>↩ {followUp} quote{followUp>1?"s":""} need follow-up</span>
+          <span style={{color:"#94a3b8"}}>→</span>
+        </button>}
+        {pending>0&&<button onClick={onGoToQuotes} style={{display:"flex",justifyContent:"space-between",alignItems:"center",width:"100%",padding:"10px 0",border:"none",background:"none",cursor:"pointer",fontFamily:"inherit"}}>
+          <span style={{fontSize:13,color:"#3b82f6",fontWeight:600}}>⏳ {pending} quote{pending>1?"s":""} pending response</span>
+          <span style={{color:"#94a3b8"}}>→</span>
+        </button>}
+        {followUp===0&&pending===0&&<div style={{fontSize:13,color:"#94a3b8",padding:"10px 0"}}>All caught up</div>}
+      </Card>
+      {topClients.length>0&&(
+        <Card>
+          <Lbl>Top Clients</Lbl>
+          {topClients.map(([name,{rev,jobs}],i)=>(
+            <div key={name} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 0",borderBottom:i<topClients.length-1?"1px solid #f1f5f9":"none"}}>
+              <div style={{minWidth:0,flex:1}}>
+                <span style={{fontSize:13,fontWeight:600,color:"#0f172a"}}>{i+1}. {name}</span>
+              </div>
+              <div style={{textAlign:"right",flexShrink:0}}>
+                <div style={{fontSize:13,fontWeight:700,color:"#0f172a"}}>{$$(rev)}</div>
+                <div style={{fontSize:11,color:"#94a3b8"}}>{jobs} job{jobs>1?"s":""}</div>
+              </div>
+            </div>
+          ))}
+          <div style={{fontSize:11,color:"#94a3b8",marginTop:8}}>Your best clients — great for referrals and upsell opportunities</div>
+        </Card>
       )}
-    </Card>
+    </div>
   );
 }
 
@@ -1061,7 +1112,7 @@ function ClientDetail({bp,client,quotes,onBack,onViewQuote,onUpdateClient}){
         <button onClick={()=>setEditing(true)} style={{background:"none",border:"none",color:"#15803d",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit",padding:"2px 4px",minHeight:24}}>Edit</button>
       </div>
       <div style={{fontWeight:700,fontSize:18,marginBottom:4}}>{client.name}</div>
-      {client.phone&&<a href={`tel:${client.phone}`} style={{display:"block",fontSize:15,color:"#16a34a",textDecoration:"none",marginBottom:4}}>📞 {client.phone}</a>}
+      {client.phone&&<a href={`tel:${client.phone}`} style={{display:"block",fontSize:15,color:"#16a34a",textDecoration:"none",marginBottom:4}}>📞 {formatPhone(client.phone)}</a>}
       {client.email&&<div style={{fontSize:14,color:"#64748b",marginBottom:4}}>✉ {client.email}</div>}
       {client.default_address&&<div style={{fontSize:13,color:"#64748b"}}>📍 {client.default_address}</div>}
     </Card>
@@ -1168,7 +1219,7 @@ function QuoteDetail({bp,quote,allQuotes,settings,onBack,onEdit,onDuplicate,onDe
     <Card>
       <Lbl>Client</Lbl>
       <div style={{fontWeight:700,fontSize:16,marginBottom:4}}>{quote.client_name}</div>
-      {quote.client_phone&&<a href={`tel:${quote.client_phone}`} style={{display:"block",fontSize:14,color:"#16a34a",textDecoration:"none",marginBottom:2}}>📞 {quote.client_phone}</a>}
+      {quote.client_phone&&<a href={`tel:${quote.client_phone}`} style={{display:"block",fontSize:14,color:"#16a34a",textDecoration:"none",marginBottom:2}}>📞 {formatPhone(quote.client_phone)}</a>}
       {quote.client_email&&<div style={{fontSize:14,color:"#64748b"}}>✉ {quote.client_email}</div>}
     </Card>
   );
@@ -2316,39 +2367,23 @@ function MapMeasure({bp,address,confirmed,setConfirmed,onConfirm,onSwitchManual,
 
 function S3({bp,flow,set,area,perim,calc,time,settings}){
   const [editing,setEditing]=useState(false);
-  const [crewOpen,setCrewOpen]=useState(false);
   const isDesktop = bp==="desktop";
   const crewTimeCard = time && (
-    <Card style={{cursor:"pointer",border:crewOpen?"1.5px solid #15803d":"1.5px solid transparent"}} onClick={()=>setCrewOpen(o=>!o)}>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
-        <div style={{display:"flex",alignItems:"center",gap:6}}>
-          <span style={{fontSize:16}}>⏱</span>
-          <Lbl style={{marginBottom:0}}>Estimated Time</Lbl>
-        </div>
-        <button onClick={e=>{e.stopPropagation();setCrewOpen(o=>!o);}} style={{background:"none",border:"none",color:"#15803d",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:4,padding:"2px 4px",minHeight:24}}>
-          ✎ crew <span style={{fontSize:10,transition:"transform .15s",display:"inline-block",transform:crewOpen?"rotate(180deg)":"none"}}>▾</span>
-        </button>
-      </div>
-      <div style={{fontSize:36,fontWeight:900,color:"#0f172a",lineHeight:1,marginTop:8,letterSpacing:-1}}>{fmtT(time.adj)}</div>
+    <Card>
+      <Lbl>⏱ Estimated Time</Lbl>
+      <div style={{fontSize:36,fontWeight:900,color:"#0f172a",lineHeight:1,letterSpacing:-1}}>{fmtT(time.adj)}</div>
       <div style={{fontSize:13,color:"#64748b",fontWeight:500,marginTop:4}}>{flow.crew}-person crew · {flow.crew>=2?"parallel work":"sequential"}</div>
-      <div style={{display:"flex",gap:16,marginTop:8,fontSize:12,color:"#475569",fontWeight:500}}>
-        <span>Mow: {fmtT(time.mh)}</span>
-        <span>Trim: {fmtT(time.th)}</span>
+      <div style={{display:"flex",gap:16,marginTop:6,fontSize:12,color:"#475569",fontWeight:500}}>
+        <span>Mow: {fmtT(time.mh)}</span><span>Trim: {fmtT(time.th)}</span>
       </div>
-      {crewOpen && (
-        <div style={{marginTop:12,paddingTop:12,borderTop:"1px solid #e2e8f0"}} onClick={e=>e.stopPropagation()}>
-          <div style={{fontSize:11,fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:1,marginBottom:8}}>Select Crew Size</div>
-          <div style={{display:"flex",gap:6}}>{[1,2,3,4,5].map(n=><Chip key={n} label={String(n)} active={flow.crew===n} onClick={()=>set("crew",n)}/>)}</div>
-          <div style={{display:"flex",gap:6,marginTop:10}}>
-            {time.crew_times.map(({n,t})=>(
-              <div key={n} style={{flex:1,textAlign:"center",padding:"8px 4px",borderRadius:10,background:n===flow.crew?"#15803d":"#f1f5f9",color:n===flow.crew?"#ffffff":"#475569",fontSize:12,fontWeight:n===flow.crew?700:500}}>
-                <div>{n} crew</div>
-                <div style={{fontWeight:800,marginTop:2}}>{fmtT(t)}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      <div style={{display:"flex",gap:6,marginTop:14}}>
+        {time.crew_times.map(({n,t})=>(
+          <button key={n} onClick={()=>set("crew",n)} style={{flex:1,textAlign:"center",padding:"10px 4px",borderRadius:12,border:"none",background:n===flow.crew?"#15803d":"#f1f5f9",color:n===flow.crew?"#ffffff":"#475569",cursor:"pointer",fontFamily:"inherit"}}>
+            <div style={{fontSize:14,fontWeight:700}}>{n}</div>
+            <div style={{fontSize:11,fontWeight:600,marginTop:2}}>{fmtT(t)}</div>
+          </button>
+        ))}
+      </div>
     </Card>
   );
   const leftCol = (<>
