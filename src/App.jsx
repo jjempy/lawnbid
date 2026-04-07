@@ -1373,9 +1373,9 @@ function QuoteDetail({bp,quote,allQuotes,settings,onBack,onEdit,onDuplicate,onDe
         <Card style={{border:"1.5px solid #e2e8f0",marginTop:4}}>
           <div style={{fontSize:13,fontWeight:700,color:"#0f172a",marginBottom:8}}>Why was this declined?</div>
           {DECLINE_REASONS.map(r=>(
-            <label key={r} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 0",cursor:"pointer",fontSize:13,color:"#334155"}}>
-              <input type="radio" name="decline" value={r} checked={declineReason===r} onChange={()=>setDeclineReason(r)} style={{accentColor:"#15803d"}}/>
-              {r}
+            <label key={r} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 0",cursor:"pointer",fontSize:13,color:"#334155",borderBottom:"1px solid #f1f5f9",minHeight:44}}>
+              <input type="radio" name="decline" value={r} checked={declineReason===r} onChange={()=>setDeclineReason(r)} style={{width:18,height:18,cursor:"pointer",accentColor:"#15803d",flexShrink:0}}/>
+              <span>{r}</span>
             </label>
           ))}
           <div style={{display:"flex",gap:8,marginTop:10}}>
@@ -1416,8 +1416,8 @@ function QuoteDetail({bp,quote,allQuotes,settings,onBack,onEdit,onDuplicate,onDe
               <Inp type="date" value={visitDate} onChange={e=>setVisitDate(e.target.value)} style={{marginBottom:10}}/>
               <div style={{fontSize:12,fontWeight:600,color:"#334155",marginBottom:6}}>Next visit:</div>
               {[["original","Keep original schedule"],["completion","Calculate from completion date"],["manual","Schedule manually later"],["end","End service — season complete"]].map(([k,lbl])=>(
-                <label key={k} style={{display:"flex",alignItems:"center",gap:8,fontSize:13,color:k==="end"?"#dc2626":"#334155",marginBottom:4,cursor:"pointer"}}>
-                  <input type="radio" name="visitSch" checked={visitSchedule===k} onChange={()=>setVisitSchedule(k)} style={{accentColor:k==="end"?"#dc2626":"#15803d"}}/> {lbl}
+                <label key={k} style={{display:"flex",alignItems:"center",gap:10,fontSize:13,color:k==="end"?"#dc2626":"#334155",cursor:"pointer",padding:"10px 0",borderBottom:"1px solid #f1f5f9",minHeight:44}}>
+                  <input type="radio" name="visitSch" value={k} checked={visitSchedule===k} onChange={()=>setVisitSchedule(k)} style={{width:18,height:18,cursor:"pointer",accentColor:k==="end"?"#dc2626":"#15803d",flexShrink:0}}/> <span>{lbl}</span>
                 </label>
               ))}
               <div style={{display:"flex",gap:8,marginTop:10}}>
