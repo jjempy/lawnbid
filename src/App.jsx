@@ -6,7 +6,7 @@ import supabase, {
   loadSettings, saveSettings as dbSaveSettings,
   nextQuoteId,
   uploadQuoteFile, deleteQuoteFile,
-  countRecentQuotes, updateQuotesForClient,
+  countRecentQuotes, updateQuotesForClient, refreshAttachmentUrls,
 } from "./supabase.js";
 
 // ─── Stripe checkout ────────────────────────────────────────────────────────────
@@ -449,7 +449,14 @@ export default function LawnBid() {
     };
   }, [settings?.plan, quotesUsedLive]);
 
-  const lang = settings?.language || (()=>{try{return localStorage.getItem("lb_language")}catch{return null}})() || "en";
+  // Language: useState for reliable reactivity across the component tree
+  const [lang, setLang] = useState(()=>{try{return localStorage.getItem("lb_language")||"en";}catch{return"en";}});
+  useEffect(()=>{
+    if(settings?.language && settings.language!==lang){
+      setLang(settings.language);
+      try{localStorage.setItem("lb_language",settings.language);}catch{}
+    }
+  },[settings?.language]);
 
   // ── Load all data from Supabase once authenticated ──
   useEffect(() => {
@@ -757,7 +764,7 @@ export default function LawnBid() {
   ):tab==="business" ? (
     <BusinessScreen bp={bp} quotes={quotes} settings={settings} clients={clients}/>
   ):(
-    <SettingsScreen bp={bp} settings={settings} onSave={handleSaveSettings} onLogout={()=>supabase.auth.signOut()}/>
+    <SettingsScreen bp={bp} settings={settings} onSave={handleSaveSettings} onLogout={()=>supabase.auth.signOut()} onLangChange={setLang}/>
   );
 
   const dbBanner = dbErr && (
@@ -1338,8 +1345,15 @@ function QuoteDetail({bp,quote,allQuotes,settings,onBack,onEdit,onDuplicate,onDe
   const [nextDateVal,setNextDateVal]=useState(new Date().toISOString().slice(0,10));
   const [confirmDel,setConfirmDel]=useState(false);
   const [copied,setCopied]=useState(false);
-  const [lightbox,setLightbox]=useState(null);
-  const attachments = Array.isArray(quote.attachments) ? quote.attachments : [];
+  const [lightboxIdx,setLightboxIdx]=useState(null);
+  const [freshAttachments,setFreshAttachments]=useState(Array.isArray(quote.attachments)?quote.attachments:[]);
+  useEffect(()=>{
+    const raw=Array.isArray(quote.attachments)?quote.attachments:[];
+    if(raw.some(a=>a.path)) refreshAttachmentUrls(raw).then(setFreshAttachments);
+    else setFreshAttachments(raw);
+  },[quote.quote_id]);
+  const attachments=freshAttachments;
+  const imageAtts=attachments.filter(a=>a.type?.startsWith("image/"));
   const snap={...settings,mow_rate:quote.mow_rate_used||settings.mow_rate,trim_rate:quote.trim_rate_used||settings.trim_rate,equipment_cost:quote.equipment_cost_used||settings.equipment_cost};
   const calc=calcQ(quote.area_sqft,quote.linear_ft,quote.complexity,quote.risk,quote.discount_pct||0,snap);
   const time=calcTime(quote.area_sqft,quote.linear_ft,quote.crew_size,quote.complexity);
@@ -1591,7 +1605,7 @@ function PlanBadge(){
   );
 }
 
-function SettingsScreen({bp,settings,onSave,onLogout}){
+function SettingsScreen({bp,settings,onSave,onLogout,onLangChange}){
   const lang = useLang();
   const [loc,setLoc]=useState(settings);
   const [tip,setTip]=useState(null);
@@ -1753,8 +1767,8 @@ function SettingsScreen({bp,settings,onSave,onLogout}){
         <div style={{marginTop:14,paddingTop:14,borderTop:"1px solid #e2e8f0"}}>
           <div style={{fontSize:13,fontWeight:600,color:"#334155",marginBottom:8}}>{t("language",lang)}</div>
           <div style={{display:"flex",gap:6}}>
-            <Chip label="🇺🇸 English" active={loc.language!=="es"} onClick={()=>{set("language","en");try{localStorage.setItem("lb_language","en");}catch{}}}/>
-            <Chip label="🇲🇽 Español" active={loc.language==="es"} onClick={()=>{set("language","es");try{localStorage.setItem("lb_language","es");}catch{}}}/>
+            <Chip label="🇺🇸 English" active={loc.language!=="es"} onClick={()=>{set("language","en");try{localStorage.setItem("lb_language","en");}catch{} if(onLangChange)onLangChange("en");}}/>
+            <Chip label="🇲🇽 Español" active={loc.language==="es"} onClick={()=>{set("language","es");try{localStorage.setItem("lb_language","es");}catch{} if(onLangChange)onLangChange("es");}}/>
           </div>
         </div>
       </Card>

@@ -153,14 +153,41 @@ export async function saveSettings(settings) {
 // ─── Quote Attachments ────────────────────────────────────────────────────────────
 const ATTACH_BUCKET = 'quote-attachments'
 
+async function resizeImage(file, maxW = 1200, maxH = 1200, quality = 0.8) {
+  return new Promise(resolve => {
+    const reader = new FileReader()
+    reader.onload = e => {
+      const img = new Image()
+      img.onload = () => {
+        const canvas = document.createElement('canvas')
+        let w = img.width, h = img.height
+        if (w > maxW || h > maxH) {
+          const r = Math.min(maxW / w, maxH / h)
+          w = Math.round(w * r); h = Math.round(h * r)
+        }
+        canvas.width = w; canvas.height = h
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h)
+        canvas.toBlob(
+          blob => resolve(new File([blob], file.name.replace(/\.[^.]+$/, '.jpg'), { type: 'image/jpeg' })),
+          'image/jpeg', quality
+        )
+      }
+      img.src = e.target.result
+    }
+    reader.readAsDataURL(file)
+  })
+}
+
 export async function uploadQuoteFile(quoteId, file) {
   const userId = await currentUserId()
   if (!userId) throw new Error('Not authenticated')
-  const cleanName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
+  // Resize images client-side before upload
+  const toUpload = file.type.startsWith('image/') ? await resizeImage(file) : file
+  const cleanName = toUpload.name.replace(/[^a-zA-Z0-9._-]/g, '_')
   const path = `${userId}/${quoteId}/${Date.now()}-${cleanName}`
   const { error } = await supabase.storage
     .from(ATTACH_BUCKET)
-    .upload(path, file, { contentType: file.type, cacheControl: '3600', upsert: false })
+    .upload(path, toUpload, { contentType: toUpload.type, cacheControl: '3600', upsert: false })
   if (error) {
     const msg = (error.message || '').toLowerCase()
     if (msg.includes('bucket not found') || msg.includes('the resource was not found')) {
@@ -168,8 +195,22 @@ export async function uploadQuoteFile(quoteId, file) {
     }
     throw error
   }
-  const { data } = supabase.storage.from(ATTACH_BUCKET).getPublicUrl(path)
-  return { path, url: data.publicUrl }
+  // Use signed URL instead of public URL (bucket is private)
+  const { data: signedData } = await supabase.storage
+    .from(ATTACH_BUCKET)
+    .createSignedUrl(path, 3600)
+  return { path, url: signedData?.signedUrl || '' }
+}
+
+export async function refreshAttachmentUrls(attachments) {
+  if (!attachments?.length) return attachments
+  return Promise.all(attachments.map(async att => {
+    if (!att.path) return att
+    try {
+      const { data } = await supabase.storage.from(ATTACH_BUCKET).createSignedUrl(att.path, 3600)
+      return { ...att, url: data?.signedUrl || att.url }
+    } catch { return att }
+  }))
 }
 
 export async function deleteQuoteFile(path) {
