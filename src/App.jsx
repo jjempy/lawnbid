@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef, forwardRef, createContext, useContext, useMemo } from "react";
+import { t } from "./i18n.js";
 import supabase, {
   loadQuotes, upsertQuote, deleteQuote, updateQuoteStatus,
   loadClients, upsertClient,
@@ -48,6 +49,8 @@ const PLANS = {
 const PLAN_PRICE = "$19/month";
 const PlanContext = createContext(null);
 const usePlan = () => useContext(PlanContext);
+const LangContext = createContext("en");
+const useLang = () => useContext(LangContext);
 const COMPLEXITY = [
   { label: "Simple",    value: 1.0,  desc: "Open lawn, no obstacles" },
   { label: "Moderate",  value: 1.3,  desc: "Some trees, beds, tight spaces" },
@@ -199,29 +202,36 @@ async function generateQuotePDF(quote, settings, calc, time) {
   const expiryStr = fmtD(expiryISO);
   let y = M;
 
-  // ── Header: logo + company block ──
-  const logoSize = 60;
+  // ── Header: two-column layout ──
+  const logoSize = 48;
   if (settings.company_logo_base64) {
     try {
       const fmt = /^data:image\/(png|jpeg|jpg|webp)/i.exec(settings.company_logo_base64)?.[1]?.toUpperCase() || "PNG";
       doc.addImage(settings.company_logo_base64, fmt==="JPG"?"JPEG":fmt, M, y, logoSize, logoSize);
-    } catch(_) { /* ignore bad image */ }
+    } catch(_) {}
   }
-  // Left column: logo + company info
-  const textX = settings.company_logo_base64 ? M + logoSize + 16 : M;
-  doc.setFont("helvetica","bold"); doc.setFontSize(18); doc.setTextColor(...DARK);
-  doc.text(settings.company_name || "LawnBid", textX, y + 20, { maxWidth: W/2 - M });
-  doc.setFont("helvetica","normal"); doc.setFontSize(10); doc.setTextColor(...MUTED);
-  const contact = [settings.company_phone ? formatPhone(settings.company_phone) : null, settings.company_email].filter(Boolean).join("  ·  ");
-  if (contact) doc.text(contact, textX, y + 36, { maxWidth: W/2 - M });
-  // Right column: document type + quote number (right-aligned, never overlaps left)
+  // Left column: company name + phone (max 55% of page width)
+  const textX = settings.company_logo_base64 ? M + logoSize + 10 : M;
+  const leftMaxW = (W * 0.52) - textX;
+  const companyName = settings.company_name || "LawnBid";
+  const nameFontSize = companyName.length > 28 ? 11 : 13;
+  doc.setFont("helvetica","bold"); doc.setFontSize(nameFontSize); doc.setTextColor(...DARK);
+  const nameLines = doc.splitTextToSize(companyName, leftMaxW);
+  doc.text(nameLines, textX, y + 18);
+  const nameHeight = nameLines.length * (nameFontSize + 2);
+  doc.setFont("helvetica","normal"); doc.setFontSize(9); doc.setTextColor(...MUTED);
+  const phone = settings.company_phone ? formatPhone(settings.company_phone) : null;
+  if (phone) doc.text(phone, textX, y + 18 + nameHeight + 2);
+  // Right column: document type + quote number (right-aligned, 45% of page)
   const docType = quote.is_recurring ? "SERVICE AGREEMENT" : "QUOTE";
-  doc.setFont("helvetica","bold"); doc.setFontSize(quote.is_recurring ? 14 : 22); doc.setTextColor(...PRIMARY);
-  doc.text(docType, W - M, y + 20, { align: "right" });
-  doc.setFont("helvetica","normal"); doc.setFontSize(10); doc.setTextColor(...MUTED);
-  doc.text(`#${quote.quote_id}`, W - M, y + (quote.is_recurring ? 34 : 38), { align: "right" });
+  const docFontSize = quote.is_recurring ? 13 : 20;
+  doc.setFont("helvetica","bold"); doc.setFontSize(docFontSize); doc.setTextColor(...PRIMARY);
+  doc.text(docType, W - M, y + 18, { align: "right" });
+  doc.setFont("helvetica","normal"); doc.setFontSize(9); doc.setTextColor(...MUTED);
+  doc.text(`#${quote.quote_id}`, W - M, y + 18 + docFontSize + 4, { align: "right" });
 
-  y += logoSize + 14;
+  const headerBottom = Math.max(y + 18 + nameHeight + 12, y + logoSize + 6);
+  y = headerBottom;
   doc.setDrawColor(...LINE); doc.setLineWidth(0.8);
   doc.line(M, y, W - M, y);
   y += 22;
@@ -466,6 +476,8 @@ export default function LawnBid() {
         } catch {}
         // Beta tester prompt — show once for new accounts (created < 10 min ago)
         try {
+          // Beta prompt: show for all free-plan users who haven't dismissed it
+          // To test: localStorage.removeItem('lb_beta_prompt_shown') in console then refresh
           if (localStorage.getItem("lb_beta_prompt_shown") !== "true" && (s?.plan||"free")==="free") {
             setBetaPrompt(true);
           }
