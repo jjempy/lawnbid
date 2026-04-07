@@ -811,7 +811,7 @@ export default function LawnBid() {
   // ─── Mobile / tablet layout: bottom nav ───
   const maxW = isTablet ? 720 : 480;
   return (
-    <PlanContext.Provider value={planValue}>
+    <PlanContext.Provider value={planValue}><LangContext.Provider value={lang}>
       <div style={{maxWidth:maxW,margin:"0 auto",minHeight:"100vh",display:"flex",flexDirection:"column",fontFamily:"'Inter',system-ui,-apple-system,sans-serif",background:"#f8fafc",color:"#0f172a"}}>
 
         {upgradeModal}
@@ -822,7 +822,7 @@ export default function LawnBid() {
         </div>
         {screen!=="flow" && <BottomNav tab={tab} screen={screen} setTab={setTab} setScreen={setScreen} bp={bp} maxW={maxW}/>}
       </div>
-    </PlanContext.Provider>
+    </LangContext.Provider></PlanContext.Provider>
   );
 }
 
@@ -1015,13 +1015,13 @@ function HomeScreen({bp,quotes,settings,onNew,onView}){
                 {needsFollowUp&&<span style={{fontSize:12,flexShrink:0}} title="Follow-up needed">⭐</span>}
               </div>
               <div style={{fontSize:13,color:"#64748b",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontWeight:400}}>{q.address}</div>
-              {(()=>{
-                const qt=calcTime(q.area_sqft,q.linear_ft,q.crew_size,q.complexity);
+              {q.area_sqft>0&&q.linear_ft>0&&(()=>{
+                const qt=calcTime(q.area_sqft,q.linear_ft,q.crew_size||1,q.complexity||1);
                 return (
                 <div style={{display:"flex",gap:bp==="mobile"?8:14,marginTop:5,fontSize:bp==="mobile"?11:12,color:"#475569",fontWeight:500,flexWrap:"wrap"}}>
                   <span>{fmtArea(q.area_sqft)}</span>
                   <span>{Math.round(q.linear_ft).toLocaleString()} ft</span>
-                  {qt&&<span>⏱ {fmtT(qt.adj)}</span>}
+                  {qt&&qt.adj>0&&<span>⏱ {fmtT(qt.adj)}</span>}
                 </div>);
               })()}
               <div style={{display:"flex",alignItems:"center",gap:8,marginTop:6}}>

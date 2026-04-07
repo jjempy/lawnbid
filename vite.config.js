@@ -27,6 +27,10 @@ export default defineConfig({
           copyFileSync('public/_redirects', 'dist/_redirects')
           console.log('✓ _redirects copied')
         }
+        if (existsSync('public/_headers')) {
+          copyFileSync('public/_headers', 'dist/_headers')
+          console.log('✓ _headers copied')
+        }
       },
     },
   ],
