@@ -253,15 +253,15 @@ async function generateQuotePDF(quote, settings, calc, time) {
 
   doc.setFont("helvetica","bold"); doc.setFontSize(8); doc.setTextColor(...MUTED);
   doc.text("AREA", M, y);
-  doc.text("PERIMETER", M + 180, y);
-  doc.text("EST. TIME", M + 340, y);
+  doc.text("PERIMETER", M + 220, y);
   doc.setFont("helvetica","normal"); doc.setFontSize(11); doc.setTextColor(...DARK);
   doc.text(fmtArea(quote.area_sqft), M, y + 14);
-  doc.text(`${Math.round(quote.linear_ft).toLocaleString()} ft`, M + 180, y + 14);
-  doc.text(time ? fmtT(time.adj) : "—", M + 340, y + 14);
+  const perimFt = Math.round(quote.linear_ft);
+  const perimYd = Math.round(quote.linear_ft / 3);
+  doc.text(`${perimFt.toLocaleString()} ft (${perimYd.toLocaleString()} yds)`, M + 220, y + 14);
   y += 34;
 
-  // ── Line item table ──
+  // ── Line item table (client-facing: no complexity, risk, margin, time) ──
   doc.setDrawColor(...LINE); doc.line(M, y, W - M, y); y += 14;
   doc.setFont("helvetica","bold"); doc.setFontSize(8); doc.setTextColor(...MUTED);
   doc.text("DESCRIPTION", M, y);
@@ -269,8 +269,17 @@ async function generateQuotePDF(quote, settings, calc, time) {
   y += 10;
   doc.line(M, y, W - M, y); y += 14;
 
+  const pdfItems = (calc?.bd || []).filter(r => {
+    const lbl = (r.label || "").toLowerCase();
+    if (lbl.includes("complexity") || lbl.includes("risk") || lbl.includes("profit margin")) return false;
+    if (lbl.includes("discount") && (!r.value || r.value === 0)) return false;
+    return true;
+  }).map(r => ({
+    ...r,
+    label: r.label?.replace("Subtotal (costs)","Subtotal").replace("Trim (perimeter)","Trim & Edge").replace("Mow (area)","Mow") || r.label,
+  }));
   doc.setFont("helvetica","normal"); doc.setFontSize(10); doc.setTextColor(...DARK);
-  (calc?.bd || []).forEach(r => {
+  pdfItems.forEach(r => {
     if (r.subtotal) {
       doc.setDrawColor(...LINE); doc.line(M, y - 4, W - M, y - 4);
       doc.setFont("helvetica","bold"); doc.setTextColor(...DARK);
@@ -655,7 +664,11 @@ export default function LawnBid() {
   ):screen==="client-detail"&&activeC ? (
     <ClientDetail bp={bp} client={activeC} quotes={quotes.filter(q=>q.client_id===activeC.id)}
       onBack={()=>{setTab("clients");setScreen("home");}}
-      onViewQuote={qid=>{setSelQ(qid);setScreen("quote-detail");}}/>
+      onViewQuote={qid=>{setSelQ(qid);setScreen("quote-detail");}}
+      onUpdateClient={async(updates)=>{
+        await upsertClient({...activeC,...updates});
+        setClients(prev=>prev.map(c=>c.id===activeC.id?{...c,...updates}:c));
+      }}/>
   ):tab==="quotes" ? (
     <HomeScreen bp={bp} quotes={quotes} onNew={startNew} onView={qid=>{setSelQ(qid);setScreen("quote-detail");}}/>
   ):tab==="clients" ? (
@@ -945,14 +958,43 @@ function ClientsScreen({bp,clients,quotes,onView}){
 }
 
 // ─── Client Detail ────────────────────────────────────────────────────────────
-function ClientDetail({bp,client,quotes,onBack,onViewQuote}){
+function ClientDetail({bp,client,quotes,onBack,onViewQuote,onUpdateClient}){
   const sorted=[...quotes].sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));
   const total=quotes.reduce((s,q)=>s+(q.final_price||0),0);
   const isDesktop = bp==="desktop";
+  const [editing,setEditing]=useState(false);
+  const [editForm,setEditForm]=useState({name:client.name||"",phone:client.phone||"",email:client.email||"",default_address:client.default_address||""});
+  const [editMsg,setEditMsg]=useState("");
+  const saveEdit=async()=>{
+    if(!editForm.name.trim()){setEditMsg("Name is required.");return;}
+    if(editForm.phone&&editForm.phone.replace(/\D/g,"").length<10){setEditMsg("Phone must be at least 10 digits.");return;}
+    try{await onUpdateClient(editForm);setEditing(false);setEditMsg("");setTimeout(()=>setEditMsg(""),0);}
+    catch(e){setEditMsg("Could not save — check connection.");console.error("[LawnBid] Client update failed:",e);}
+  };
 
-  const contactCard = (
+  const contactCard = editing ? (
     <Card>
-      <Lbl>Contact</Lbl>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+        <Lbl style={{marginBottom:0}}>Edit Contact</Lbl>
+      </div>
+      {[["name","Name *"],["phone","Phone"],["email","Email"],["default_address","Address"]].map(([k,lbl])=>(
+        <div key={k} style={{marginBottom:10}}>
+          <div style={{fontSize:12,fontWeight:600,color:"#334155",marginBottom:3}}>{lbl}</div>
+          <Inp value={editForm[k]} onChange={e=>setEditForm(f=>({...f,[k]:e.target.value}))} placeholder={lbl}/>
+        </div>
+      ))}
+      {editMsg&&<div style={{fontSize:12,color:"#dc2626",marginBottom:8}}>⚠ {editMsg}</div>}
+      <div style={{display:"flex",gap:8}}>
+        <Btn onClick={saveEdit} style={{flex:1,height:40,minHeight:40,fontSize:13}}>Save</Btn>
+        <Btn variant="secondary" onClick={()=>{setEditing(false);setEditForm({name:client.name||"",phone:client.phone||"",email:client.email||"",default_address:client.default_address||""});setEditMsg("");}} style={{flex:1,height:40,minHeight:40,fontSize:13}}>Cancel</Btn>
+      </div>
+    </Card>
+  ) : (
+    <Card>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+        <Lbl>Contact</Lbl>
+        <button onClick={()=>setEditing(true)} style={{background:"none",border:"none",color:"#15803d",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit",padding:"2px 4px",minHeight:24}}>Edit</button>
+      </div>
       <div style={{fontWeight:700,fontSize:18,marginBottom:4}}>{client.name}</div>
       {client.phone&&<a href={`tel:${client.phone}`} style={{display:"block",fontSize:15,color:"#16a34a",textDecoration:"none",marginBottom:4}}>📞 {client.phone}</a>}
       {client.email&&<div style={{fontSize:14,color:"#64748b",marginBottom:4}}>✉ {client.email}</div>}
@@ -1246,7 +1288,15 @@ function SettingsScreen({bp,settings,onSave,onLogout}){
     catch(e) { console.error("[LawnBid] Settings save failed:", e); alert("Could not save settings. Check your connection and try again."); }
   };
   const reset=async()=>{if(confirm("Reset formula settings to defaults?")){const ns={...loc,...DEFAULT_SETTINGS};setLoc(ns);try{await onSave(ns);}catch(e){console.error("[LawnBid] Settings reset failed:",e);}}};
-  const TIPS={mow_rate:"Dollar value of mowing 20,000 sqft (≈½ acre) in 1 hr.",trim_rate:"Cost to trim 3,000 linear feet in 1 hr. Most crews do 2,500–4,000 ft/hr.",equipment_cost:"Hourly cost to run your equipment — fuel, maintenance, depreciation.",hourly_rate:"True cost per worker per hour: wages + payroll taxes + benefits.",minimum_bid:"No quote goes below this. Covers drive time, mobilization, admin.",quote_validity_days:"How many days a new quote is valid before it is marked expired.",profit_margin:"Your target profit. 30% means for every $100 charged, $30 is profit after all costs. Most lawn care businesses target 25–40%. Formula: price = cost ÷ (1 - margin)"};
+  const TIPS={
+    mow_rate:"What you charge to mow a standard half-acre lawn (20,000 sqft). If you quote $110 for a typical half-acre cut, set this to $110. The formula scales this rate up or down based on actual property size.",
+    trim_rate:"What you charge for one hour of trimming and edging. Most crews trim about 3,000 linear feet per hour. If you charge $18 for that hour of trimming work, set $18. This automatically adjusts based on how much edge your client has.",
+    equipment_cost:"Your true hourly cost to run your equipment — what it costs YOU, not what you charge. Add up: fuel ($3–5/hr) + maintenance ($2–3/hr) + depreciation (mower cost ÷ expected hours). Most owner-operators are between $8–18/hr. This is passed through to the quote as a real cost.",
+    hourly_rate:"Your true cost per worker per hour including wages, payroll taxes (~7.65%), and workers comp. Used only for time estimates — not directly in the price. Example: $17/hr wage + $1.30 taxes + $2 workers comp = $20.30/hr.",
+    minimum_bid:"No quote goes below this amount. Set it high enough to cover your drive time, loading, and admin on every job. Most operators use $45–75. A job that takes 15 minutes still costs you time to schedule, drive, and invoice.",
+    profit_margin:"Your target profit percentage. At 30%, a job that costs you $93 to do bills at $132 — $39 is your profit. This is true margin (not markup). Industry standard for lawn care is 25–40%. Start at 30% and adjust based on your local market.",
+    quote_validity_days:"How many days your quotes stay active before expiring. After this period, the quote shows as EXPIRED and you'll need to resend with updated pricing. 30 days is standard.",
+  };
   const FIELDS=[{key:"mow_rate",label:"Mow Rate ($/20k sqft)"},{key:"trim_rate",label:"Trim Rate ($/3k linear ft)"},{key:"equipment_cost",label:"Equipment Cost ($/hr)"},{key:"hourly_rate",label:"Hourly Rate ($/worker/hr)"},{key:"minimum_bid",label:"Minimum Bid ($)"},{key:"profit_margin",label:"Profit Margin (%)",pct:true},{key:"quote_validity_days",label:"Quote Valid For (days)"}];
   const [logoMsg,setLogoMsg]=useState("");
   const compressLogo = (file) => new Promise((resolve) => {
@@ -2179,9 +2229,43 @@ function MapMeasure({bp,address,confirmed,setConfirmed,onConfirm,onSwitchManual,
 
 function S3({bp,flow,set,area,perim,calc,time,settings}){
   const [editing,setEditing]=useState(false);
+  const [crewOpen,setCrewOpen]=useState(false);
   const isDesktop = bp==="desktop";
+  const crewTimeCard = time && (
+    <Card style={{cursor:"pointer",border:crewOpen?"1.5px solid #15803d":"1.5px solid transparent"}} onClick={()=>setCrewOpen(o=>!o)}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+        <div style={{display:"flex",alignItems:"center",gap:6}}>
+          <span style={{fontSize:16}}>⏱</span>
+          <Lbl style={{marginBottom:0}}>Estimated Time</Lbl>
+        </div>
+        <button onClick={e=>{e.stopPropagation();setCrewOpen(o=>!o);}} style={{background:"none",border:"none",color:"#15803d",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:4,padding:"2px 4px",minHeight:24}}>
+          ✎ crew <span style={{fontSize:10,transition:"transform .15s",display:"inline-block",transform:crewOpen?"rotate(180deg)":"none"}}>▾</span>
+        </button>
+      </div>
+      <div style={{fontSize:36,fontWeight:900,color:"#0f172a",lineHeight:1,marginTop:8,letterSpacing:-1}}>{fmtT(time.adj)}</div>
+      <div style={{fontSize:13,color:"#64748b",fontWeight:500,marginTop:4}}>{flow.crew}-person crew · {flow.crew>=2?"parallel work":"sequential"}</div>
+      <div style={{display:"flex",gap:16,marginTop:8,fontSize:12,color:"#475569",fontWeight:500}}>
+        <span>Mow: {fmtT(time.mh)}</span>
+        <span>Trim: {fmtT(time.th)}</span>
+      </div>
+      {crewOpen && (
+        <div style={{marginTop:12,paddingTop:12,borderTop:"1px solid #e2e8f0"}} onClick={e=>e.stopPropagation()}>
+          <div style={{fontSize:11,fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:1,marginBottom:8}}>Select Crew Size</div>
+          <div style={{display:"flex",gap:6}}>{[1,2,3,4,5].map(n=><Chip key={n} label={String(n)} active={flow.crew===n} onClick={()=>set("crew",n)}/>)}</div>
+          <div style={{display:"flex",gap:6,marginTop:10}}>
+            {time.crew_times.map(({n,t})=>(
+              <div key={n} style={{flex:1,textAlign:"center",padding:"8px 4px",borderRadius:10,background:n===flow.crew?"#15803d":"#f1f5f9",color:n===flow.crew?"#ffffff":"#475569",fontSize:12,fontWeight:n===flow.crew?700:500}}>
+                <div>{n} crew</div>
+                <div style={{fontWeight:800,marginTop:2}}>{fmtT(t)}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </Card>
+  );
   const leftCol = (<>
-      <Card><Lbl>Crew Size</Lbl><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{[1,2,3,4,5].map(n=><Chip key={n} label={String(n)} active={flow.crew===n} onClick={()=>set("crew",n)}/>)}</div></Card>
+      {crewTimeCard}
       <Card>
         <Lbl>Job Complexity</Lbl>
         <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:8}}>{COMPLEXITY.map(o=><Chip key={o.value} label={`${o.label} (${o.value}×)`} active={flow.cx===o.value} onClick={()=>set("cx",o.value)}/>)}</div>
@@ -2200,36 +2284,6 @@ function S3({bp,flow,set,area,perim,calc,time,settings}){
         <div style={{color:"#475569",marginTop:2}}>{fmtArea(area)} · {Math.round(perim).toLocaleString()} ft perimeter</div>
       </div>
       {(() => {
-        const timeCard = time && (
-        <Card>
-          <Lbl>⏱ Time Estimate</Lbl>
-          <div style={{display:"flex",alignItems:"flex-end",gap:10,marginBottom:6}}>
-            <div style={{fontSize:42,fontWeight:900,color:"#0f172a",lineHeight:1,letterSpacing:-1}}>{fmtT(time.adj)}</div>
-            {flow.cx>1&&<div style={{fontSize:12,color:"#b45309",paddingBottom:6,fontWeight:600}}>+{fmtT(time.adj-time.wall)} complexity</div>}
-          </div>
-          <div style={{fontSize:13,color:"#64748b",marginBottom:16,fontWeight:500}}>{flow.crew>=2?`${flow.crew}-person crew — mow & trim in parallel`:"Solo — mow then trim sequentially"}</div>
-          {[{label:"Mowing",hrs:time.mh,note:`${fmtArea(area)} ÷ 20,000`},{label:"Trimming",hrs:time.th,note:`${Math.round(perim).toLocaleString()} ft ÷ 3,000`}].map(ph=>(
-            <div key={ph.label} style={{marginBottom:12}}>
-              <div style={{display:"flex",justifyContent:"space-between",fontSize:13,marginBottom:4}}><span style={{color:"#334155",fontWeight:500}}>{ph.label}</span><span style={{fontWeight:700,color:"#0f172a"}}>{fmtT(ph.hrs)}</span></div>
-              <div style={{background:"#f1f5f9",borderRadius:4,height:6}}><div style={{background:"#15803d",height:"100%",borderRadius:4,width:`${Math.min(100,(ph.hrs/(time.mh+time.th))*100)}%`}}/></div>
-              <div style={{fontSize:10,color:"#94a3b8",marginTop:4,fontWeight:500}}>{ph.note}</div>
-            </div>
-          ))}
-          <div style={{marginTop:4,marginBottom:16}}>
-            <div style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:4}}><span style={{color:"#334155",fontWeight:500}}>% of 8-hr workday</span><span style={{fontWeight:700,color:"#0f172a"}}>{Math.round(time.pct)}%</span></div>
-            <div style={{background:"#f1f5f9",borderRadius:4,height:8}}><div style={{background:time.pct>80?"#dc2626":time.pct>50?"#b45309":"#15803d",height:"100%",borderRadius:4,width:`${time.pct}%`,transition:"all .3s"}}/></div>
-          </div>
-          <div style={{fontSize:11,fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:1,marginBottom:8}}>Crew Impact</div>
-          <div style={{display:"flex",gap:6}}>
-            {time.crew_times.map(({n,t})=>(
-              <div key={n} style={{flex:1,textAlign:"center",padding:"10px 4px",borderRadius:12,background:n===flow.crew?"#15803d":"#f1f5f9",color:n===flow.crew?"#ffffff":"#475569"}}>
-                <div style={{fontSize:10,fontWeight:600,letterSpacing:.2}}>{n} crew</div>
-                <div style={{fontSize:13,fontWeight:800,marginTop:2}}>{fmtT(t)}</div>
-              </div>
-            ))}
-          </div>
-        </Card>
-        );
         const discountCard = (
         <Card>
           <Lbl>Discount</Lbl>
@@ -2272,11 +2326,11 @@ function S3({bp,flow,set,area,perim,calc,time,settings}){
           return (
             <div style={{display:"grid",gridTemplateColumns:"minmax(0,1fr) minmax(0,1fr)",gap:20,alignItems:"start"}}>
               <div style={{minWidth:0}}>{leftCol}{discountCard}</div>
-              <div style={{minWidth:0,position:"sticky",top:80}}>{timeCard}{calcCard}</div>
+              <div style={{minWidth:0,position:"sticky",top:80}}>{calcCard}</div>
             </div>
           );
         }
-        return (<>{leftCol}{timeCard}{discountCard}{calcCard}</>);
+        return (<>{leftCol}{discountCard}{calcCard}</>);
       })()}
     </div>
   );
