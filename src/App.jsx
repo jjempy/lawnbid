@@ -1664,6 +1664,8 @@ function PlanBadge(){
 
 function SettingsScreen({bp,settings,onSave,onLogout,onLangChange}){
   const lang = useLang();
+  const [userEmail,setUserEmail]=useState("");
+  useEffect(()=>{supabase.auth.getUser().then(({data})=>{if(data?.user?.email)setUserEmail(data.user.email);});},[]);
   const [loc,setLoc]=useState(settings);
   const [tip,setTip]=useState(null);
   const [saved,setSaved]=useState(false);
@@ -1835,7 +1837,8 @@ function SettingsScreen({bp,settings,onSave,onLogout,onLangChange}){
       {autoSaveErr && <div style={{fontSize:12,color:"#dc2626",background:"#fef2f2",borderLeft:"3px solid #dc2626",borderRadius:"0 8px 8px 0",padding:"8px 10px",fontWeight:500,marginBottom:10}}>⚠ {autoSaveErr}</div>}
       <Btn onClick={save} style={{width:"100%"}}>{saved?"✓ Saved!":t("save_settings",lang)}</Btn>
       <div style={{textAlign:"center",fontSize:11,color:"#94a3b8",marginTop:6}}>{t("auto_save_note",lang)}</div>
-      <Btn variant="danger" onClick={onLogout} style={{width:"100%",marginTop:10}}>{t("log_out",lang)}</Btn>
+      <div style={{textAlign:"center",fontSize:12,color:"#64748b",marginTop:14,marginBottom:4}}>{t("logged_in_as",lang)} {userEmail}</div>
+      <Btn variant="danger" onClick={onLogout} style={{width:"100%"}}>{t("log_out",lang)}</Btn>
       <div style={{textAlign:"center",fontSize:11,color:"#94a3b8",marginTop:20}}>LawnBid v{APP_VERSION} · Built for lawn care professionals</div>
     </>
   );
