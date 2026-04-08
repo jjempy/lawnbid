@@ -359,19 +359,6 @@
   .fade-up:nth-child(3) { transition-delay: 0.2s; }
   .fade-up:nth-child(4) { transition-delay: 0.3s; }
 
-  /* Pro trial modal */
-  .pro-modal { position: fixed; inset: 0; background: rgba(10,18,8,0.72); z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 20px; opacity: 0; pointer-events: none; transition: opacity 0.2s ease; }
-  .pro-modal.open { opacity: 1; pointer-events: auto; }
-  .pro-modal-dialog { background: var(--white); border-radius: 16px; padding: 32px; width: 100%; max-width: 420px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); position: relative; transform: translateY(10px); transition: transform 0.25s cubic-bezier(.2,.8,.2,1); }
-  .pro-modal.open .pro-modal-dialog { transform: translateY(0); }
-  .pro-modal-close { position: absolute; top: 14px; right: 14px; width: 32px; height: 32px; border-radius: 50%; border: none; background: transparent; color: rgba(0,0,0,0.4); font-size: 20px; cursor: pointer; line-height: 1; display: flex; align-items: center; justify-content: center; font-family: var(--sans); }
-  .pro-modal-close:hover { background: rgba(0,0,0,0.05); color: rgba(0,0,0,0.8); }
-  .pro-modal h3 { font-family: var(--serif); font-size: 24px; font-weight: 400; color: var(--gray-900); letter-spacing: -0.4px; margin-bottom: 14px; }
-  .pro-modal .pro-price { font-size: 15px; color: var(--gray-900); font-weight: 600; margin-bottom: 4px; }
-  .pro-modal .pro-terms { font-size: 14px; color: var(--gray-500); margin-bottom: 22px; }
-  .pro-modal .pro-continue { display: block; width: 100%; background: var(--green-500); color: var(--white); border: none; padding: 14px 20px; border-radius: 10px; font-size: 15px; font-weight: 600; cursor: pointer; font-family: var(--sans); text-decoration: none; text-align: center; box-sizing: border-box; transition: background 0.15s; }
-  .pro-modal .pro-continue:hover { background: var(--green-700); }
-  .pro-modal .pro-footnote { font-size: 12px; color: var(--gray-500); text-align: center; margin-top: 14px; line-height: 1.5; }
 </style>
 </head>
 <body>
@@ -583,7 +570,8 @@
           <li>Business analytics</li>
           <li>English &amp; Spanish language support</li>
         </ul>
-        <a href="/app/?plan=pro" class="price-btn primary" data-pro-trigger>Start Pro free →</a>
+        <a href="/app/?plan=pro" class="price-btn primary">Start Pro Trial — Free for 14 days →</a>
+        <p style="font-size:12px;color:var(--gray-500);text-align:center;margin-top:10px;line-height:1.5;">No credit card to start · Cancel anytime · $19/mo after trial</p>
       </div>
       <!-- TEAM -->
       <div class="price-card">
@@ -647,21 +635,6 @@
   </div>
 </footer>
 
-<!-- PRO TRIAL MODAL -->
-<div id="pro-modal" class="pro-modal" role="dialog" aria-modal="true" aria-labelledby="pro-modal-title">
-  <div class="pro-modal-dialog" role="document">
-    <button class="pro-modal-close" type="button" aria-label="Close" data-pro-close>✕</button>
-    <h3 id="pro-modal-title">Start your Pro trial</h3>
-    <div class="pro-price">$19/month after 14-day free trial</div>
-    <div class="pro-terms">Cancel anytime. No commitment.</div>
-    <div style="margin-top:16px;">
-      <input type="email" id="proEmail" placeholder="your@email.com" style="width:100%;height:44px;padding:0 14px;border:1.5px solid var(--green-500);border-radius:10px;font-size:15px;font-family:var(--sans);outline:none;box-sizing:border-box;margin-bottom:10px;"/>
-      <button id="proTrialBtn" onclick="startProTrial()" class="pro-continue" style="border:none;cursor:pointer;">Start Pro Trial — $19/mo →</button>
-    </div>
-    <div class="pro-footnote">14-day free trial · No credit card to start · Cancel anytime</div>
-  </div>
-</div>
-
 <script>
   // Fade-up on scroll
   const obs = new IntersectionObserver(entries => {
@@ -669,39 +642,6 @@
   }, { threshold: 0.15 });
   document.querySelectorAll('.fade-up').forEach(el => obs.observe(el));
 
-  // Pro trial modal
-  const proModal = document.getElementById('pro-modal');
-  const openPro = (e) => { if (e) e.preventDefault(); proModal.classList.add('open'); document.body.style.overflow = 'hidden'; };
-  const closePro = () => { proModal.classList.remove('open'); document.body.style.overflow = ''; };
-  document.querySelectorAll('[data-pro-trigger]').forEach(el => el.addEventListener('click', openPro));
-  proModal.addEventListener('click', (e) => { if (e.target === proModal) closePro(); });
-  document.querySelectorAll('[data-pro-close]').forEach(el => el.addEventListener('click', closePro));
-  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && proModal.classList.contains('open')) closePro(); });
-
-  // Email-first Pro trial checkout
-  async function startProTrial() {
-    const email = document.getElementById('proEmail').value.trim();
-    if (!email || !email.includes('@')) { alert('Please enter a valid email address'); return; }
-    const btn = document.getElementById('proTrialBtn');
-    btn.textContent = 'Redirecting...'; btn.disabled = true;
-    try {
-      const res = await fetch('https://ceonccsuzgpdrzsythpe.supabase.co/functions/v1/create-checkout-session', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ priceId: 'price_1RQjKeLbEzg6yXFu0lPaH48l', userEmail: email }),
-      });
-      if (!res.ok) { const txt = await res.text(); console.error('Checkout response:', res.status, txt); throw new Error('Server error: ' + res.status); }
-      const data = await res.json();
-      if (data.error) throw new Error(data.error);
-      if (!data.url) throw new Error('No checkout URL returned');
-      window.location.href = data.url;
-    } catch (err) {
-      btn.textContent = 'Start Pro Trial — $19/mo →'; btn.disabled = false;
-      console.error('Pro trial error:', err);
-      alert('Could not start checkout: ' + err.message);
-    }
-  }
-  window.startProTrial = startProTrial;
 
   // Team waitlist
   async function joinTeamWaitlist() {

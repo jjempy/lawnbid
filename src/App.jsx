@@ -520,6 +520,20 @@ export default function LawnBid() {
             window.history.replaceState({}, "", "/app/");
           }
         } catch {}
+        // Auto-trigger checkout if user came from landing page with ?plan=pro or ?plan=team
+        try {
+          const intendedPlan = localStorage.getItem("lb_intended_plan");
+          if (intendedPlan && (s?.plan || "free") === "free") {
+            localStorage.removeItem("lb_intended_plan");
+            const priceId = intendedPlan === "team"
+              ? import.meta.env.VITE_STRIPE_TEAM_PRICE_ID
+              : import.meta.env.VITE_STRIPE_PRO_PRICE_ID;
+            setToast(intendedPlan === "team"
+              ? "Account created! Redirecting to Team plan..."
+              : "Account created! Redirecting to Pro trial...");
+            setTimeout(() => redirectToStripeCheckout(priceId), 1500);
+          }
+        } catch {}
         // Beta tester prompt — show once for new accounts (created < 10 min ago)
         try {
           // Beta prompt: show for all free-plan users who haven't dismissed it
@@ -1910,6 +1924,7 @@ function AuthScreen(){
   const upgradeSuccess = urlParams.get("upgrade") === "success";
   if (initialPlanFromUrl) {
     try { localStorage.setItem("lb_intended_plan", initialPlanFromUrl); } catch {}
+    try { window.history.replaceState({}, "", "/app/"); } catch {}
   }
   const [mode,setMode]=useState(
     (initialPlanFromUrl || isNewFromUrl || upgradeSuccess) ? "signup" : "login"
@@ -1970,17 +1985,20 @@ function AuthScreen(){
         <div style={{fontSize:32,fontWeight:900,color:"#0f172a",letterSpacing:-.6}}>LawnBid</div>
         <div style={{fontSize:13,color:"#64748b",marginTop:4,fontWeight:500}}>{subtitleFor(mode)}</div>
       </div>
-      {mode==="signup" && upgradeSuccess && (
+      {upgradeSuccess && (
         <div style={{background:"#dcfce7",border:"1px solid #bbf7d0",borderLeft:"3px solid #15803d",borderRadius:"0 10px 10px 0",padding:"10px 14px",marginBottom:12,fontSize:13,color:"#166534",fontWeight:600,display:"flex",alignItems:"center",gap:8}}>
           <span style={{fontSize:15}}>🎉</span>
           <span>Payment successful! Create your account to unlock Pro features.</span>
         </div>
       )}
-      {mode==="signup" && initialPlanFromUrl && !upgradeSuccess && (
+      {initialPlanFromUrl && !upgradeSuccess && (
         <div style={{background:"#dcfce7",border:"1px solid #bbf7d0",borderLeft:"3px solid #15803d",borderRadius:"0 10px 10px 0",padding:"10px 14px",marginBottom:12,fontSize:13,color:"#166534",fontWeight:600,display:"flex",alignItems:"center",gap:8}}>
-          <span style={{fontSize:15}}>🌿</span>
-          <span>You're signing up for LawnBid {initialPlanFromUrl==="pro"?"Pro":"Team"} — 14-day free trial</span>
+          <span style={{fontSize:15}}>🎉</span>
+          <span>You're one step away from Pro access</span>
         </div>
+      )}
+      {initialPlanFromUrl && !upgradeSuccess && (
+        <div style={{fontSize:13,color:"#64748b",textAlign:"center",marginBottom:12}}>Create an account or sign in to start your 14-day free trial</div>
       )}
       <Card>
         <div style={{marginBottom:12}}>
