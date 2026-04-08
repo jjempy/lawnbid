@@ -36,6 +36,31 @@ async function redirectToStripeCheckout(priceId) {
   }
 }
 
+async function openStripePortal() {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) throw new Error("Not authenticated");
+    const response = await fetch(
+      `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-portal-session`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${session.access_token}`,
+          "apikey": import.meta.env.VITE_SUPABASE_ANON_KEY,
+        },
+        body: JSON.stringify({ userId: session.user.id }),
+      }
+    );
+    const { url, error } = await response.json();
+    if (error) throw new Error(error);
+    window.location.href = url;
+  } catch (err) {
+    console.error("[LawnBid] Portal error:", err);
+    alert("Could not open subscription management. Error: " + err.message);
+  }
+}
+
 // ─── Constants ──────────────────────────────────────────────────────────────────
 const APP_VERSION = "0.9.0";
 const DEFAULT_SETTINGS = {
@@ -1596,22 +1621,38 @@ function QuoteDetail({bp,quote,allQuotes,settings,onBack,onEdit,onDuplicate,onDe
 // ─── Settings ─────────────────────────────────────────────────────────────────
 function PlanBadge(){
   const {plan,planName,quoteLimit,quotesUsed} = usePlan();
+  const lang = useLang();
+  const btnStyle={height:36,minHeight:36,padding:"0 14px",borderRadius:10,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap"};
   if (plan === "free") {
     return (
-      <Card style={{background:"#f0fdf4",border:"1px solid #bbf7d0",display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap",padding:"16px 18px",marginBottom:14}}>
-        <div style={{minWidth:0}}>
-          <div style={{fontSize:14,fontWeight:700,color:"#166534"}}>Free Plan</div>
-          <div style={{fontSize:12,color:"#15803d",fontWeight:500,marginTop:3}}>{quotesUsed} of {quoteLimit} quotes used · Rolling 30 days</div>
+      <Card style={{background:"#f0fdf4",border:"1px solid #bbf7d0",padding:"16px 18px",marginBottom:14}}>
+        <div style={{fontSize:14,fontWeight:700,color:"#166534"}}>{t("plan_free",lang)}</div>
+        <div style={{fontSize:12,color:"#15803d",fontWeight:500,marginTop:3}}>{quotesUsed} {t("quotes_used",lang)} · Rolling 30 days</div>
+        <div style={{display:"flex",gap:8,marginTop:10,flexWrap:"wrap"}}>
+          <button onClick={()=>redirectToStripeCheckout(import.meta.env.VITE_STRIPE_PRO_PRICE_ID)} style={{...btnStyle,border:"none",background:"#15803d",color:"#ffffff"}}>{t("upgrade_to_pro",lang)}</button>
+          <button onClick={()=>redirectToStripeCheckout(import.meta.env.VITE_STRIPE_TEAM_PRICE_ID)} style={{...btnStyle,border:"1.5px solid #15803d",background:"#ffffff",color:"#15803d"}}>{t("upgrade_to_team",lang)}</button>
         </div>
-        <button onClick={()=>redirectToStripeCheckout(import.meta.env.VITE_STRIPE_PRO_PRICE_ID)} style={{height:36,minHeight:36,padding:"0 14px",borderRadius:10,border:"none",background:"#15803d",color:"#ffffff",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap"}}>Upgrade to Pro →</button>
+      </Card>
+    );
+  }
+  if (plan === "pro") {
+    return (
+      <Card style={{background:"#f0fdf4",border:"1px solid #bbf7d0",padding:"16px 18px",marginBottom:14}}>
+        <div style={{fontSize:14,fontWeight:700,color:"#166534"}}>{t("plan_pro",lang)}</div>
+        <div style={{fontSize:12,color:"#15803d",fontWeight:600,marginTop:3}}>Unlimited quotes ✓</div>
+        <div style={{display:"flex",gap:8,marginTop:10,flexWrap:"wrap"}}>
+          <button onClick={()=>redirectToStripeCheckout(import.meta.env.VITE_STRIPE_TEAM_PRICE_ID)} style={{...btnStyle,border:"1.5px solid #15803d",background:"#ffffff",color:"#15803d"}}>{t("upgrade_to_team",lang)}</button>
+          <button onClick={openStripePortal} style={{...btnStyle,border:"1.5px solid #e2e8f0",background:"#ffffff",color:"#334155"}}>{t("manage_subscription",lang)}</button>
+        </div>
       </Card>
     );
   }
   return (
-    <Card style={{background:"#f0fdf4",border:"1px solid #bbf7d0",display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,padding:"16px 18px",marginBottom:14}}>
-      <div style={{minWidth:0}}>
-        <div style={{fontSize:14,fontWeight:700,color:"#166534"}}>{planName} Plan</div>
-        <div style={{fontSize:12,color:"#15803d",fontWeight:600,marginTop:3}}>Unlimited quotes ✓</div>
+    <Card style={{background:"#f0fdf4",border:"1px solid #bbf7d0",padding:"16px 18px",marginBottom:14}}>
+      <div style={{fontSize:14,fontWeight:700,color:"#166534"}}>{t("plan_team",lang)}</div>
+      <div style={{fontSize:12,color:"#15803d",fontWeight:600,marginTop:3}}>Unlimited quotes ✓</div>
+      <div style={{display:"flex",gap:8,marginTop:10}}>
+        <button onClick={openStripePortal} style={{...btnStyle,border:"1.5px solid #e2e8f0",background:"#ffffff",color:"#334155"}}>{t("manage_subscription",lang)}</button>
       </div>
     </Card>
   );
