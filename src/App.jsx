@@ -449,10 +449,11 @@ export default function LawnBid() {
       setSession(data.session || null);
       setAuthReady(true);
     });
-    const { data: sub } = supabase.auth.onAuthStateChange(async (event, s) => {
-      if (event === "PASSWORD_RECOVERY") setRecovering(true);
-      if (event === "SIGNED_IN" && s?.user) {
-        await initializeUserSettings(s.user.id);
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => {
+      if (_event === "PASSWORD_RECOVERY") setRecovering(true);
+      // Initialize settings row for new users — fire and forget, never block session
+      if (_event === "SIGNED_IN" && s?.user) {
+        initializeUserSettings(s.user.id).catch(e => console.error("[LawnBid] Settings init failed:", e));
       }
       setSession(s || null);
     });
