@@ -679,14 +679,17 @@
       const res = await fetch('https://ceonccsuzgpdrzsythpe.supabase.co/functions/v1/create-checkout-session', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ priceId: (window.STRIPE_PRO_PRICE_ID || 'price_1RQjKeLbEzg6yXFu0lPaH48l'), userId: 'landing-' + Date.now(), userEmail: email }),
+        body: JSON.stringify({ priceId: 'price_1RQjKeLbEzg6yXFu0lPaH48l', userId: 'landing-' + Date.now(), userEmail: email }),
       });
-      const { url, error } = await res.json();
-      if (error) throw new Error(error);
-      window.location.href = url;
+      if (!res.ok) { const txt = await res.text(); console.error('Checkout response:', res.status, txt); throw new Error('Server error: ' + res.status); }
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      if (!data.url) throw new Error('No checkout URL returned');
+      window.location.href = data.url;
     } catch (err) {
       btn.textContent = 'Start Pro Trial — $19/mo →'; btn.disabled = false;
-      alert('Something went wrong. Please try again.');
+      console.error('Pro trial error:', err);
+      alert('Could not start checkout: ' + err.message);
     }
   }
   window.startProTrial = startProTrial;
