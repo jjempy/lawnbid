@@ -31,6 +31,10 @@ export default defineConfig({
           copyFileSync('public/_headers', 'dist/_headers')
           console.log('✓ _headers copied')
         }
+        if (existsSync('public/lawnbid-translations.xlsx')) {
+          copyFileSync('public/lawnbid-translations.xlsx', 'dist/lawnbid-translations.xlsx')
+          console.log('✓ translations.xlsx copied')
+        }
       },
     },
   ],
