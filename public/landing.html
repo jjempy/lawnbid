@@ -645,8 +645,11 @@
     <h3 id="pro-modal-title">Start your Pro trial</h3>
     <div class="pro-price">$19/month after 14-day free trial</div>
     <div class="pro-terms">Cancel anytime. No commitment.</div>
-    <a href="/app/?plan=pro" class="pro-continue">Continue with email →</a>
-    <div class="pro-footnote">You'll create your account and enter payment details on the next step.</div>
+    <div style="margin-top:16px;">
+      <input type="email" id="proEmail" placeholder="your@email.com" style="width:100%;height:44px;padding:0 14px;border:1.5px solid var(--green-500);border-radius:10px;font-size:15px;font-family:var(--sans);outline:none;box-sizing:border-box;margin-bottom:10px;"/>
+      <button id="proTrialBtn" onclick="startProTrial()" class="pro-continue" style="border:none;cursor:pointer;">Start Pro Trial — $19/mo →</button>
+    </div>
+    <div class="pro-footnote">14-day free trial · No credit card to start · Cancel anytime</div>
   </div>
 </div>
 
@@ -665,6 +668,28 @@
   proModal.addEventListener('click', (e) => { if (e.target === proModal) closePro(); });
   document.querySelectorAll('[data-pro-close]').forEach(el => el.addEventListener('click', closePro));
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && proModal.classList.contains('open')) closePro(); });
+
+  // Email-first Pro trial checkout
+  async function startProTrial() {
+    const email = document.getElementById('proEmail').value.trim();
+    if (!email || !email.includes('@')) { alert('Please enter a valid email address'); return; }
+    const btn = document.getElementById('proTrialBtn');
+    btn.textContent = 'Redirecting...'; btn.disabled = true;
+    try {
+      const res = await fetch('https://ceonccsuzgpdrzsythpe.supabase.co/functions/v1/create-checkout-session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ priceId: (window.STRIPE_PRO_PRICE_ID || 'price_1RQjKeLbEzg6yXFu0lPaH48l'), userId: 'landing-' + Date.now(), userEmail: email }),
+      });
+      const { url, error } = await res.json();
+      if (error) throw new Error(error);
+      window.location.href = url;
+    } catch (err) {
+      btn.textContent = 'Start Pro Trial — $19/mo →'; btn.disabled = false;
+      alert('Something went wrong. Please try again.');
+    }
+  }
+  window.startProTrial = startProTrial;
 </script>
 </body>
 </html>

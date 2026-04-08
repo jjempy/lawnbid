@@ -17,6 +17,10 @@
 //
 // CRITICAL: Run these to fix settings keying by user_id instead of id:
 // ALTER TABLE settings ADD CONSTRAINT settings_user_id_unique UNIQUE (user_id);
+// ALTER TABLE settings ADD COLUMN IF NOT EXISTS plan_expires_at timestamptz;
+// ALTER TABLE settings ADD COLUMN IF NOT EXISTS plan_cancelled boolean DEFAULT false;
+// ALTER TABLE settings ADD COLUMN IF NOT EXISTS stripe_customer_id text;
+// ALTER TABLE settings ADD COLUMN IF NOT EXISTS stripe_subscription_id text;
 // ALTER TABLE settings ADD COLUMN IF NOT EXISTS profit_margin decimal DEFAULT 0.30;
 // ALTER TABLE settings ADD COLUMN IF NOT EXISTS company_logo_base64 text;
 // ALTER TABLE settings ADD COLUMN IF NOT EXISTS plan text DEFAULT 'free';
@@ -166,7 +170,8 @@ const SETTINGS_COLUMNS = [
   'complexity_default','risk_default','profit_margin','quote_validity_days',
   'follow_up_days','follow_up_enabled','language',
   'company_name','company_phone','company_email','company_logo_base64',
-  'plan','quote_count_this_month','quote_count_reset_at',
+  'plan','plan_cancelled','plan_expires_at',
+  'quote_count_this_month','quote_count_reset_at',
 ]
 export async function saveSettings(settings) {
   const userId = await currentUserId()

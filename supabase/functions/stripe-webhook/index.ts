@@ -74,7 +74,11 @@ Deno.serve(async (req) => {
 
     if (userId) {
       await supabase.from('settings')
-        .update({ plan: 'free' })
+        .update({
+          plan: 'free',
+          plan_cancelled: true,
+          plan_expires_at: new Date((sub as any).current_period_end * 1000).toISOString(),
+        })
         .eq('user_id', userId)
     }
   }

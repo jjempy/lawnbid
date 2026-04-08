@@ -1005,9 +1005,16 @@ function HomeScreen({bp,quotes,settings,onNew,onView}){
   const filtered=filter==="all"?quotes:filter==="followup"?quotes.filter(isFollowUp):filter==="recurring"?quotes.filter(isRecurring):quotes.filter(q=>q.status===filter);
   const shown=(search.trim()?filtered.filter(q=>{const s=search.toLowerCase();return (q.client_name||"").toLowerCase().includes(s)||(q.address||"").toLowerCase().includes(s)||(q.quote_id||"").toLowerCase().includes(s);}):filtered).sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));
   const isDesktop = bp==="desktop";
+  const cancelled = settings?.plan_cancelled && settings?.plan_expires_at && new Date(settings.plan_expires_at) > new Date();
   return(
     <div style={{padding:isDesktop?0:16,display:isDesktop?"grid":"block",gridTemplateColumns:isDesktop?"minmax(0,3fr) minmax(0,2fr)":undefined,gap:isDesktop?24:0}}>
       <div style={{minWidth:0}}>
+      {cancelled&&(
+        <div style={{background:"#fffbeb",border:"1px solid #fde68a",borderRadius:12,padding:"10px 14px",marginBottom:12,fontSize:13,color:"#92400e",display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,flexWrap:"wrap"}}>
+          <span>⚠ {t("plan_cancelled_banner",lang)} {fmtD(settings.plan_expires_at)}</span>
+          <button onClick={()=>redirectToStripeCheckout(import.meta.env.VITE_STRIPE_PRO_PRICE_ID)} style={{background:"none",border:"none",color:"#15803d",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit",textDecoration:"underline",padding:0}}>{t("resubscribe",lang)}</button>
+        </div>
+      )}
       {!isDesktop && (
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
           <div style={{display:"flex",alignItems:"center",gap:8}}>
@@ -1627,15 +1634,18 @@ function QuoteDetail({bp,quote,allQuotes,settings,onBack,onEdit,onDuplicate,onDe
 function PlanBadge(){
   const {plan,planName,quoteLimit,quotesUsed} = usePlan();
   const lang = useLang();
-  const btnStyle={height:36,minHeight:36,padding:"0 14px",borderRadius:10,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap"};
+  const b={height:36,minHeight:36,padding:"0 14px",borderRadius:10,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap"};
+  const primary={...b,border:"none",background:"#15803d",color:"#fff"};
+  const outline={...b,border:"1.5px solid #15803d",background:"#fff",color:"#15803d"};
+  const muted={...b,border:"1.5px solid #e2e8f0",background:"#fff",color:"#334155"};
   if (plan === "free") {
     return (
       <Card style={{background:"#f0fdf4",border:"1px solid #bbf7d0",padding:"16px 18px",marginBottom:14}}>
         <div style={{fontSize:14,fontWeight:700,color:"#166534"}}>{t("plan_free",lang)}</div>
         <div style={{fontSize:12,color:"#15803d",fontWeight:500,marginTop:3}}>{quotesUsed} {t("quotes_used",lang)} · Rolling 30 days</div>
         <div style={{display:"flex",gap:8,marginTop:10,flexWrap:"wrap"}}>
-          <button onClick={()=>redirectToStripeCheckout(import.meta.env.VITE_STRIPE_PRO_PRICE_ID)} style={{...btnStyle,border:"none",background:"#15803d",color:"#ffffff"}}>{t("upgrade_to_pro",lang)}</button>
-          <button onClick={()=>redirectToStripeCheckout(import.meta.env.VITE_STRIPE_TEAM_PRICE_ID)} style={{...btnStyle,border:"1.5px solid #15803d",background:"#ffffff",color:"#15803d"}}>{t("upgrade_to_team",lang)}</button>
+          <button onClick={()=>redirectToStripeCheckout(import.meta.env.VITE_STRIPE_PRO_PRICE_ID)} style={primary}>Start Pro Trial — $19/mo</button>
+          <button onClick={()=>redirectToStripeCheckout(import.meta.env.VITE_STRIPE_TEAM_PRICE_ID)} style={outline}>See Team Plan — $39/mo</button>
         </div>
       </Card>
     );
@@ -1643,21 +1653,20 @@ function PlanBadge(){
   if (plan === "pro") {
     return (
       <Card style={{background:"#f0fdf4",border:"1px solid #bbf7d0",padding:"16px 18px",marginBottom:14}}>
-        <div style={{fontSize:14,fontWeight:700,color:"#166534"}}>{t("plan_pro",lang)}</div>
-        <div style={{fontSize:12,color:"#15803d",fontWeight:600,marginTop:3}}>Unlimited quotes ✓</div>
+        <div style={{fontSize:14,fontWeight:700,color:"#166534"}}>✓ {t("plan_pro",lang)} · Unlimited quotes</div>
         <div style={{display:"flex",gap:8,marginTop:10,flexWrap:"wrap"}}>
-          <button onClick={()=>redirectToStripeCheckout(import.meta.env.VITE_STRIPE_TEAM_PRICE_ID)} style={{...btnStyle,border:"1.5px solid #15803d",background:"#ffffff",color:"#15803d"}}>{t("upgrade_to_team",lang)}</button>
-          <button onClick={openStripePortal} style={{...btnStyle,border:"1.5px solid #e2e8f0",background:"#ffffff",color:"#334155"}}>{t("manage_subscription",lang)}</button>
+          <button onClick={()=>redirectToStripeCheckout(import.meta.env.VITE_STRIPE_TEAM_PRICE_ID)} style={outline}>{t("upgrade_to_team",lang)}</button>
+          <button onClick={openStripePortal} style={muted}>{t("manage_subscription",lang)}</button>
         </div>
       </Card>
     );
   }
   return (
     <Card style={{background:"#f0fdf4",border:"1px solid #bbf7d0",padding:"16px 18px",marginBottom:14}}>
-      <div style={{fontSize:14,fontWeight:700,color:"#166534"}}>{t("plan_team",lang)}</div>
-      <div style={{fontSize:12,color:"#15803d",fontWeight:600,marginTop:3}}>Unlimited quotes ✓</div>
+      <div style={{fontSize:14,fontWeight:700,color:"#166534"}}>✓ {t("plan_team",lang)} · Unlimited quotes</div>
+      <div style={{fontSize:12,color:"#64748b",fontWeight:500,marginTop:3}}>Up to 5 users (coming soon)</div>
       <div style={{display:"flex",gap:8,marginTop:10}}>
-        <button onClick={openStripePortal} style={{...btnStyle,border:"1.5px solid #e2e8f0",background:"#ffffff",color:"#334155"}}>{t("manage_subscription",lang)}</button>
+        <button onClick={openStripePortal} style={muted}>{t("manage_subscription",lang)}</button>
       </div>
     </Card>
   );
@@ -1838,9 +1847,9 @@ function SettingsScreen({bp,settings,onSave,onLogout,onLangChange}){
       {autoSaveErr && <div style={{fontSize:12,color:"#dc2626",background:"#fef2f2",borderLeft:"3px solid #dc2626",borderRadius:"0 8px 8px 0",padding:"8px 10px",fontWeight:500,marginBottom:10}}>⚠ {autoSaveErr}</div>}
       <Btn onClick={save} style={{width:"100%"}}>{saved?"✓ Saved!":t("save_settings",lang)}</Btn>
       <div style={{textAlign:"center",fontSize:11,color:"#94a3b8",marginTop:6}}>{t("auto_save_note",lang)}</div>
-      <div style={{textAlign:"center",fontSize:12,color:"#64748b",marginTop:14,marginBottom:4}}>{t("logged_in_as",lang)} {userEmail}</div>
-      <Btn variant="danger" onClick={onLogout} style={{width:"100%"}}>{t("log_out",lang)}</Btn>
-      <div style={{textAlign:"center",fontSize:11,color:"#94a3b8",marginTop:20}}>LawnBid v{APP_VERSION} · Built for lawn care professionals</div>
+      <Btn variant="danger" onClick={onLogout} style={{width:"100%",marginTop:10}}>{t("log_out",lang)}</Btn>
+      {userEmail&&<div style={{textAlign:"center",fontSize:11,color:"#94a3b8",marginTop:16}}>{t("logged_in_as",lang)} {userEmail}</div>}
+      <div style={{textAlign:"center",fontSize:11,color:"#94a3b8",marginTop:4}}>LawnBid v{APP_VERSION} · Built for lawn care professionals</div>
     </>
   );
 
