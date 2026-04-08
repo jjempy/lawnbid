@@ -12,21 +12,27 @@ import supabase, {
 // ─── Stripe checkout ────────────────────────────────────────────────────────────
 async function redirectToStripeCheckout(priceId) {
   try {
-    const { data: { user } } = await supabase.auth.getUser();
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) throw new Error("Not authenticated");
     const response = await fetch(
       `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-checkout-session`,
       {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ priceId, userId: user.id, userEmail: user.email }),
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${session.access_token}`,
+          "apikey": import.meta.env.VITE_SUPABASE_ANON_KEY,
+        },
+        body: JSON.stringify({ priceId, userId: session.user.id, userEmail: session.user.email }),
       }
     );
     const { url, error } = await response.json();
     if (error) throw new Error(error);
+    if (!url) throw new Error("No checkout URL returned");
     window.location.href = url;
   } catch (err) {
-    alert("Could not start checkout. Please try again.");
     console.error("[LawnBid] Stripe checkout error:", err);
+    alert("Could not start checkout. Please try again. Error: " + err.message);
   }
 }
 
