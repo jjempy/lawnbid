@@ -285,6 +285,7 @@
   .price-features li::before { content: '✓'; color: var(--green-500); font-weight: 700; flex-shrink: 0; margin-top: 1px; }
   .price-features li.dim { color: var(--gray-400); }
   .price-features li.dim::before { color: var(--gray-300); }
+  .price-features li.founding::before { content: none; }
   .price-btn {
     display: block; text-align: center; padding: 13px;
     border-radius: 8px; font-weight: 600; font-size: 15px;
@@ -295,6 +296,10 @@
   .price-btn.outline { border: 1.5px solid var(--gray-200); color: var(--gray-700); }
   .price-btn.outline:hover { border-color: var(--green-500); color: var(--green-500); }
   .pricing-note { text-align: center; margin-top: 32px; font-size: 14px; color: var(--gray-500); }
+  .team-waitlist input { width: 100%; height: 44px; padding: 0 14px; border: 1.5px solid var(--green-500); border-radius: 10px; font-size: 15px; font-family: var(--sans); outline: none; box-sizing: border-box; margin-bottom: 10px; }
+  .team-waitlist button { display: block; width: 100%; background: var(--green-500); color: var(--white); border: none; padding: 14px 20px; border-radius: 10px; font-size: 15px; font-weight: 600; cursor: pointer; font-family: var(--sans); transition: background 0.15s; }
+  .team-waitlist button:hover { background: var(--green-700); }
+  .team-waitlist .fine-print { font-size: 12px; color: var(--gray-500); text-align: center; margin-top: 10px; line-height: 1.5; }
 
   /* ── TESTIMONIAL ── */
   .testimonial { background: var(--white); padding: 100px 24px; }
@@ -573,9 +578,10 @@
           <li>Satellite map measurement</li>
           <li>PDF quote generation</li>
           <li>Photo &amp; file attachments</li>
-          <li>Quote expiry &amp; reminders</li>
-          <li>Full client history</li>
-          <li>Priority support</li>
+          <li>Recurring service agreements</li>
+          <li>Quote expiry &amp; follow-up reminders</li>
+          <li>Business analytics</li>
+          <li>English &amp; Spanish language support</li>
         </ul>
         <a href="/app/?plan=pro" class="price-btn primary" data-pro-trigger>Start Pro free →</a>
       </div>
@@ -589,14 +595,17 @@
         <p class="price-desc">For crews with multiple operators quoting.</p>
         <ul class="price-features">
           <li>Everything in Pro</li>
-          <li>Up to 5 team members</li>
-          <li>Your branding on quotes</li>
+          <li>Manage up to 5 team members</li>
           <li>Shared client database</li>
-          <li>Admin controls</li>
-          <li>Usage reporting</li>
-          <li>Phone support</li>
+          <li>Your branding on all quotes</li>
+          <li class="founding" style="color:var(--green-600);">⚡ Founding price — locked in forever</li>
         </ul>
-        <a href="/app/?plan=team" class="price-btn outline">Start Team free →</a>
+        <p style="font-size:13px;color:var(--gray-500);font-style:italic;margin-bottom:24px;line-height:1.5;">Team features in active development.<br/>Founding members lock in $39/mo forever.</p>
+        <div class="team-waitlist">
+          <input type="email" id="teamEmail" placeholder="your@email.com"/>
+          <button onclick="joinTeamWaitlist()">Join Team Waitlist →</button>
+          <p class="fine-print">Lock in $39/mo founding price · No commitment</p>
+        </div>
       </div>
     </div>
     <p class="pricing-note">All plans include a 14-day Pro trial. No credit card required to start.</p>
@@ -693,6 +702,28 @@
     }
   }
   window.startProTrial = startProTrial;
+
+  // Team waitlist
+  async function joinTeamWaitlist() {
+    const email = document.getElementById('teamEmail').value.trim();
+    if (!email || !email.includes('@')) {
+      alert('Please enter a valid email address');
+      return;
+    }
+    const btn = document.querySelector('.team-waitlist button');
+    btn.textContent = 'Joining...';
+    btn.disabled = true;
+    window.open(
+      'mailto:grove.winwin@gmail.com?subject=LawnBid Team Waitlist&body=Please add me to the Team plan waitlist: ' + encodeURIComponent(email),
+      '_blank'
+    );
+    btn.textContent = "You're on the list \u2713";
+    btn.style.background = '#15803d';
+    document.querySelector('.team-waitlist input').style.display = 'none';
+    document.querySelector('.team-waitlist .fine-print').textContent =
+      "We'll reach out when Team features launch. Founding price locked.";
+  }
+  window.joinTeamWaitlist = joinTeamWaitlist;
 </script>
 </body>
 </html>
