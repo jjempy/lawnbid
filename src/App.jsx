@@ -7,6 +7,7 @@ import supabase, {
   nextQuoteId,
   uploadQuoteFile, deleteQuoteFile,
   countRecentQuotes, updateQuotesForClient, refreshAttachmentUrls,
+  initializeUserSettings,
 } from "./supabase.js";
 
 // ─── Stripe checkout ────────────────────────────────────────────────────────────
@@ -448,8 +449,11 @@ export default function LawnBid() {
       setSession(data.session || null);
       setAuthReady(true);
     });
-    const { data: sub } = supabase.auth.onAuthStateChange((event, s) => {
+    const { data: sub } = supabase.auth.onAuthStateChange(async (event, s) => {
       if (event === "PASSWORD_RECOVERY") setRecovering(true);
+      if (event === "SIGNED_IN" && s?.user) {
+        await initializeUserSettings(s.user.id);
+      }
       setSession(s || null);
     });
     return () => sub.subscription.unsubscribe();

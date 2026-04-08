@@ -14,6 +14,9 @@
 // ALTER TABLE settings ADD COLUMN IF NOT EXISTS follow_up_days integer DEFAULT 3;
 // ALTER TABLE settings ADD COLUMN IF NOT EXISTS language text DEFAULT 'en';
 // ALTER TABLE settings ADD COLUMN IF NOT EXISTS follow_up_enabled boolean DEFAULT true;
+//
+// CRITICAL: Run these to fix settings keying by user_id instead of id:
+// ALTER TABLE settings ADD CONSTRAINT settings_user_id_unique UNIQUE (user_id);
 // ALTER TABLE settings ADD COLUMN IF NOT EXISTS profit_margin decimal DEFAULT 0.30;
 // ALTER TABLE settings ADD COLUMN IF NOT EXISTS company_logo_base64 text;
 // ALTER TABLE settings ADD COLUMN IF NOT EXISTS plan text DEFAULT 'free';
@@ -119,19 +122,45 @@ export async function updateQuotesForClient(clientId, fields) {
 }
 
 // ─── Settings ─────────────────────────────────────────────────────────────────────
+// SQL required:
+// ALTER TABLE settings ADD CONSTRAINT settings_user_id_unique UNIQUE (user_id);
+// (The id=1 pattern is legacy — user_id is now the primary key for upserts)
+
+export async function initializeUserSettings(userId) {
+  // Check if a settings row exists for this user
+  const { data } = await supabase
+    .from('settings')
+    .select('user_id')
+    .eq('user_id', userId)
+    .maybeSingle()
+  if (data) return // row already exists
+  // Create a default settings row
+  const { error } = await supabase
+    .from('settings')
+    .insert({
+      user_id: userId,
+      plan: 'free',
+      mow_rate: 110, trim_rate: 18, equipment_cost: 12.35, hourly_rate: 22.80,
+      minimum_bid: 55, complexity_default: 1.0, risk_default: 1.0,
+      quote_validity_days: 30, profit_margin: 0.30,
+      follow_up_days: 3, follow_up_enabled: true, language: 'en',
+    })
+  if (error) console.error('[LawnBid] Failed to create settings row:', error)
+  else console.log('[LawnBid] Settings row created for new user:', userId)
+}
+
 export async function loadSettings() {
+  const userId = await currentUserId()
   const { data, error, status } = await supabase
     .from('settings')
     .select('*')
-    .eq('id', 1)
+    .eq('user_id', userId)
     .maybeSingle()
-  // PGRST116 = no rows found; 406 = Not Acceptable (no rows on .single()). Both mean "no settings yet."
   if (error && error.code !== 'PGRST116' && status !== 406) throw error
   return data || null
 }
 
 // Known settings columns — only these are sent to Supabase.
-// If you add a new column, add it here AND run the ALTER TABLE SQL.
 const SETTINGS_COLUMNS = [
   'mow_rate','trim_rate','equipment_cost','hourly_rate','minimum_bid',
   'complexity_default','risk_default','profit_margin','quote_validity_days',
@@ -140,13 +169,14 @@ const SETTINGS_COLUMNS = [
   'plan','quote_count_this_month','quote_count_reset_at',
 ]
 export async function saveSettings(settings) {
-  const record = { id: 1, user_id: await currentUserId() }
+  const userId = await currentUserId()
+  const record = { user_id: userId }
   for (const k of SETTINGS_COLUMNS) {
     if (settings[k] !== undefined && typeof settings[k] !== 'function') record[k] = settings[k]
   }
   const { error } = await supabase
     .from('settings')
-    .upsert(record, { onConflict: 'id' })
+    .upsert(record, { onConflict: 'user_id' })
   if (error) { console.error('[LawnBid] saveSettings error:', error.message, error.details, error.code); throw error }
 }
 
