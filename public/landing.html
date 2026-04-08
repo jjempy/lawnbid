@@ -679,7 +679,7 @@
       const res = await fetch('https://ceonccsuzgpdrzsythpe.supabase.co/functions/v1/create-checkout-session', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ priceId: 'price_1RQjKeLbEzg6yXFu0lPaH48l', userId: 'landing-' + Date.now(), userEmail: email }),
+        body: JSON.stringify({ priceId: 'price_1RQjKeLbEzg6yXFu0lPaH48l', userEmail: email }),
       });
       if (!res.ok) { const txt = await res.text(); console.error('Checkout response:', res.status, txt); throw new Error('Server error: ' + res.status); }
       const data = await res.json();

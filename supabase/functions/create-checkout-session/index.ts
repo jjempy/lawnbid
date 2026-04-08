@@ -14,9 +14,13 @@ Deno.serve(async (req) => {
   try {
     const { priceId, userId, userEmail } = await req.json()
 
-    if (!priceId || !userId || !userEmail) {
-      throw new Error('Missing required fields: priceId, userId, userEmail')
+    if (!priceId || !userEmail) {
+      throw new Error('Missing required fields: priceId and userEmail')
     }
+
+    // userId is optional — landing page checkouts won't have one
+    const hasRealUser = userId && !userId.startsWith('landing')
+    const metadata = hasRealUser ? { userId } : { source: 'landing-page' }
 
     const session = await stripe.checkout.sessions.create({
       mode: 'subscription',
@@ -25,12 +29,14 @@ Deno.serve(async (req) => {
       success_url: 'https://winwinlawnbid.com/app/?upgrade=success',
       cancel_url: 'https://winwinlawnbid.com/app/?upgrade=cancelled',
       customer_email: userEmail,
-      metadata: { userId },
+      metadata,
       subscription_data: {
-        metadata: { userId },
+        metadata,
         trial_period_days: 14,
       },
     })
+
+    console.log('Checkout session created:', session.id, 'for:', userEmail)
 
     return new Response(
       JSON.stringify({ url: session.url }),

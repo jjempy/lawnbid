@@ -1907,11 +1907,12 @@ function AuthScreen(){
   const urlParams = (()=>{ try { return new URLSearchParams(window.location.search); } catch { return new URLSearchParams(); } })();
   const initialPlanFromUrl = (()=>{ const p = urlParams.get("plan"); return p==="pro"||p==="team"?p:null; })();
   const isNewFromUrl = urlParams.get("new") === "1";
+  const upgradeSuccess = urlParams.get("upgrade") === "success";
   if (initialPlanFromUrl) {
     try { localStorage.setItem("lb_intended_plan", initialPlanFromUrl); } catch {}
   }
   const [mode,setMode]=useState(
-    (initialPlanFromUrl || isNewFromUrl) ? "signup" : "login"
+    (initialPlanFromUrl || isNewFromUrl || upgradeSuccess) ? "signup" : "login"
   ); // "login" | "signup" | "reset"
   const [email,setEmail]=useState("");
   const [password,setPassword]=useState("");
@@ -1969,7 +1970,13 @@ function AuthScreen(){
         <div style={{fontSize:32,fontWeight:900,color:"#0f172a",letterSpacing:-.6}}>LawnBid</div>
         <div style={{fontSize:13,color:"#64748b",marginTop:4,fontWeight:500}}>{subtitleFor(mode)}</div>
       </div>
-      {mode==="signup" && initialPlanFromUrl && (
+      {mode==="signup" && upgradeSuccess && (
+        <div style={{background:"#dcfce7",border:"1px solid #bbf7d0",borderLeft:"3px solid #15803d",borderRadius:"0 10px 10px 0",padding:"10px 14px",marginBottom:12,fontSize:13,color:"#166534",fontWeight:600,display:"flex",alignItems:"center",gap:8}}>
+          <span style={{fontSize:15}}>🎉</span>
+          <span>Payment successful! Create your account to unlock Pro features.</span>
+        </div>
+      )}
+      {mode==="signup" && initialPlanFromUrl && !upgradeSuccess && (
         <div style={{background:"#dcfce7",border:"1px solid #bbf7d0",borderLeft:"3px solid #15803d",borderRadius:"0 10px 10px 0",padding:"10px 14px",marginBottom:12,fontSize:13,color:"#166534",fontWeight:600,display:"flex",alignItems:"center",gap:8}}>
           <span style={{fontSize:15}}>🌿</span>
           <span>You're signing up for LawnBid {initialPlanFromUrl==="pro"?"Pro":"Team"} — 14-day free trial</span>
