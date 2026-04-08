@@ -1956,7 +1956,7 @@ function AuthScreen(){
     if (!pwLongEnough) { setErr("Password must be at least 6 characters long."); return; }
     if (!pwMatch) { setErr("Passwords do not match. Please retype."); return; }
     setBusy(true);
-    const { data, error } = await supabase.auth.signUp({ email, password });
+    const { data, error } = await supabase.auth.signUp({ email, password, options: { emailRedirectTo: "https://winwinlawnbid.com/app/" } });
     setBusy(false);
     if (error) { setErr(authErrorMessage(error)); return; }
     // Supabase returns an empty identities array when the email is already registered
@@ -1968,7 +1968,7 @@ function AuthScreen(){
   };
   const sendReset=async()=>{
     clearMsgs(); setBusy(true);
-    const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: "https://winwinlawnbid.com/app" });
+    const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: "https://winwinlawnbid.com/app/" });
     setBusy(false);
     if(error) setErr(authErrorMessage(error));
     else setInfo(`Check your email — we sent a password reset link to ${email}`);

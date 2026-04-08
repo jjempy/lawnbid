@@ -33,6 +33,11 @@
 // Admin: to manually upgrade a user to Pro, run in Supabase SQL Editor:
 //   UPDATE settings SET plan = 'pro' WHERE user_id = 'paste-user-id-here';
 //   -- find user id via: SELECT id, email FROM auth.users;
+//
+// SUPABASE AUTH URL CONFIG (Dashboard → Authentication → URL Configuration):
+//   Site URL:      https://winwinlawnbid.com/app/
+//   Redirect URLs: https://winwinlawnbid.com/app/
+// This ensures confirmation/reset emails redirect to the app, not the landing page.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { createClient } from '@supabase/supabase-js'
