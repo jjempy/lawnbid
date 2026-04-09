@@ -262,6 +262,18 @@
     }
   }
 
+  /* ── SCREENSHOTS ── */
+  .screenshots-section { background: #f8fafc; padding: 80px 24px; text-align: center; }
+  .screenshots-header h2 { font-family: var(--serif); font-size: clamp(28px, 4vw, 40px); font-weight: 800; color: var(--gray-900); margin-bottom: 12px; letter-spacing: -0.5px; }
+  .screenshots-header p { font-size: 1.1rem; color: var(--gray-500); margin-bottom: 48px; font-weight: 300; }
+  .screenshots-grid { display: flex; justify-content: center; gap: 40px; flex-wrap: wrap; }
+  .phone-mockup { max-width: 260px; }
+  .phone-mockup img { width: 100%; border-radius: 32px; box-shadow: 0 24px 60px rgba(0,0,0,0.18); border: 6px solid #1e293b; }
+  .phone-mockup .caption { margin-top: 16px; font-size: 0.95rem; color: var(--green-500); font-weight: 600; }
+  @media (max-width: 600px) {
+    .screenshots-grid { flex-direction: column; align-items: center; }
+  }
+
   /* ── PRICING ── */
   .pricing { background: var(--gray-50); padding: 100px 24px; }
   .pricing-inner { max-width: 1000px; margin: 0 auto; }
@@ -528,6 +540,24 @@
       </div>
     </div>
     <p style="text-align:center;margin-top:32px;font-size:14px;color:rgba(255,255,255,0.3);font-style:italic;">The formula is yours. The consistency is automatic.</p>
+  </div>
+</section>
+
+<!-- SCREENSHOTS -->
+<section class="screenshots-section fade-up">
+  <div class="screenshots-header">
+    <h2>Quote any lawn in under 60 seconds</h2>
+    <p>Draw the property on satellite. Get an instant professional price.</p>
+  </div>
+  <div class="screenshots-grid">
+    <div class="phone-mockup">
+      <img src="screenshots/screenshot-map.png" alt="Satellite map measurement" />
+      <p class="caption">Draw the lawn — area calculates instantly</p>
+    </div>
+    <div class="phone-mockup">
+      <img src="screenshots/screenshot-bid.png" alt="Calculated bid" />
+      <p class="caption">Formula prices it automatically</p>
+    </div>
   </div>
 </section>
 

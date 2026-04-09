@@ -1,6 +1,6 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
-import { copyFileSync, existsSync, mkdirSync, renameSync } from 'fs'
+import { copyFileSync, existsSync, mkdirSync, renameSync, readdirSync } from 'fs'
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -34,6 +34,13 @@ export default defineConfig({
         if (existsSync('public/lawnbid-translations.xlsx')) {
           copyFileSync('public/lawnbid-translations.xlsx', 'dist/lawnbid-translations.xlsx')
           console.log('✓ translations.xlsx copied')
+        }
+        if (existsSync('public/screenshots')) {
+          mkdirSync('dist/screenshots', { recursive: true })
+          readdirSync('public/screenshots').forEach(file => {
+            copyFileSync(`public/screenshots/${file}`, `dist/screenshots/${file}`)
+          })
+          console.log('✓ screenshots copied')
         }
       },
     },
