@@ -11,7 +11,13 @@
       "Bash(grep -nE '>[A-Z][a-z]{3,}[^<{]*</' src/App.jsx)",
       "Bash(python3:*)",
       "Bash(/tmp/xlenv/bin/pip install:*)",
-      "Bash(/tmp/xlenv/bin/python export-translations.py)"
+      "Bash(/tmp/xlenv/bin/python export-translations.py)",
+      "Bash(dpkg -l)",
+      "Bash(apt list:*)",
+      "Bash(sudo apt-get:*)",
+      "Bash(node -e ':*)",
+      "Bash(npx sharp-cli:*)",
+      "Bash(node -e \"require\\('sharp'\\)\")"
     ]
   }
 }
