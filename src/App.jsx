@@ -12,6 +12,7 @@ import supabase, {
 
 // ─── Stripe checkout ────────────────────────────────────────────────────────────
 async function redirectToStripeCheckout(priceId) {
+  track("upgrade_initiated", { plan: priceId?.includes("team") ? "team" : "pro" });
   try {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) throw new Error("Not authenticated");
@@ -61,6 +62,9 @@ async function openStripePortal() {
     alert("Could not open subscription management. Error: " + err.message);
   }
 }
+
+// ─── Analytics ─────────────────────────────────────────────────────────────────
+const track = (event, params = {}) => { try { if (typeof gtag !== 'undefined') gtag('event', event, params); } catch(e) {} };
 
 // ─── Constants ──────────────────────────────────────────────────────────────────
 const APP_VERSION = "0.9.0";
@@ -513,6 +517,7 @@ export default function LawnBid() {
             // Re-fetch settings to pick up the updated plan from webhook
             const fresh = await loadSettings();
             if (fresh) setSettings(prev => ({ ...prev, ...fresh }));
+            track("upgrade_success", { plan: fresh?.plan || "pro" });
             setToast("Welcome to Pro! All features are now unlocked.");
             window.history.replaceState({}, "", "/app/");
           } else if (up === "cancelled") {
@@ -659,6 +664,7 @@ export default function LawnBid() {
       Object.keys(record).forEach(k => record[k] === undefined && delete record[k]);
 
       await upsertQuote(record);
+      if (status === "sent") track("quote_sent");
 
       // 3. Update local quotes state
       setQuotes(prev => {
@@ -1425,7 +1431,7 @@ function QuoteDetail({bp,quote,allQuotes,settings,onBack,onEdit,onDuplicate,onDe
     else{navigator.clipboard?.writeText(txt);setCopied(true);setTimeout(()=>setCopied(false),2000);}
   };
   const downloadPDF=async()=>{
-    try { await generateQuotePDF(quote, settings, calc, time); }
+    try { await generateQuotePDF(quote, settings, calc, time); track("pdf_downloaded"); }
     catch(e){ alert("Could not generate PDF: "+(e.message||"Unknown error")); }
   };
 
@@ -1948,6 +1954,7 @@ function AuthScreen(){
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     setBusy(false);
     if(error) setErr(authErrorMessage(error));
+    else track("login");
   };
   const [emailBlurred,setEmailBlurred]=useState(false);
   const emailLooksValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
@@ -1964,6 +1971,7 @@ function AuthScreen(){
       setErr("duplicate-email");
       return;
     }
+    track("signup_complete");
     if (!data.session) setInfo("signup-check-email");
   };
   const sendReset=async()=>{
@@ -2521,6 +2529,7 @@ function MapMeasure({bp,address,confirmed,setConfirmed,onConfirm,onSwitchManual,
       p.getPath().getArray().map(ll => ({ lat: ll.lat(), lng: ll.lng() }))
     );
     onConfirm({ areaSqft: totals.area, perimFt: totals.perim, polygons: polyCoords });
+    track("map_measurement_used");
     setConfirmed(true);
     setSuccessOverlay(true);
     setTimeout(() => { setSuccessOverlay(false); onAdvance?.(); }, 1500);

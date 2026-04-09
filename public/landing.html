@@ -3,6 +3,14 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<!-- Google Analytics -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-QTN7Z6GV87"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', 'G-QTN7Z6GV87');
+</script>
 <meta name="description" content="The fastest lawn care quoting app for landscapers. Draw your lawn on satellite maps, get instant pricing, send professional quotes in under 60 seconds. Free to start."/>
 <meta name="keywords" content="lawn care quoting app, landscaping estimate app, lawn mowing quote software, lawn care pricing software, satellite lawn measurement, landscaping bid app, free lawn care app"/>
 <link rel="canonical" href="https://winwinlawnbid.com/"/>
@@ -370,7 +378,7 @@
     <span>WinWin LawnBid</span>
   </a>
   <div class="nav-actions">
-    <a href="/app/" class="nav-signin">Sign In</a>
+    <a href="/app/" class="nav-signin" onclick="gtag('event','click_sign_in',{event_category:'engagement'})">Sign In</a>
     <a href="/app/?new=1" class="nav-cta">Start Free →</a>
   </div>
 </nav>
@@ -570,7 +578,7 @@
           <li>Business analytics</li>
           <li>English &amp; Spanish language support</li>
         </ul>
-        <a href="/app/?plan=pro" class="price-btn primary">Start Pro Trial — Free for 14 days →</a>
+        <a href="/app/?plan=pro" class="price-btn primary" onclick="gtag('event','click_pro_trial',{event_category:'conversion'})">Start Pro Trial — Free for 14 days →</a>
         <p style="font-size:12px;color:var(--gray-500);text-align:center;margin-top:10px;line-height:1.5;">No credit card to start · Cancel anytime · $19/mo after trial</p>
       </div>
       <!-- TEAM -->
@@ -666,6 +674,7 @@
       );
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Failed to join waitlist');
+      gtag('event', 'join_waitlist', { event_category: 'conversion', event_label: 'team' });
       input.style.display = 'none';
       btn.textContent = "You're on the list \u2713";
       btn.style.background = '#15803d';
