@@ -2009,6 +2009,7 @@ function AuthScreen(){
         <div style={{fontSize:13,color:"#64748b",textAlign:"center",marginBottom:12}}>Create an account or sign in to start your 14-day free trial</div>
       )}
       <Card>
+        <form onSubmit={e=>{e.preventDefault();if(mode==="login")login();else if(mode==="signup")signup();else if(mode==="reset")sendReset();}}>
         <div style={{marginBottom:12}}>
           <div style={{fontSize:13,fontWeight:600,color:"#334155",marginBottom:4}}>{t("email",lang)}</div>
           <Inp type="email" value={email} onChange={e=>{setEmail(e.target.value);setEmailBlurred(false);}} onBlur={()=>setEmailBlurred(true)} placeholder={t("ph_company_email",lang)} autoComplete="email"/>
@@ -2030,7 +2031,7 @@ function AuthScreen(){
             <div style={{textAlign:"right",marginBottom:12}}>
               <button type="button" onClick={()=>{clearMsgs();setMode("reset");}} style={{background:"none",border:"none",color:"#15803d",fontSize:12,fontWeight:600,cursor:"pointer",textDecoration:"underline",padding:"4px 0",minHeight:28,fontFamily:"inherit"}}>{t("forgot_password",lang)}</button>
             </div>
-            <Btn onClick={login} disabled={busy||!email||!password} style={{width:"100%"}}>{t("log_in",lang)}</Btn>
+            <Btn type="submit" disabled={busy||!email||!password} style={{width:"100%"}}>{t("log_in",lang)}</Btn>
             <div style={{height:1,background:"#e2e8f0",margin:"16px 0"}}/>
             <div style={{textAlign:"center",fontSize:13,color:"#64748b"}}>
               {t("no_account",lang)} <button type="button" onClick={()=>{clearMsgs();setMode("signup");}} style={{background:"none",border:"none",color:"#15803d",fontSize:13,fontWeight:600,cursor:"pointer",textDecoration:"underline",padding:"4px 2px",fontFamily:"inherit"}}>{t("create_one",lang)}</button>
@@ -2064,7 +2065,7 @@ function AuthScreen(){
                 </button>
               </div>
             </div>
-            <Btn onClick={signup} disabled={busy||!canSignup} style={{width:"100%"}}>{busy?"...":t("create_account",lang)}</Btn>
+            <Btn type="submit" disabled={busy||!canSignup} style={{width:"100%"}}>{busy?"...":t("create_account",lang)}</Btn>
             <div style={{height:1,background:"#e2e8f0",margin:"16px 0"}}/>
             <div style={{textAlign:"center",fontSize:13,color:"#64748b"}}>
               {t("already_account",lang)} <button type="button" onClick={()=>{clearMsgs();setMode("login");}} style={{background:"none",border:"none",color:"#15803d",fontSize:13,fontWeight:600,cursor:"pointer",textDecoration:"underline",padding:"4px 2px",fontFamily:"inherit"}}>{t("log_in_link",lang)}</button>
@@ -2073,12 +2074,13 @@ function AuthScreen(){
         )}
         {mode==="reset" && (
           <>
-            <Btn onClick={sendReset} disabled={busy||!email} style={{width:"100%",marginTop:4}}>{t("send_reset",lang)}</Btn>
+            <Btn type="submit" disabled={busy||!email} style={{width:"100%",marginTop:4}}>{t("send_reset",lang)}</Btn>
             <div style={{textAlign:"center",marginTop:12}}>
               <button type="button" onClick={()=>{clearMsgs();setMode("login");}} style={{background:"none",border:"none",color:"#15803d",fontSize:13,fontWeight:600,cursor:"pointer",textDecoration:"underline",padding:"6px 0",minHeight:28,fontFamily:"inherit"}}>← Back to login</button>
             </div>
           </>
         )}
+        </form>
         {err==="duplicate-email" ? (
           <div style={{marginTop:12,padding:"12px 14px",background:"#eff6ff",borderLeft:"3px solid #3b82f6",borderRadius:"0 8px 8px 0",color:"#1e40af",fontSize:13,fontWeight:500,lineHeight:1.5}}>
             An account with <strong>{email}</strong> already exists.
@@ -2133,6 +2135,7 @@ function ResetPasswordScreen({onDone}){
         <div style={{fontSize:13,color:"#64748b",marginTop:4,fontWeight:500}}>Choose something at least 6 characters long.</div>
       </div>
       <Card>
+        <form onSubmit={e=>{e.preventDefault();submit();}}>
         <div style={{marginBottom:12}}>
           <div style={{fontSize:13,fontWeight:600,color:"#334155",marginBottom:4}}>New password</div>
           <div style={{position:"relative"}}>
@@ -2151,7 +2154,8 @@ function ResetPasswordScreen({onDone}){
             </button>
           </div>
         </div>
-        <Btn onClick={submit} disabled={busy||!pw||!pw2} style={{width:"100%",marginTop:4}}>{busy?"Updating…":"Update Password"}</Btn>
+        <Btn type="submit" disabled={busy||!pw||!pw2} style={{width:"100%",marginTop:4}}>{busy?"Updating…":"Update Password"}</Btn>
+        </form>
         {err && <ErrBox style={{marginTop:12}}>{err}</ErrBox>}
         {info && <div style={{marginTop:12,padding:"10px 12px",background:"#f0fdf4",borderLeft:"3px solid #16a34a",borderRadius:"0 8px 8px 0",color:"#166534",fontSize:13,fontWeight:500}}>✓ {info}</div>}
       </Card>
