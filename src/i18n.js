@@ -344,6 +344,76 @@ export const translations = {
     service_label: 'Service',
     overdue: 'Overdue',
     due_today: 'Due today',
+    // UpgradeModal
+    upgrade_desc: 'Upgrade to Pro for unlimited quotes, satellite map measurement, PDF exports, and photo attachments.',
+    upgrade_pro_btn: 'Upgrade to Pro — $19/month',
+    upgrade_team_link: 'Upgrade to Team instead ($39/mo)',
+    maybe_later: 'Maybe later',
+    per_month: '/month',
+    // BetaPrompt
+    beta_title: 'Welcome to LawnBid Beta',
+    beta_desc: 'Get free Pro access — satellite maps, PDF quotes, and photo attachments — just for testing and giving feedback.',
+    beta_your_email: 'Your email',
+    beta_send: 'Send my email for Pro access',
+    beta_followup: 'Joseph will upgrade your account within 24 hours and reach out directly for your feedback.',
+    beta_skip: 'Maybe later — skip for now',
+    beta_sent: 'Request sent!',
+    beta_sent_sub: 'Joseph will be in touch within 24 hours.',
+    // QuoteDetail labels
+    service_line: 'Mowing · Trimming · Edging',
+    not_yet_sent: 'Not yet sent',
+    why_declined: 'Why was this declined?',
+    mark_declined_btn: 'Mark Declined',
+    rates_at_time: 'Rates at quoting time',
+    editing_creates_v2: 'Editing a sent quote creates a new V2 — original preserved.',
+    ready_to_send: 'Ready to Send',
+    revision_of: 'Revision of',
+    // ResetPasswordScreen
+    set_new_pw: 'Set a new password',
+    choose_pw_hint: 'Choose something at least 6 characters long.',
+    new_pw: 'New password',
+    confirm_new_pw: 'Confirm new password',
+    updating: 'Updating…',
+    pw_updated: 'Password updated. You\'re now logged in.',
+    // S4 / shared field labels
+    total: 'Total',
+    uploading: 'Uploading…',
+    // ClientDetail
+    name_star: 'Name *',
+    phone_label: 'Phone',
+    email_label: 'Email',
+    err_name_required: 'Name is required.',
+    err_phone_10: 'Phone must be at least 10 digits.',
+    // ClientsScreen
+    no_clients_yet: 'No clients yet',
+    no_results: 'No results',
+    clients_auto_saved: 'Clients are saved automatically when you send a quote',
+    // HomeScreen
+    quotes_in_db: 'quotes in database',
+    quote_in_db: 'quote in database',
+    // BusinessScreen
+    biz_jobs: 'jobs',
+    biz_job: 'job',
+    biz_implied_hourly: 'implied gross/hr',
+    biz_margin: 'margin',
+    // HomeStats
+    pipeline: 'Pipeline',
+    // Decline reasons
+    decline_price: 'Price too high',
+    decline_competitor: 'Went with competitor',
+    decline_no_response: 'No response',
+    decline_changed_mind: 'Client changed mind',
+    decline_other: 'Other',
+    // Photo attachments
+    add_photo_btn: 'Add Photo',
+    upload_file_btn: 'Upload File',
+    photos_attached: 'photo(s) attached to digital quote',
+    // Recurring detail
+    recurring_weekly: 'Weekly',
+    recurring_biweekly: 'Biweekly',
+    recurring_monthly: 'Monthly',
+    cancel_service_confirm: 'End recurring service for',
+    service_cancelled: 'Service cancelled',
   },
   es: {
     nav_quotes: 'Mis Precios',
@@ -673,6 +743,76 @@ export const translations = {
     service_label: 'Servicio',
     overdue: 'Atrasado',
     due_today: 'Hoy toca',
+    // UpgradeModal
+    upgrade_desc: 'Mejora a Pro para precios ilimitados, mapa satelital, PDF y fotos.',
+    upgrade_pro_btn: 'Mejorar a Pro — $19/mes',
+    upgrade_team_link: 'Mejorar a Equipo ($39/mes)',
+    maybe_later: 'Tal vez después',
+    per_month: '/mes',
+    // BetaPrompt
+    beta_title: 'Bienvenido a LawnBid Beta',
+    beta_desc: 'Obtén acceso Pro gratis — mapas, PDF y fotos — solo por probar y dar tu opinión.',
+    beta_your_email: 'Tu correo',
+    beta_send: 'Enviar mi correo para acceso Pro',
+    beta_followup: 'Joseph te mejorará la cuenta en 24 horas y te contactará para tu opinión.',
+    beta_skip: 'Tal vez después — saltar por ahora',
+    beta_sent: '¡Solicitud enviada!',
+    beta_sent_sub: 'Joseph te contactará en 24 horas.',
+    // QuoteDetail labels
+    service_line: 'Corte · Orillado · Bordeado',
+    not_yet_sent: 'Aún no enviado',
+    why_declined: '¿Por qué fue rechazado?',
+    mark_declined_btn: 'Marcar rechazado',
+    rates_at_time: 'Tarifas al momento de cotizar',
+    editing_creates_v2: 'Editar un precio enviado crea un V2 — el original se conserva.',
+    ready_to_send: 'Listo para enviar',
+    revision_of: 'Revisión de',
+    // ResetPasswordScreen
+    set_new_pw: 'Pon una nueva contraseña',
+    choose_pw_hint: 'Escoge algo de al menos 6 caracteres.',
+    new_pw: 'Nueva contraseña',
+    confirm_new_pw: 'Confirmar nueva contraseña',
+    updating: 'Actualizando…',
+    pw_updated: 'Contraseña actualizada. Ya estás adentro.',
+    // S4 / shared field labels
+    total: 'Total',
+    uploading: 'Subiendo…',
+    // ClientDetail
+    name_star: 'Nombre *',
+    phone_label: 'Teléfono',
+    email_label: 'Correo',
+    err_name_required: 'El nombre es obligatorio.',
+    err_phone_10: 'El teléfono debe tener al menos 10 dígitos.',
+    // ClientsScreen
+    no_clients_yet: 'No hay clientes todavía',
+    no_results: 'Sin resultados',
+    clients_auto_saved: 'Los clientes se guardan automáticamente al enviar un precio',
+    // HomeScreen
+    quotes_in_db: 'precios guardados',
+    quote_in_db: 'precio guardado',
+    // BusinessScreen
+    biz_jobs: 'trabajos',
+    biz_job: 'trabajo',
+    biz_implied_hourly: 'por hora estimado',
+    biz_margin: 'ganancia',
+    // HomeStats
+    pipeline: 'Resumen',
+    // Decline reasons
+    decline_price: 'Precio muy alto',
+    decline_competitor: 'Se fue con otro',
+    decline_no_response: 'No contestó',
+    decline_changed_mind: 'El cliente cambió de opinión',
+    decline_other: 'Otro',
+    // Photo attachments
+    add_photo_btn: 'Agregar foto',
+    upload_file_btn: 'Subir archivo',
+    photos_attached: 'foto(s) adjunta(s) al precio digital',
+    // Recurring detail
+    recurring_weekly: 'Semanal',
+    recurring_biweekly: 'Quincenal',
+    recurring_monthly: 'Mensual',
+    cancel_service_confirm: 'Terminar servicio para',
+    service_cancelled: 'Servicio cancelado',
   }
 };
 

@@ -138,7 +138,7 @@ const ATTACH_ACCEPT = ".jpg,.jpeg,.png,.pdf,.txt,.heic,image/jpeg,image/png,appl
 
 const STATUS_COLOR = { draft:"#f59e0b", sent:"#3b82f6", accepted:"#16a34a", declined:"#94a3b8", seasonal_complete:"#16a34a" };
 const STATUS_BG    = { draft:"#fffbeb", sent:"#eff6ff", accepted:"#f0fdf4", declined:"#f8fafc", seasonal_complete:"#f0fdf4" };
-const DECLINE_REASONS = ["Price too high","Went with competitor","No response","Client changed mind","Other"];
+const DECLINE_REASON_KEYS = ["decline_price","decline_competitor","decline_no_response","decline_changed_mind","decline_other"];
 
 const uid = () => Math.random().toString(36).slice(2,8).toUpperCase();
 
@@ -500,7 +500,7 @@ export default function LawnBid() {
 
   // ── Load all data from Supabase once authenticated ──
   useEffect(() => {
-    if (!session) { setReady(false); setQuotes([]); setClients([]); setSettings(DEFAULT_SETTINGS); setQuotesUsedLive(0); return; }
+    if (!session) { setReady(false); setQuotes([]); setClients([]); const cl=(()=>{try{return localStorage.getItem("lb_language")||"en";}catch{return"en";}})(); setSettings({...DEFAULT_SETTINGS,language:cl}); setLang(cl); setQuotesUsedLive(0); return; }
     (async () => {
       try {
         const [q, c, s, qCount] = await Promise.all([loadQuotes(), loadClients(), loadSettings(), countRecentQuotes(30)]);
@@ -940,6 +940,7 @@ function BottomNav({tab,screen,setTab,setScreen,bp,maxW}){
 
 // ─── Upgrade modal (plan gate) ───
 function UpgradeModal({feature,onClose}){
+  const lang = useLang();
   return (
     <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.6)",zIndex:450,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
       <div onClick={e=>e.stopPropagation()} style={{background:"#ffffff",borderRadius:16,padding:24,width:"100%",maxWidth:400,boxSizing:"border-box",boxShadow:"0 10px 40px rgba(0,0,0,.25)"}}>
@@ -949,17 +950,17 @@ function UpgradeModal({feature,onClose}){
           </div>
         </div>
         <div style={{fontSize:18,fontWeight:800,color:"#0f172a",textAlign:"center",marginBottom:4,letterSpacing:-.2}}>{feature}</div>
-        <div style={{fontSize:13,color:"#64748b",textAlign:"center",lineHeight:1.5,marginBottom:16}}>Upgrade to Pro for unlimited quotes, satellite map measurement, PDF exports, and photo attachments.</div>
+        <div style={{fontSize:13,color:"#64748b",textAlign:"center",lineHeight:1.5,marginBottom:16}}>{t("upgrade_desc",lang)}</div>
         <div style={{display:"flex",alignItems:"baseline",justifyContent:"center",gap:4,marginBottom:18}}>
           <span style={{fontSize:28,fontWeight:900,color:"#0f172a",letterSpacing:-.5}}>$19</span>
-          <span style={{fontSize:13,color:"#64748b",fontWeight:500}}>/month</span>
+          <span style={{fontSize:13,color:"#64748b",fontWeight:500}}>{t("per_month",lang)}</span>
         </div>
-        <Btn onClick={()=>redirectToStripeCheckout(import.meta.env.VITE_STRIPE_PRO_PRICE_ID)} style={{width:"100%"}}>Upgrade to Pro — $19/month</Btn>
+        <Btn onClick={()=>redirectToStripeCheckout(import.meta.env.VITE_STRIPE_PRO_PRICE_ID)} style={{width:"100%"}}>{t("upgrade_pro_btn",lang)}</Btn>
         <div style={{textAlign:"center",marginTop:8}}>
-          <button type="button" onClick={()=>redirectToStripeCheckout(import.meta.env.VITE_STRIPE_TEAM_PRICE_ID)} style={{background:"none",border:"none",color:"#15803d",fontSize:13,fontWeight:600,cursor:"pointer",textDecoration:"underline",padding:"6px 12px",minHeight:32,fontFamily:"inherit"}}>Upgrade to Team instead ($39/mo)</button>
+          <button type="button" onClick={()=>redirectToStripeCheckout(import.meta.env.VITE_STRIPE_TEAM_PRICE_ID)} style={{background:"none",border:"none",color:"#15803d",fontSize:13,fontWeight:600,cursor:"pointer",textDecoration:"underline",padding:"6px 12px",minHeight:32,fontFamily:"inherit"}}>{t("upgrade_team_link",lang)}</button>
         </div>
         <div style={{textAlign:"center",marginTop:4}}>
-          <button type="button" onClick={onClose} style={{background:"none",border:"none",color:"#64748b",fontSize:13,fontWeight:600,cursor:"pointer",padding:"8px 12px",minHeight:32,fontFamily:"inherit"}}>Maybe later</button>
+          <button type="button" onClick={onClose} style={{background:"none",border:"none",color:"#64748b",fontSize:13,fontWeight:600,cursor:"pointer",padding:"8px 12px",minHeight:32,fontFamily:"inherit"}}>{t("maybe_later",lang)}</button>
         </div>
       </div>
     </div>
@@ -968,6 +969,7 @@ function UpgradeModal({feature,onClose}){
 
 // ─── Beta prompt ───
 function BetaPrompt({userEmail,onDone}){
+  const lang = useLang();
   const [sent,setSent]=useState(false);
   const dismiss=()=>{try{localStorage.setItem("lb_beta_prompt_shown","true");}catch{}onDone();};
   const send=()=>{
@@ -987,24 +989,24 @@ function BetaPrompt({userEmail,onDone}){
             <div style={{width:56,height:56,borderRadius:"50%",background:"#dcfce7",display:"inline-flex",alignItems:"center",justifyContent:"center",marginBottom:10}}>
               <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#15803d" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
             </div>
-            <div style={{fontSize:15,fontWeight:700,color:"#0f172a"}}>Request sent!</div>
-            <div style={{fontSize:13,color:"#64748b",marginTop:4}}>Joseph will be in touch within 24 hours.</div>
+            <div style={{fontSize:15,fontWeight:700,color:"#0f172a"}}>{t("beta_sent",lang)}</div>
+            <div style={{fontSize:13,color:"#64748b",marginTop:4}}>{t("beta_sent_sub",lang)}</div>
           </div>
         ):(
           <>
             <div style={{textAlign:"center",marginBottom:14}}>
               <img src="/logo.png" alt="" style={{width:56,height:56,borderRadius:"50%",objectFit:"cover",marginBottom:10}}/>
-              <div style={{fontSize:20,fontWeight:800,color:"#0f172a",letterSpacing:-.3}}>Welcome to LawnBid Beta</div>
+              <div style={{fontSize:20,fontWeight:800,color:"#0f172a",letterSpacing:-.3}}>{t("beta_title",lang)}</div>
             </div>
-            <div style={{fontSize:14,color:"#64748b",textAlign:"center",lineHeight:1.5,marginBottom:16}}>Get free Pro access — satellite maps, PDF quotes, and photo attachments — just for testing and giving feedback.</div>
+            <div style={{fontSize:14,color:"#64748b",textAlign:"center",lineHeight:1.5,marginBottom:16}}>{t("beta_desc",lang)}</div>
             <div style={{marginBottom:14}}>
-              <div style={{fontSize:12,fontWeight:600,color:"#334155",marginBottom:4}}>Your email</div>
+              <div style={{fontSize:12,fontWeight:600,color:"#334155",marginBottom:4}}>{t("beta_your_email",lang)}</div>
               <Inp value={userEmail} readOnly style={{background:"#f8fafc",color:"#64748b"}}/>
             </div>
-            <Btn onClick={send} style={{width:"100%"}}>✉ Send my email for Pro access</Btn>
-            <div style={{fontSize:12,color:"#64748b",textAlign:"center",lineHeight:1.5,marginTop:12,marginBottom:8}}>Joseph will upgrade your account within 24 hours and reach out directly for your feedback.</div>
+            <Btn onClick={send} style={{width:"100%"}}>{"✉ "+t("beta_send",lang)}</Btn>
+            <div style={{fontSize:12,color:"#64748b",textAlign:"center",lineHeight:1.5,marginTop:12,marginBottom:8}}>{t("beta_followup",lang)}</div>
             <div style={{textAlign:"center"}}>
-              <button onClick={dismiss} style={{background:"none",border:"none",color:"#94a3b8",fontSize:12,fontWeight:500,cursor:"pointer",padding:"8px 12px",fontFamily:"inherit"}}>Maybe later — skip for now</button>
+              <button onClick={dismiss} style={{background:"none",border:"none",color:"#94a3b8",fontSize:12,fontWeight:500,cursor:"pointer",padding:"8px 12px",fontFamily:"inherit"}}>{t("beta_skip",lang)}</button>
             </div>
           </>
         )}
@@ -1041,7 +1043,7 @@ function HomeScreen({bp,quotes,settings,onNew,onView}){
             <img src="/logo.png" alt="LawnBid" style={{width:36,height:36,borderRadius:"50%",objectFit:"cover",marginRight:8}}/>
             <div>
               <div style={{fontSize:26,fontWeight:900,color:"#0f172a"}}>LawnBid</div>
-              <div style={{fontSize:12,color:"#64748b"}}>{quotes.length} quote{quotes.length!==1?"s":""} in database</div>
+              <div style={{fontSize:12,color:"#64748b"}}>{quotes.length} {t(quotes.length!==1?"quotes_in_db":"quote_in_db",lang)}</div>
             </div>
           </div>
           <Btn onClick={onNew} style={{height:40,minHeight:40,padding:"0 14px",fontSize:13,borderRadius:12}}>{t("new_quote",lang)}</Btn>
@@ -1173,7 +1175,7 @@ function BusinessScreen({bp,quotes,settings,clients}){
         <Row label={t("close_rate_pct",lang)} value={`${closeRate}%`}/>
         <div style={{fontSize:11,color:"#94a3b8",marginTop:-4,marginBottom:6}}>{t("close_rate_sub",lang)}{sentAndAccepted>0?` (${acceptedQ.length} of ${sentAndAccepted})`:""}</div>
         <div style={{fontSize:13,color:"#334155",lineHeight:1.6}}>
-          {acceptedQ.length} jobs{impliedHourly>0?` · ~$${impliedHourly}/hr implied gross`:""}{impliedMargin>0?` · ~${impliedMargin}% margin`:""}
+          {acceptedQ.length} {t(acceptedQ.length!==1?"biz_jobs":"biz_job",lang)}{impliedHourly>0?` · ~$${impliedHourly}/hr ${t("biz_implied_hourly",lang)}`:""}{impliedMargin>0?` · ~${impliedMargin}% ${t("biz_margin",lang)}`:""}
         </div>
         {impliedMargin>0&&<div style={{fontSize:10,color:"#94a3b8",marginTop:2}}>{t("margin_sub",lang)}</div>}
       </Card>
@@ -1214,7 +1216,7 @@ function HomeStats({quotes}){
   return (
     <div style={{position:"sticky",top:80,alignSelf:"start"}}>
       <Card>
-        <Lbl>Pipeline</Lbl>
+        <Lbl>{t("pipeline",lang)}</Lbl>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
           {rows.map(r=>(
             <div key={r.lbl} style={{padding:"14px",borderRadius:12,background:"#f8fafc"}}>
@@ -1246,8 +1248,8 @@ function ClientsScreen({bp,clients,quotes,onView}){
       {shown.length===0?(
         <div style={{textAlign:"center",padding:"60px 20px",color:"#64748b"}}>
           <div style={{fontSize:48,marginBottom:12}}>👥</div>
-          <div style={{fontWeight:700}}>{clients.length===0?"No clients yet":"No results"}</div>
-          <div style={{fontSize:13,marginTop:6}}>Clients are saved automatically when you send a quote</div>
+          <div style={{fontWeight:700}}>{clients.length===0?t("no_clients_yet",lang):t("no_results",lang)}</div>
+          <div style={{fontSize:13,marginTop:6}}>{t("clients_auto_saved",lang)}</div>
         </div>
       ):shown.map(c=>{
         const cqs=quotes.filter(q=>q.client_id===c.id).sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));
@@ -1285,8 +1287,8 @@ function ClientDetail({bp,client,quotes,onBack,onViewQuote,onUpdateClient,onDele
   const [editForm,setEditForm]=useState({name:client.name||"",phone:client.phone||"",email:client.email||"",default_address:client.default_address||""});
   const [editMsg,setEditMsg]=useState("");
   const saveEdit=async()=>{
-    if(!editForm.name.trim()){setEditMsg("Name is required.");return;}
-    if(editForm.phone&&editForm.phone.replace(/\D/g,"").length<10){setEditMsg("Phone must be at least 10 digits.");return;}
+    if(!editForm.name.trim()){setEditMsg(t("err_name_required",lang));return;}
+    if(editForm.phone&&editForm.phone.replace(/\D/g,"").length<10){setEditMsg(t("err_phone_10",lang));return;}
     try{await onUpdateClient(editForm);setEditing(false);setEditMsg("");setTimeout(()=>setEditMsg(""),0);}
     catch(e){setEditMsg("Could not save — check connection.");console.error("[LawnBid] Client update failed:",e);}
   };
@@ -1296,7 +1298,7 @@ function ClientDetail({bp,client,quotes,onBack,onViewQuote,onUpdateClient,onDele
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
         <Lbl style={{marginBottom:0}}>{t("edit_client",lang)}</Lbl>
       </div>
-      {[["name","Name *"],["phone","Phone"],["email","Email"],["default_address","Address"]].map(([k,lbl])=>(
+      {[["name",t("name_star",lang)],["phone",t("phone_label",lang)],["email",t("email_label",lang)],["default_address",t("address_label",lang)]].map(([k,lbl])=>(
         <div key={k} style={{marginBottom:10}}>
           <div style={{fontSize:12,fontWeight:600,color:"#334155",marginBottom:3}}>{lbl}</div>
           <Inp value={k==="phone"?formatPhone(editForm[k]):editForm[k]} onChange={e=>setEditForm(f=>({...f,[k]:k==="phone"?formatPhone(e.target.value):e.target.value}))} placeholder={lbl}/>
@@ -1350,7 +1352,7 @@ function ClientDetail({bp,client,quotes,onBack,onViewQuote,onUpdateClient,onDele
               <div style={{fontSize:12,color:"#94a3b8",marginTop:2}}>
                 {fmtArea(q.area_sqft)} · {q.crew_size} crew · {t(COMPLEXITY.find(o=>o.value===q.complexity)?.lk||"cx_simple",lang)} · {t(RISK.find(o=>o.value===q.risk)?.lk||"risk_low",lang)}
               </div>
-              {q.parent_id&&<div style={{fontSize:11,color:"#94a3b8",marginTop:2}}>Revision of {q.parent_id}</div>}
+              {q.parent_id&&<div style={{fontSize:11,color:"#94a3b8",marginTop:2}}>{t("revision_of",lang)} {q.parent_id}</div>}
             </div>
             <div style={{textAlign:"right",flexShrink:0}}><div style={{fontSize:20,fontWeight:900,color:"#0f172a",letterSpacing:-.4}}>{$$(q.final_price)}</div></div>
           </div>
@@ -1359,13 +1361,13 @@ function ClientDetail({bp,client,quotes,onBack,onViewQuote,onUpdateClient,onDele
       <div style={{marginTop:16}}>
         {delStep===0&&<Btn variant="danger" onClick={()=>setDelStep(1)} style={{width:"100%"}}>{t("delete_client",lang)}</Btn>}
         {delStep===1&&<Card style={{border:"1.5px solid #fecaca"}}>
-          <div style={{fontSize:14,fontWeight:700,color:"#dc2626",marginBottom:6}}>⚠️ Delete {client.name}?</div>
-          <div style={{fontSize:13,color:"#64748b",lineHeight:1.5,marginBottom:12}}>This will permanently delete this client and all {quotes.length} quote{quotes.length!==1?"s":""} associated with them. This cannot be undone.</div>
-          <div style={{display:"flex",gap:8}}><Btn variant="secondary" onClick={()=>setDelStep(0)} style={{flex:1,height:40,minHeight:40,fontSize:13}}>Cancel</Btn><Btn variant="danger" onClick={()=>setDelStep(2)} style={{flex:1,height:40,minHeight:40,fontSize:13}}>Yes, Delete Everything</Btn></div>
+          <div style={{fontSize:14,fontWeight:700,color:"#dc2626",marginBottom:6}}>{"⚠️ "+t("delete_client",lang)+" "+client.name+"?"}</div>
+          <div style={{fontSize:13,color:"#64748b",lineHeight:1.5,marginBottom:12}}>{t("delete_warn",lang)}</div>
+          <div style={{display:"flex",gap:8}}><Btn variant="secondary" onClick={()=>setDelStep(0)} style={{flex:1,height:40,minHeight:40,fontSize:13}}>{t("cancel",lang)}</Btn><Btn variant="danger" onClick={()=>setDelStep(2)} style={{flex:1,height:40,minHeight:40,fontSize:13}}>{t("confirm_delete_all",lang)}</Btn></div>
         </Card>}
         {delStep===2&&<Card style={{border:"1.5px solid #dc2626"}}>
-          <div style={{fontSize:14,fontWeight:700,color:"#dc2626",marginBottom:8}}>Are you absolutely sure?</div>
-          <div style={{display:"flex",gap:8}}><Btn variant="secondary" onClick={()=>setDelStep(0)} style={{flex:1,height:40,minHeight:40,fontSize:13}}>Cancel</Btn><Btn variant="danger" onClick={onDeleteClient} style={{flex:1,height:40,minHeight:40,fontSize:13}}>🗑 Confirm Delete</Btn></div>
+          <div style={{fontSize:14,fontWeight:700,color:"#dc2626",marginBottom:8}}>{t("are_you_sure",lang)}</div>
+          <div style={{display:"flex",gap:8}}><Btn variant="secondary" onClick={()=>setDelStep(0)} style={{flex:1,height:40,minHeight:40,fontSize:13}}>{t("cancel",lang)}</Btn><Btn variant="danger" onClick={onDeleteClient} style={{flex:1,height:40,minHeight:40,fontSize:13}}>{t("confirm_final",lang)}</Btn></div>
         </Card>}
       </div>
     </>
@@ -1438,9 +1440,9 @@ function QuoteDetail({bp,quote,allQuotes,settings,onBack,onEdit,onDuplicate,onDe
   const heroCard = (
     <Card style={{background:"#0f172a",textAlign:"center",padding:"28px 24px",boxShadow:"0 4px 16px rgba(15,23,42,.12)"}}>
       <div style={{fontSize:"var(--price-hero)",fontWeight:900,color:"#ffffff",letterSpacing:-2,lineHeight:1}}>{$$(quote.final_price)}</div>
-      <div style={{fontSize:12,color:"#94a3b8",marginTop:8,fontWeight:500,textTransform:"uppercase",letterSpacing:1}}>Mowing · Trimming · Edging</div>
+      <div style={{fontSize:12,color:"#94a3b8",marginTop:8,fontWeight:500,textTransform:"uppercase",letterSpacing:1}}>{t("service_line",lang)}</div>
       {time&&<div style={{fontSize:13,color:"#4ade80",marginTop:8,fontWeight:700}}>Est. {fmtT(time.adj)}</div>}
-      <div style={{marginTop:10,fontSize:11,color:"#64748b",fontWeight:500}}>Sent: {quote.sent_at?fmtTS(quote.sent_at):"Not yet sent"}</div>
+      <div style={{marginTop:10,fontSize:11,color:"#64748b",fontWeight:500}}>{t("sent_date",lang)}: {quote.sent_at?fmtTS(quote.sent_at):t("not_yet_sent",lang)}</div>
     </Card>
   );
   const clientCard = quote.client_name && (
@@ -1455,7 +1457,7 @@ function QuoteDetail({bp,quote,allQuotes,settings,onBack,onEdit,onDuplicate,onDe
     <Card>
       <Lbl>{t("job_details",lang)}</Lbl>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-        {[{l:"Address",v:quote.address,full:true},{l:"Area",v:fmtArea(quote.area_sqft)},{l:"Perimeter",v:`${Math.round(quote.linear_ft).toLocaleString()} ft`},{l:"Crew",v:`${quote.crew_size} worker${quote.crew_size>1?"s":""}`},{l:"Complexity",v:t(COMPLEXITY.find(o=>o.value===quote.complexity)?.lk||"cx_simple",lang)},{l:"Risk",v:t(RISK.find(o=>o.value===quote.risk)?.lk||"risk_low",lang)},{l:"Discount",v:(quote.discount_pct||0)>0?`${quote.discount_pct}%`:"None"},{l:"Created",v:fmtTS(quote.created_at),full:true},{l:"Sent",v:quote.sent_at?fmtTS(quote.sent_at):"Not sent",full:true},{l:"Expires",v:quote.expiry_date?`${fmtD(quote.expiry_date)}${isExpired(quote.expiry_date)?" (expired)":""}`:"—",full:true}]
+        {[{l:t("address_label",lang),v:quote.address,full:true},{l:t("area",lang),v:fmtArea(quote.area_sqft)},{l:t("perimeter",lang),v:`${Math.round(quote.linear_ft).toLocaleString()} ft`},{l:t("crew_label",lang),v:`${quote.crew_size} ${t(quote.crew_size>1?"workers":"worker",lang)}`},{l:t("complexity",lang),v:t(COMPLEXITY.find(o=>o.value===quote.complexity)?.lk||"cx_simple",lang)},{l:t("risk",lang),v:t(RISK.find(o=>o.value===quote.risk)?.lk||"risk_low",lang)},{l:t("discount",lang),v:(quote.discount_pct||0)>0?`${quote.discount_pct}%`:t("none",lang)},{l:t("created",lang),v:fmtTS(quote.created_at),full:true},{l:t("sent_date",lang),v:quote.sent_at?fmtTS(quote.sent_at):t("not_sent",lang),full:true},{l:t("expires",lang),v:quote.expiry_date?`${fmtD(quote.expiry_date)}${isExpired(quote.expiry_date)?` (${t("expired_label",lang)})`:""}`:"—",full:true}]
           .map(({l,v,full})=>(
             <div key={l} style={{gridColumn:full?"1 / -1":"auto"}}>
               <div style={{fontSize:10,fontWeight:700,color:"#94a3b8",textTransform:"uppercase"}}>{l}</div>
@@ -1475,7 +1477,7 @@ function QuoteDetail({bp,quote,allQuotes,settings,onBack,onEdit,onDuplicate,onDe
         </div>
       ))}
       <div style={{display:"flex",justifyContent:"space-between",marginTop:10,fontSize:18,fontWeight:900,color:"#16a34a"}}><span>{t("final_bid",lang)}</span><span>{$$(quote.final_price)}</span></div>
-      {quote.mow_rate_used&&<div style={{marginTop:10,padding:"8px 10px",background:"#f8fafc",borderRadius:8,fontSize:11,color:"#64748b"}}>Rates at quoting time: mow ${quote.mow_rate_used}/20k · trim ${quote.trim_rate_used}/3k · equip ${quote.equipment_cost_used}/hr</div>}
+      {quote.mow_rate_used&&<div style={{marginTop:10,padding:"8px 10px",background:"#f8fafc",borderRadius:8,fontSize:11,color:"#64748b"}}>{t("rates_at_time",lang)}: mow ${quote.mow_rate_used}/20k · trim ${quote.trim_rate_used}/3k · equip ${quote.equipment_cost_used}/hr</div>}
     </Card>
   );
   const notesCard = quote.notes && <Card><Lbl>{t("notes",lang)}</Lbl><div style={{fontSize:14,color:"#334155",lineHeight:1.5}}>{quote.notes}</div></Card>;
@@ -1515,8 +1517,8 @@ function QuoteDetail({bp,quote,allQuotes,settings,onBack,onEdit,onDuplicate,onDe
   );
   const banners = (
     <>
-      {ratesChanged&&<div style={{background:"#fffbeb",border:"1px solid #fde68a",borderRadius:12,padding:"10px 14px",marginBottom:12,fontSize:12,color:"#92400e"}}>ℹ Rates changed since sent. Showing rates used at time of quoting.</div>}
-      {isSent&&<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:12,padding:"10px 14px",marginBottom:12,fontSize:13,color:"#1d4ed8"}}>✏️ <strong>Editing a sent quote creates a new V2</strong> — original preserved.</div>}
+      {ratesChanged&&<div style={{background:"#fffbeb",border:"1px solid #fde68a",borderRadius:12,padding:"10px 14px",marginBottom:12,fontSize:12,color:"#92400e"}}>{"ℹ "+t("rates_at_time",lang)}</div>}
+      {isSent&&<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:12,padding:"10px 14px",marginBottom:12,fontSize:13,color:"#1d4ed8"}}>{"✏️ "+t("editing_creates_v2",lang)}</div>}
     </>
   );
   const actions = (
@@ -1527,19 +1529,19 @@ function QuoteDetail({bp,quote,allQuotes,settings,onBack,onEdit,onDuplicate,onDe
         : <Btn variant="outline" onClick={()=>showUpgrade("PDF Quote Export")} style={{width:"100%",opacity:.7,display:"inline-flex",alignItems:"center",justifyContent:"center",gap:8}}><LockIcon size={14} color="#15803d"/>Download PDF — Pro</Btn>
       }
       {quote.status==="sent"&&<Btn variant="outline" onClick={onAccepted} style={{width:"100%"}}>✅ {t("mark_accepted",lang)}</Btn>}
-      {quote.status==="sent"&&!declineOpen&&<Btn variant="secondary" onClick={()=>setDeclineOpen(true)} style={{width:"100%"}}>Mark as Declined</Btn>}
+      {quote.status==="sent"&&!declineOpen&&<Btn variant="secondary" onClick={()=>setDeclineOpen(true)} style={{width:"100%"}}>{t("mark_declined",lang)}</Btn>}
       {declineOpen&&(
         <Card style={{border:"1.5px solid #e2e8f0",marginTop:4}}>
-          <div style={{fontSize:13,fontWeight:700,color:"#0f172a",marginBottom:8}}>Why was this declined?</div>
-          {DECLINE_REASONS.map(r=>(
-            <label key={r} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 0",cursor:"pointer",fontSize:13,color:"#334155",borderBottom:"1px solid #f1f5f9",minHeight:44}}>
-              <input type="radio" name="decline" value={r} checked={declineReason===r} onChange={()=>setDeclineReason(r)} style={{width:18,height:18,cursor:"pointer",accentColor:"#15803d",flexShrink:0}}/>
-              <span>{r}</span>
+          <div style={{fontSize:13,fontWeight:700,color:"#0f172a",marginBottom:8}}>{t("why_declined",lang)}</div>
+          {DECLINE_REASON_KEYS.map(rk=>(
+            <label key={rk} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 0",cursor:"pointer",fontSize:13,color:"#334155",borderBottom:"1px solid #f1f5f9",minHeight:44}}>
+              <input type="radio" name="decline" value={rk} checked={declineReason===rk} onChange={()=>setDeclineReason(rk)} style={{width:18,height:18,cursor:"pointer",accentColor:"#15803d",flexShrink:0}}/>
+              <span>{t(rk,lang)}</span>
             </label>
           ))}
           <div style={{display:"flex",gap:8,marginTop:10}}>
-            <Btn variant="secondary" onClick={()=>{onDecline(declineReason||"No reason given");setDeclineOpen(false);}} disabled={!declineReason} style={{flex:1,height:40,minHeight:40,fontSize:13}}>Mark Declined</Btn>
-            <Btn variant="secondary" onClick={()=>{setDeclineOpen(false);setDeclineReason("");}} style={{flex:1,height:40,minHeight:40,fontSize:13}}>Cancel</Btn>
+            <Btn variant="secondary" onClick={()=>{onDecline(declineReason?t(declineReason,lang):"—");setDeclineOpen(false);}} disabled={!declineReason} style={{flex:1,height:40,minHeight:40,fontSize:13}}>{t("mark_declined_btn",lang)}</Btn>
+            <Btn variant="secondary" onClick={()=>{setDeclineOpen(false);setDeclineReason("");}} style={{flex:1,height:40,minHeight:40,fontSize:13}}>{t("cancel",lang)}</Btn>
           </div>
         </Card>
       )}
@@ -2107,6 +2109,7 @@ function AuthScreen(){
 
 // ─── Reset Password Screen (after email recovery link) ───
 function ResetPasswordScreen({onDone}){
+  const lang = (()=>{try{return localStorage.getItem("lb_language")||"en";}catch{return"en";}})();
   const [pw,setPw]=useState("");
   const [pw2,setPw2]=useState("");
   const [showPw,setShowPw]=useState(false);
@@ -2117,13 +2120,13 @@ function ResetPasswordScreen({onDone}){
 
   const submit = async () => {
     setErr(""); setInfo("");
-    if (pw.length < 6) { setErr("Password must be at least 6 characters. Please choose a longer password."); return; }
-    if (pw !== pw2) { setErr("Passwords do not match. Please retype the new password."); return; }
+    if (pw.length < 6) { setErr(t("err_password_short",lang)); return; }
+    if (pw !== pw2) { setErr(t("confirm_password",lang)); return; }
     setBusy(true);
     const { error } = await supabase.auth.updateUser({ password: pw });
     setBusy(false);
     if (error) { setErr(authErrorMessage(error)); return; }
-    setInfo("Password updated. You're now logged in.");
+    setInfo(t("pw_updated",lang));
     setTimeout(onDone, 1200);
   };
 
@@ -2131,13 +2134,13 @@ function ResetPasswordScreen({onDone}){
     <div style={{maxWidth:480,margin:"0 auto",minHeight:"100vh",display:"flex",flexDirection:"column",justifyContent:"center",padding:"24px",fontFamily:"'Inter',system-ui,-apple-system,sans-serif",background:"#f8fafc",boxSizing:"border-box",color:"#0f172a"}}>
       <div style={{textAlign:"center",marginBottom:28}}>
         <img src="/logo.png" alt="LawnBid" style={{width:72,height:72,borderRadius:"50%",objectFit:"cover",marginBottom:12}}/>
-        <div style={{fontSize:32,fontWeight:900,color:"#0f172a",letterSpacing:-.8}}>Set a new password</div>
-        <div style={{fontSize:13,color:"#64748b",marginTop:4,fontWeight:500}}>Choose something at least 6 characters long.</div>
+        <div style={{fontSize:32,fontWeight:900,color:"#0f172a",letterSpacing:-.8}}>{t("set_new_pw",lang)}</div>
+        <div style={{fontSize:13,color:"#64748b",marginTop:4,fontWeight:500}}>{t("choose_pw_hint",lang)}</div>
       </div>
       <Card>
         <form onSubmit={e=>{e.preventDefault();submit();}}>
         <div style={{marginBottom:12}}>
-          <div style={{fontSize:13,fontWeight:600,color:"#334155",marginBottom:4}}>New password</div>
+          <div style={{fontSize:13,fontWeight:600,color:"#334155",marginBottom:4}}>{t("new_pw",lang)}</div>
           <div style={{position:"relative"}}>
             <Inp type={showPw?"text":"password"} value={pw} onChange={e=>setPw(e.target.value)} placeholder="••••••••" autoComplete="new-password" style={{paddingRight:44}}/>
             <button type="button" onClick={()=>setShowPw(v=>!v)} aria-label={showPw?"Hide password":"Show password"} style={{position:"absolute",right:12,top:"50%",transform:"translateY(-50%)",width:24,height:24,minHeight:24,padding:0,border:"none",background:"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
@@ -2146,7 +2149,7 @@ function ResetPasswordScreen({onDone}){
           </div>
         </div>
         <div style={{marginBottom:12}}>
-          <div style={{fontSize:13,fontWeight:600,color:"#334155",marginBottom:4}}>Confirm new password</div>
+          <div style={{fontSize:13,fontWeight:600,color:"#334155",marginBottom:4}}>{t("confirm_new_pw",lang)}</div>
           <div style={{position:"relative"}}>
             <Inp type={showPw2?"text":"password"} value={pw2} onChange={e=>setPw2(e.target.value)} placeholder="••••••••" autoComplete="new-password" style={{paddingRight:44}}/>
             <button type="button" onClick={()=>setShowPw2(v=>!v)} aria-label={showPw2?"Hide password":"Show password"} style={{position:"absolute",right:12,top:"50%",transform:"translateY(-50%)",width:24,height:24,minHeight:24,padding:0,border:"none",background:"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
@@ -2154,7 +2157,7 @@ function ResetPasswordScreen({onDone}){
             </button>
           </div>
         </div>
-        <Btn type="submit" disabled={busy||!pw||!pw2} style={{width:"100%",marginTop:4}}>{busy?"Updating…":"Update Password"}</Btn>
+        <Btn type="submit" disabled={busy||!pw||!pw2} style={{width:"100%",marginTop:4}}>{busy?t("updating",lang):t("update_password",lang)}</Btn>
         </form>
         {err && <ErrBox style={{marginTop:12}}>{err}</ErrBox>}
         {info && <div style={{marginTop:12,padding:"10px 12px",background:"#f0fdf4",borderLeft:"3px solid #16a34a",borderRadius:"0 8px 8px 0",color:"#166534",fontSize:13,fontWeight:500}}>✓ {info}</div>}
@@ -2224,7 +2227,7 @@ function QuoteFlow({bp,step,setStep,flow,setFlow,errors,setErrors,settings,clien
       {sharePay&&(
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.6)",zIndex:200,display:"flex",alignItems:isDesktop||bp==="tablet"?"center":"flex-end",justifyContent:"center",padding:isDesktop||bp==="tablet"?20:0}}>
           <div style={{background:"#fff",borderRadius:isDesktop||bp==="tablet"?16:"16px 16px 0 0",padding:20,width:"100%",maxWidth:480,boxSizing:"border-box",paddingBottom:isDesktop||bp==="tablet"?20:"calc(20px + env(safe-area-inset-bottom))"}}>
-            <div style={{fontWeight:700,fontSize:17,marginBottom:12}}>📤 Ready to Send</div>
+            <div style={{fontWeight:700,fontSize:17,marginBottom:12}}>{"📤 "+t("ready_to_send",lang)}</div>
             <textarea readOnly value={sharePay.txt} style={{width:"100%",height:200,border:"1.5px solid #e2e8f0",borderRadius:12,padding:"10px 12px",fontSize:12,fontFamily:"ui-monospace,monospace",boxSizing:"border-box",resize:"none"}}/>
             <div style={{display:"flex",gap:8,marginTop:12}}>
               <Btn style={{flex:1}} onClick={()=>{navigator.clipboard?.writeText(sharePay.txt);setCopied(true);setTimeout(()=>setCopied(false),2000);}}>{copied?"✓ Copied!":"Copy"}</Btn>
@@ -2238,7 +2241,7 @@ function QuoteFlow({bp,step,setStep,flow,setFlow,errors,setErrors,settings,clien
           <button onClick={step===1?onCancel:()=>setStep(s=>s-1)} style={{width:40,height:40,minHeight:40,display:"inline-flex",alignItems:"center",justifyContent:"center",background:"none",border:"none",fontSize:24,cursor:"pointer",color:"#15803d",fontFamily:"inherit",lineHeight:1,padding:0,marginLeft:-8}}>‹</button>
           <div style={{flex:1,minWidth:0}}>
             <div style={{fontWeight:700,fontSize:15}}>{flow.parentId?t("new_revision",lang):t("new_quote_title",lang)} — {t("step_of",lang)+" "+step+" "+t("of",lang)+" 4"}</div>
-            <div style={{fontSize:12,color:"#64748b"}}>{STEPS[step-1]}{flow.parentId?` · Revision of ${flow.parentId}`:""}</div>
+            <div style={{fontSize:12,color:"#64748b"}}>{STEPS[step-1]}{flow.parentId?` · ${t("revision_of",lang)} ${flow.parentId}`:""}</div>
           </div>
           <button onClick={onCancel} style={{width:40,height:40,minHeight:40,display:"inline-flex",alignItems:"center",justifyContent:"center",background:"none",border:"none",fontSize:16,color:"#94a3b8",cursor:"pointer",fontFamily:"inherit"}}>✕</button>
         </div>
@@ -2875,7 +2878,7 @@ function S4({bp,flow,set,setFlow,area,perim,calc,time,onSend,saving}){
       <Card>
         <Lbl>{t("quote_summary",lang)}</Lbl>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:16}}>
-          {[{l:"Address",v:flow.address,full:true},{l:"Area",v:fmtArea(area)},{l:"Perimeter",v:`${Math.round(perim).toLocaleString()} ft`},{l:"Crew",v:`${flow.crew} worker${flow.crew>1?"s":""}`},{l:"Complexity",v:t(COMPLEXITY.find(o=>o.value===flow.cx)?.lk||"cx_simple",lang)},{l:"Risk",v:t(RISK.find(o=>o.value===flow.risk)?.lk||"risk_low",lang)},{l:"Est. Time",v:time?fmtT(time.adj):"—"},{l:"Discount",v:flow.disc>0?`${flow.disc}%`:"None"}]
+          {[{l:t("address_label",lang),v:flow.address,full:true},{l:t("area",lang),v:fmtArea(area)},{l:t("perimeter",lang),v:`${Math.round(perim).toLocaleString()} ft`},{l:t("crew_label",lang),v:`${flow.crew} ${t(flow.crew>1?"workers":"worker",lang)}`},{l:t("complexity",lang),v:t(COMPLEXITY.find(o=>o.value===flow.cx)?.lk||"cx_simple",lang)},{l:t("risk",lang),v:t(RISK.find(o=>o.value===flow.risk)?.lk||"risk_low",lang)},{l:t("est_time",lang),v:time?fmtT(time.adj):"—"},{l:t("discount",lang),v:flow.disc>0?`${flow.disc}%`:t("none",lang)}]
             .map(({l,v,full})=>(
               <div key={l} style={{gridColumn:full?"1 / -1":"auto"}}>
                 <div style={{fontSize:10,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:1}}>{l}</div>
@@ -2884,7 +2887,7 @@ function S4({bp,flow,set,setFlow,area,perim,calc,time,onSend,saving}){
             ))}
         </div>
         <div style={{borderTop:"1px solid #e2e8f0",paddingTop:14,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-          <span style={{fontWeight:700,fontSize:15,color:"#0f172a"}}>Total</span>
+          <span style={{fontWeight:700,fontSize:15,color:"#0f172a"}}>{t("total",lang)}</span>
           <span style={{fontSize:32,fontWeight:900,color:"#0f172a",letterSpacing:-.8}}>{calc?$$(calc.disp):"—"}</span>
         </div>
       </Card>
@@ -2921,15 +2924,15 @@ function S4({bp,flow,set,setFlow,area,perim,calc,time,onSend,saving}){
         </div>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:attachments.length?12:0}}>
           <label style={{height:40,minHeight:40,padding:"0 12px",borderRadius:12,border:"1.5px solid #15803d",background:"#ffffff",color:"#15803d",fontSize:13,fontWeight:600,cursor:uploading||attachments.length>=MAX_ATTACHMENTS?"not-allowed":"pointer",opacity:uploading||attachments.length>=MAX_ATTACHMENTS?.55:1,display:"inline-flex",alignItems:"center",justifyContent:"center",fontFamily:"inherit"}}>
-            📷 Add Photo
+            {"📷 "+t("add_photo_btn",lang)}
             <input type="file" accept="image/*" capture="environment" onChange={e=>{addFiles(e.target.files); e.target.value="";}} style={{display:"none"}} disabled={uploading||attachments.length>=MAX_ATTACHMENTS}/>
           </label>
           <label style={{height:40,minHeight:40,padding:"0 12px",borderRadius:12,border:"1.5px solid #e2e8f0",background:"#ffffff",color:"#334155",fontSize:13,fontWeight:600,cursor:uploading||attachments.length>=MAX_ATTACHMENTS?"not-allowed":"pointer",opacity:uploading||attachments.length>=MAX_ATTACHMENTS?.55:1,display:"inline-flex",alignItems:"center",justifyContent:"center",fontFamily:"inherit"}}>
-            📎 Upload File
+            {"📎 "+t("upload_file_btn",lang)}
             <input type="file" accept={ATTACH_ACCEPT} multiple onChange={e=>{addFiles(e.target.files); e.target.value="";}} style={{display:"none"}} disabled={uploading||attachments.length>=MAX_ATTACHMENTS}/>
           </label>
         </div>
-        {uploading&&<div style={{fontSize:12,color:"#15803d",fontWeight:600,marginBottom:8}}>Uploading…</div>}
+        {uploading&&<div style={{fontSize:12,color:"#15803d",fontWeight:600,marginBottom:8}}>{t("uploading",lang)}</div>}
         {attachments.length>0&&(
           <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
             {attachments.map(att=>{
