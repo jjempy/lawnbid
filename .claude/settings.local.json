@@ -17,7 +17,8 @@
       "Bash(sudo apt-get:*)",
       "Bash(node -e ':*)",
       "Bash(npx sharp-cli:*)",
-      "Bash(node -e \"require\\('sharp'\\)\")"
+      "Bash(node -e \"require\\('sharp'\\)\")",
+      "Bash(node:*)"
     ]
   }
 }
