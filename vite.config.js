@@ -35,6 +35,14 @@ export default defineConfig({
           copyFileSync('public/lawnbid-translations.xlsx', 'dist/lawnbid-translations.xlsx')
           console.log('✓ translations.xlsx copied')
         }
+        if (existsSync('public/terms.html')) {
+          copyFileSync('public/terms.html', 'dist/terms.html')
+          console.log('✓ terms.html copied')
+        }
+        if (existsSync('public/privacy.html')) {
+          copyFileSync('public/privacy.html', 'dist/privacy.html')
+          console.log('✓ privacy.html copied')
+        }
         if (existsSync('public/screenshots')) {
           mkdirSync('dist/screenshots', { recursive: true })
           readdirSync('public/screenshots').forEach(file => {

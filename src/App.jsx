@@ -8,6 +8,7 @@ import supabase, {
   uploadQuoteFile, deleteQuoteFile,
   countRecentQuotes, updateQuotesForClient, refreshAttachmentUrls,
   initializeUserSettings,
+  recordMarketData,
 } from "./supabase.js";
 
 // ─── Stripe checkout ────────────────────────────────────────────────────────────
@@ -664,7 +665,7 @@ export default function LawnBid() {
       Object.keys(record).forEach(k => record[k] === undefined && delete record[k]);
 
       await upsertQuote(record);
-      if (status === "sent") track("quote_sent");
+      if (status === "sent") { track("quote_sent"); recordMarketData(record, "sent"); }
 
       // 3. Update local quotes state
       setQuotes(prev => {
@@ -706,8 +707,10 @@ export default function LawnBid() {
     try {
       await updateQuoteStatus(quoteId, "accepted", { accepted_at: now });
       setQuotes(prev => prev.map(q => q.quote_id === quoteId ? { ...q, status: "accepted", accepted_at: now } : q));
+      const q = quotes.find(q => q.quote_id === quoteId);
+      if (q) recordMarketData(q, "accepted");
     } catch(e) { alert(dbErrorMessage(e)); }
-  }, []);
+  }, [quotes]);
 
   // Auto-dismiss toast (must be before any early returns)
   useEffect(() => {
@@ -784,6 +787,7 @@ export default function LawnBid() {
       onDecline={async(reason)=>{
         try{await updateQuoteStatus(activeQ.quote_id,"declined",{declined_reason:reason});
         setQuotes(prev=>prev.map(q=>q.quote_id===activeQ.quote_id?{...q,status:"declined",declined_reason:reason}:q));
+        recordMarketData({...activeQ,declined_reason:reason},"declined");
         }catch(e){alert(dbErrorMessage(e));}
       }}/>
   ):screen==="client-detail"&&activeC ? (
@@ -1945,11 +1949,12 @@ function AuthScreen(){
   const [err,setErr]=useState("");
   const [info,setInfo]=useState("");
   const [busy,setBusy]=useState(false);
+  const [dataConsent,setDataConsent]=useState(false);
 
   const clearMsgs = () => { setErr(""); setInfo(""); };
   const pwLongEnough = password.length >= 6;
   const pwMatch = password2.length > 0 && password === password2;
-  const canSignup = pwLongEnough && pwMatch && email.trim().length > 0;
+  const canSignup = pwLongEnough && pwMatch && email.trim().length > 0 && dataConsent;
 
   const login=async()=>{
     clearMsgs(); setBusy(true);
@@ -2067,6 +2072,10 @@ function AuthScreen(){
                 </button>
               </div>
             </div>
+            <label style={{display:"flex",alignItems:"flex-start",gap:10,fontSize:12,color:"#64748b",cursor:"pointer",padding:"12px 0",lineHeight:1.5}}>
+              <input type="checkbox" checked={dataConsent} onChange={e=>setDataConsent(e.target.checked)} style={{marginTop:2,width:16,height:16,cursor:"pointer",flexShrink:0}}/>
+              <span>{t("consent_agree",lang)}{" "}<a href="https://winwinlawnbid.com/terms" target="_blank" rel="noopener noreferrer" style={{color:"#15803d"}}>{t("consent_terms",lang)}</a>{" "}{t("consent_and",lang)}{" "}<a href="https://winwinlawnbid.com/privacy" target="_blank" rel="noopener noreferrer" style={{color:"#15803d"}}>{t("consent_privacy",lang)}</a>.{" "}{t("consent_data",lang)}</span>
+            </label>
             <Btn type="submit" disabled={busy||!canSignup} style={{width:"100%"}}>{busy?"...":t("create_account",lang)}</Btn>
             <div style={{height:1,background:"#e2e8f0",margin:"16px 0"}}/>
             <div style={{textAlign:"center",fontSize:13,color:"#64748b"}}>

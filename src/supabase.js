@@ -38,6 +38,31 @@
 //   Site URL:      https://winwinlawnbid.com/app/
 //   Redirect URLs: https://winwinlawnbid.com/app/
 // This ensures confirmation/reset emails redirect to the app, not the landing page.
+//
+// ANONYMOUS MARKET DATA TABLE:
+// CREATE TABLE IF NOT EXISTS market_data (
+//   id bigserial PRIMARY KEY,
+//   zip_prefix text,
+//   state text DEFAULT 'SC',
+//   area_sqft integer,
+//   perimeter_ft integer,
+//   complexity decimal,
+//   risk decimal,
+//   crew_size integer,
+//   est_minutes integer,
+//   final_price decimal,
+//   price_per_sqft decimal,
+//   discount_pct decimal,
+//   is_recurring boolean DEFAULT false,
+//   recurring_frequency text,
+//   outcome text DEFAULT 'sent',
+//   declined_reason text,
+//   days_to_outcome integer,
+//   quote_month text,
+//   season text,
+//   market_ref_id uuid DEFAULT gen_random_uuid(),
+//   created_at timestamptz DEFAULT NOW()
+// );
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { createClient } from '@supabase/supabase-js'
@@ -275,4 +300,47 @@ export async function nextQuoteId() {
   const { data, error } = await supabase.rpc('next_quote_id')
   if (error) throw error
   return data
+}
+
+// ─── Anonymous market data collection ─────────────────────────────────────────
+export async function recordMarketData(quote, outcome = 'sent') {
+  try {
+    const address = quote.address || ''
+    const zipMatch = address.match(/\b(\d{5})\b/)
+    const zip = zipMatch ? zipMatch[1] : null
+    const zipPrefix = zip ? zip.slice(0, 3) : null
+
+    const now = new Date()
+    const month = now.getMonth()
+    const season = month >= 2 && month <= 4 ? 'spring'
+      : month >= 5 && month <= 7 ? 'summer'
+      : month >= 8 && month <= 10 ? 'fall'
+      : 'winter'
+
+    const payload = {
+      zip_prefix: zipPrefix,
+      area_sqft: Math.round(quote.area_sqft) || null,
+      perimeter_ft: Math.round(quote.linear_ft) || null,
+      complexity: quote.complexity || 1.0,
+      risk: quote.risk || 1.0,
+      crew_size: quote.crew_size || 1,
+      est_minutes: quote.est_minutes || null,
+      final_price: quote.final_price || null,
+      price_per_sqft: quote.area_sqft
+        ? Math.round((quote.final_price / quote.area_sqft) * 10000) / 10000
+        : null,
+      discount_pct: quote.discount_pct || 0,
+      is_recurring: quote.is_recurring || false,
+      recurring_frequency: quote.recurring_frequency || null,
+      outcome,
+      declined_reason: quote.declined_reason || null,
+      quote_month: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`,
+      season,
+    }
+
+    await supabase.from('market_data').insert(payload)
+  } catch (e) {
+    // Silent fail — never block the user flow for data collection
+    console.log('[Market data] Collection skipped:', e.message)
+  }
 }

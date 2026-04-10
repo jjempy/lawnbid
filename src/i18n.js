@@ -414,6 +414,13 @@ export const translations = {
     recurring_monthly: 'Monthly',
     cancel_service_confirm: 'End recurring service for',
     service_cancelled: 'Service cancelled',
+    // Consent
+    consent_agree: 'I agree to the',
+    consent_and: 'and',
+    consent_terms: 'Terms of Service',
+    consent_privacy: 'Privacy Policy',
+    consent_data: 'Anonymous property measurements and pricing data may be used to generate market insights. No client information or personal data is ever collected or shared.',
+    consent_required: 'Please agree to the Terms of Service to continue',
   },
   es: {
     nav_quotes: 'Mis Precios',
@@ -813,6 +820,13 @@ export const translations = {
     recurring_monthly: 'Mensual',
     cancel_service_confirm: 'Terminar servicio para',
     service_cancelled: 'Servicio cancelado',
+    // Consent
+    consent_agree: 'Acepto los',
+    consent_and: 'y la',
+    consent_terms: 'Términos de Servicio',
+    consent_privacy: 'Política de Privacidad',
+    consent_data: 'Las medidas anónimas de propiedades y datos de precios pueden usarse para generar información de mercado. Nunca se recopila ni comparte información de clientes o datos personales.',
+    consent_required: 'Por favor acepta los Términos de Servicio para continuar',
   }
 };
 
