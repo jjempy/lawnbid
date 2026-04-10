@@ -564,7 +564,7 @@ export default function LawnBid() {
       return;
     }
     setFlow({
-      isNew:true, parentId:null, existingId:null,
+      isNew:true, parentId:null, existingId:null, revisionNumber:0,
       clientId:null, clientName:"", clientPhone:"", clientEmail:"",
       address:"", areaVal:"", areaUnit:"sqft", perimVal:"", perimUnit:"ft",
       crew:1, cx:settings.complexity_default, risk:settings.risk_default,
@@ -583,6 +583,7 @@ export default function LawnBid() {
     }
     setFlow({
       isNew:forceNew, parentId:forceNew?q.quote_id:(q.parent_id||null), existingId:forceNew?null:q.quote_id,
+      revisionNumber:forceNew?(q.revision_number||0)+1:(q.revision_number||0),
       clientId:q.client_id, clientName:q.client_name||"", clientPhone:q.client_phone||"", clientEmail:q.client_email||"",
       address:q.address, areaVal:String(q.area_sqft), areaUnit:"sqft", perimVal:String(q.linear_ft), perimUnit:"ft",
       crew:q.crew_size, cx:q.complexity, risk:q.risk, disc:q.discount_pct||0, customDisc:"",
@@ -598,7 +599,7 @@ export default function LawnBid() {
   useEffect(() => { quotesUsedRef.current = quotesUsedLive; }, [quotesUsedLive]);
 
   const handleSave = useCallback(async (rec, cliData, status) => {
-    // Gate: free plan quote limit — any new record counts (brand new, V2, duplicate)
+    // Gate: free plan quote limit — any new record counts (brand new, revision, duplicate)
     if (rec.isNew) {
       const s = settingsRef.current || {};
       const cfg = PLANS[s.plan || "free"] || PLANS.free;
@@ -652,6 +653,7 @@ export default function LawnBid() {
         client_phone:rec.client_phone,
         client_email:rec.client_email,
         parent_id:   rec.parentId || null,
+        revision_number: rec.revisionNumber || 0,
         notes:       rec.notes,
         attachments: Array.isArray(rec.attachments) ? rec.attachments : [],
         is_recurring: !!rec.is_recurring,
@@ -680,6 +682,7 @@ export default function LawnBid() {
         setQuotesUsedLive(n => n + 1);
       }
 
+      if (rec.isNew && rec.parentId) setToast(t("revision_created",lang));
       setSelQ(quoteId);
       setScreen("quote-detail");
       setFlow(null);
@@ -688,7 +691,7 @@ export default function LawnBid() {
     } finally {
       setSaving(false);
     }
-  }, []);
+  }, [lang]);
 
   const handleSaveSettings = useCallback(async ns => {
     setSettings(ns);
@@ -745,7 +748,7 @@ export default function LawnBid() {
   const isTablet  = bp === "tablet";
 
   const pageTitle = (() => {
-    if (screen === "flow") return flow?.parentId ? t("new_revision",lang) : flow?.existingId ? t("edit_quote_title",lang) : t("new_quote_title",lang);
+    if (screen === "flow") return flow?.parentId ? `${t("revising_quote",lang)} ${flow.parentId}` : flow?.existingId ? t("edit_quote_title",lang) : t("new_quote_title",lang);
     if (screen === "quote-detail") return t("quote_details",lang);
     if (screen === "client-detail") return activeC?.name || t("client_label",lang);
     return tab==="quotes" ? t("nav_quotes",lang) : tab==="clients" ? t("nav_clients",lang) : tab==="business" ? t("nav_business",lang) : t("nav_settings",lang);
@@ -1080,7 +1083,7 @@ function HomeScreen({bp,quotes,settings,onNew,onView}){
             <div style={{flex:1,minWidth:0}}>
               <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:2,flexWrap:"wrap"}}>
                 <div style={{fontWeight:600,fontSize:15,color:"#0f172a",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",letterSpacing:-.1}}>{q.client_name||t("no_client",lang)}</div>
-                {q.parent_id&&<span style={{fontSize:10,background:"#e0f2fe",color:"#0369a1",padding:"1px 5px",borderRadius:4,fontWeight:700,flexShrink:0}}>V2</span>}
+                {(q.revision_number>0)&&<span style={{fontSize:10,background:"#e0f2fe",color:"#0369a1",padding:"1px 5px",borderRadius:4,fontWeight:700,flexShrink:0}}>{t("revision_label",lang)} {q.revision_number}</span>}
                 {q.is_recurring&&<span style={{fontSize:10,background:"#dcfce7",color:"#15803d",padding:"1px 5px",borderRadius:4,fontWeight:700,flexShrink:0}}>↻ {q.recurring_frequency==="weekly"?"Weekly":q.recurring_frequency==="monthly"?"Monthly":"Biweekly"}{q.visit_count>0?` · Visit ${q.visit_count}`:""}{q.status==="seasonal_complete"?" · Season complete ✓":q.next_due_at?` · Next: ${fmtD(q.next_due_at)}`:q.status==="accepted"?" · Next visit TBD":""}</span>}
                 {expired&&!q.is_recurring&&q.status!=="seasonal_complete"&&<span style={{fontSize:10,background:"#fee2e2",color:"#dc2626",padding:"1px 6px",borderRadius:4,fontWeight:700,flexShrink:0,letterSpacing:.4}}>EXPIRED</span>}
                 {needsFollowUp&&<span style={{fontSize:12,flexShrink:0}} title="Follow-up needed">⭐</span>}
@@ -1351,7 +1354,7 @@ function ClientDetail({bp,client,quotes,onBack,onViewQuote,onUpdateClient,onDele
             <div style={{flex:1,minWidth:0}}>
               <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4,flexWrap:"wrap"}}>
                 <QID id={q.quote_id}/>
-                {q.parent_id&&<span style={{fontSize:10,background:"#e0f2fe",color:"#0369a1",padding:"1px 5px",borderRadius:4,fontWeight:700}}>V2</span>}
+                {(q.revision_number>0)&&<span style={{fontSize:10,background:"#e0f2fe",color:"#0369a1",padding:"1px 5px",borderRadius:4,fontWeight:700}}>{t("revision_label",lang)} {q.revision_number}</span>}
                 <Badge status={q.status}/>
               </div>
               <div style={{fontSize:12,color:"#64748b"}}>{fmtTS(q.created_at)}</div>
@@ -1596,7 +1599,7 @@ function QuoteDetail({bp,quote,allQuotes,settings,onBack,onEdit,onDuplicate,onDe
           {quote.status!=="seasonal_complete"&&<Btn variant="secondary" onClick={()=>{if(window.confirm(`End recurring service for ${quote.client_name}?`))onDecline("Service cancelled");}} style={{width:"100%",marginTop:4}}>Cancel Service</Btn>}
         </>
       )}
-      <Btn variant="warning" onClick={onEdit} style={{width:"100%"}}>✏️ {isSent?t("edit_quote",lang):t("edit_quote",lang)}</Btn>
+      <Btn variant="warning" onClick={onEdit} style={{width:"100%"}}>{isSent?`✏️ ${t("revise_quote",lang)}`:`✏️ ${t("edit_quote_title",lang)}`}</Btn>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
         <Btn variant="secondary" onClick={onDuplicate}>📋 {t("duplicate",lang)}</Btn>
         {!confirmDel?<Btn variant="danger" onClick={()=>setConfirmDel(true)}>🗑 {t("delete",lang)}</Btn>:<Btn variant="danger" onClick={onDelete}>{t("delete_confirm",lang)}</Btn>}
@@ -1637,7 +1640,7 @@ function QuoteDetail({bp,quote,allQuotes,settings,onBack,onEdit,onDuplicate,onDe
           <div style={{fontWeight:700,fontSize:15,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{quote.client_name||"Quote"}</div>
           <div style={{display:"flex",alignItems:"center",gap:6,marginTop:2}}>
             <QID id={quote.quote_id}/>
-            {quote.parent_id&&<span style={{fontSize:10,background:"#e0f2fe",color:"#0369a1",padding:"1px 5px",borderRadius:4,fontWeight:700}}>REVISED</span>}
+            {(quote.revision_number>0)&&<span style={{fontSize:10,background:"#e0f2fe",color:"#0369a1",padding:"1px 5px",borderRadius:4,fontWeight:700}}>{t("revision_label",lang)} {quote.revision_number}</span>}
           </div>
         </div>
         <Badge status={quote.status}/>
@@ -2204,7 +2207,7 @@ function QuoteFlow({bp,step,setStep,flow,setFlow,errors,setErrors,settings,clien
   const next=()=>{if(step===1&&!v1())return;if(step===2&&!v2())return;setStep(s=>s+1);};
 
   const buildRec=(status)=>({
-    isNew:flow.isNew!==false, existingId:flow.existingId||null, parentId:flow.parentId||null,
+    isNew:flow.isNew!==false, existingId:flow.existingId||null, parentId:flow.parentId||null, revisionNumber:flow.revisionNumber||0,
     address:flow.address, area_sqft:area, linear_ft:perim, crew_size:flow.crew,
     complexity:flow.cx, risk:flow.risk, discount_pct:flow.disc,
     mow_rate_used:settings.mow_rate, trim_rate_used:settings.trim_rate, equipment_cost_used:settings.equipment_cost,
@@ -2251,8 +2254,8 @@ function QuoteFlow({bp,step,setStep,flow,setFlow,errors,setErrors,settings,clien
         <div style={{background:"#fff",padding:"calc(12px + env(safe-area-inset-top)) 16px 12px",borderBottom:"1px solid #e2e8f0",display:"flex",alignItems:"center",gap:12,position:"sticky",top:0,zIndex:10}}>
           <button onClick={step===1?onCancel:()=>setStep(s=>s-1)} style={{width:40,height:40,minHeight:40,display:"inline-flex",alignItems:"center",justifyContent:"center",background:"none",border:"none",fontSize:24,cursor:"pointer",color:"#15803d",fontFamily:"inherit",lineHeight:1,padding:0,marginLeft:-8}}>‹</button>
           <div style={{flex:1,minWidth:0}}>
-            <div style={{fontWeight:700,fontSize:15}}>{flow.parentId?t("new_revision",lang):t("new_quote_title",lang)} — {t("step_of",lang)+" "+step+" "+t("of",lang)+" 4"}</div>
-            <div style={{fontSize:12,color:"#64748b"}}>{STEPS[step-1]}{flow.parentId?` · ${t("revision_of",lang)} ${flow.parentId}`:""}</div>
+            <div style={{fontWeight:700,fontSize:15}}>{flow.parentId?`${t("revising_quote",lang)} ${flow.parentId}`:t("new_quote_title",lang)} — {t("step_of",lang)+" "+step+" "+t("of",lang)+" 4"}</div>
+            <div style={{fontSize:12,color:"#64748b"}}>{STEPS[step-1]}</div>
           </div>
           <button onClick={onCancel} style={{width:40,height:40,minHeight:40,display:"inline-flex",alignItems:"center",justifyContent:"center",background:"none",border:"none",fontSize:16,color:"#94a3b8",cursor:"pointer",fontFamily:"inherit"}}>✕</button>
         </div>

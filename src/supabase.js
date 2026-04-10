@@ -12,6 +12,7 @@
 // ALTER TABLE quotes   ADD COLUMN IF NOT EXISTS next_due_at timestamptz;
 // ALTER TABLE quotes   ADD COLUMN IF NOT EXISTS visit_count integer DEFAULT 0;
 // ALTER TABLE quotes   ADD COLUMN IF NOT EXISTS est_minutes integer;
+// ALTER TABLE quotes   ADD COLUMN IF NOT EXISTS revision_number integer DEFAULT 0;
 // -- Backfill est_minutes for existing quotes using the formula:
 // --   wall = (crew_size >= 2) ? GREATEST(area_sqft/20000, linear_ft/3000)
 // --                           : (area_sqft/20000 + linear_ft/3000)
