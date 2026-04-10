@@ -438,6 +438,7 @@ export default function LawnBid() {
   const [screen,   setScreen]   = useState("home");
   const [selQ,     setSelQ]     = useState(null);
   const [selC,     setSelC]     = useState(null);
+  const [clientDetailFrom, setClientDetailFrom] = useState(null); // null | "home" | "quote"
   const [flow,     setFlow]     = useState(null);
   const [step,     setStep]     = useState(1);
   const [errors,   setErrors]   = useState({});
@@ -471,7 +472,7 @@ export default function LawnBid() {
   const navStateRef = useRef({});
   useEffect(() => {
     if (!session) return;
-    navStateRef.current = { screen, tab, step, selC };
+    navStateRef.current = { screen, tab, step, selC, selQ, clientDetailFrom };
   });
   useEffect(() => {
     if (!session) return;
@@ -485,7 +486,13 @@ export default function LawnBid() {
         if (s.selC && s.tab === "clients") setScreen("client-detail");
         else setScreen("home");
       } else if (s.screen === "client-detail") {
-        setTab("clients"); setScreen("home");
+        if (s.clientDetailFrom === "quote" && s.selQ) {
+          setClientDetailFrom(null);
+          setScreen("quote-detail");
+        } else {
+          setClientDetailFrom(null);
+          setTab("clients"); setScreen("home");
+        }
       } else if (s.tab !== "quotes") {
         setTab("quotes");
       }
@@ -796,7 +803,7 @@ export default function LawnBid() {
       onDuplicate={()=>editQuote(activeQ,true)}
       onDelete={()=>handleDeleteQuote(activeQ.quote_id)}
       onAccepted={()=>handleAccepted(activeQ.quote_id)}
-      onViewClient={()=>{ if(activeQ.client_id){ setSelC(activeQ.client_id); setTab("clients"); setScreen("client-detail"); } }}
+      onViewClient={()=>{ if(activeQ.client_id){ setSelC(activeQ.client_id); setClientDetailFrom("quote"); setTab("clients"); setScreen("client-detail"); } }}
       onSend={async()=>{
         const now=new Date().toISOString();
         try{
@@ -838,7 +845,7 @@ export default function LawnBid() {
       }}/>
   ):screen==="client-detail"&&activeC ? (
     <ClientDetail bp={bp} client={activeC} quotes={quotes.filter(q=>q.client_id===activeC.id)}
-      onBack={()=>{setTab("clients");setScreen("home");}}
+      onBack={()=>{ if(clientDetailFrom==="quote"&&selQ){ setClientDetailFrom(null); setScreen("quote-detail"); } else { setClientDetailFrom(null); setTab("clients"); setScreen("home"); } }}
       onViewQuote={qid=>{setSelQ(qid);setScreen("quote-detail");}}
       onUpdateClient={async(updates)=>{
         await upsertClient({...activeC,...updates});
@@ -866,7 +873,7 @@ export default function LawnBid() {
   ):tab==="quotes" ? (
     <HomeScreen bp={bp} quotes={quotes} settings={settings} onNew={startNew} onView={qid=>{setSelQ(qid);setScreen("quote-detail");}}/>
   ):tab==="clients" ? (
-    <ClientsScreen bp={bp} clients={clients} quotes={quotes} onView={cid=>{setSelC(cid);setScreen("client-detail");}}/>
+    <ClientsScreen bp={bp} clients={clients} quotes={quotes} onView={cid=>{setSelC(cid);setClientDetailFrom("home");setScreen("client-detail");}}/>
   ):tab==="business" ? (
     <BusinessScreen bp={bp} quotes={quotes} settings={settings} clients={clients}/>
   ):(
