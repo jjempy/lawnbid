@@ -796,7 +796,7 @@ export default function LawnBid() {
         try{await updateQuoteStatus(activeQ.quote_id,newStatus,updates);
         setQuotes(prev=>prev.map(q=>q.quote_id===activeQ.quote_id?{...q,status:newStatus,...updates}:q));
         if(schedule!=="set_next_date") recordMarketData({...activeQ,...updates},"completed");
-        setToast(schedule==="end"?"Season complete — service ended.":schedule==="set_next_date"?"Next visit date set.":"Visit marked complete.");}catch(e){alert(dbErrorMessage(e));}
+        setToast(schedule==="end"?t("season_complete_toast",lang):schedule==="set_next_date"?t("next_visit_set_toast",lang):t("visit_marked_complete_toast",lang));}catch(e){alert(dbErrorMessage(e));}
       }}
       onDecline={async(reason)=>{
         try{await updateQuoteStatus(activeQ.quote_id,"declined",{declined_reason:reason});
@@ -1093,7 +1093,7 @@ function HomeScreen({bp,quotes,settings,onNew,onView}){
               <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:2,flexWrap:"wrap"}}>
                 <div style={{fontWeight:600,fontSize:15,color:"#0f172a",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",letterSpacing:-.1}}>{q.client_name||t("no_client",lang)}</div>
                 {(q.revision_number>0)&&<span style={{fontSize:10,background:"#e0f2fe",color:"#0369a1",padding:"1px 5px",borderRadius:4,fontWeight:700,flexShrink:0}}>{t("revision_label",lang)} {q.revision_number}</span>}
-                {q.is_recurring&&<span style={{fontSize:10,background:"#dcfce7",color:"#15803d",padding:"1px 5px",borderRadius:4,fontWeight:700,flexShrink:0}}>↻ {q.recurring_frequency==="weekly"?"Weekly":q.recurring_frequency==="monthly"?"Monthly":"Biweekly"}{q.visit_count>0?` · Visit ${q.visit_count}`:""}{q.status==="seasonal_complete"?" · Season complete ✓":q.next_due_at?` · Next: ${fmtD(q.next_due_at)}`:q.status==="accepted"?" · Next visit TBD":""}</span>}
+                {q.is_recurring&&<span style={{fontSize:10,background:"#dcfce7",color:"#15803d",padding:"1px 5px",borderRadius:4,fontWeight:700,flexShrink:0}}>{"↻ "+t(q.recurring_frequency==="weekly"?"weekly":q.recurring_frequency==="monthly"?"monthly":"biweekly",lang)}{q.visit_count>0?` · ${t("visit_n",lang)} ${q.visit_count}`:""}{q.status==="seasonal_complete"?" · "+t("season_complete_short",lang):q.next_due_at?` · ${t("next_short",lang)} ${fmtD(q.next_due_at)}`:q.status==="accepted"?" · "+t("next_visit_tbd_short",lang):""}</span>}
                 {expired&&!q.is_recurring&&q.status!=="seasonal_complete"&&<span style={{fontSize:10,background:"#fee2e2",color:"#dc2626",padding:"1px 6px",borderRadius:4,fontWeight:700,flexShrink:0,letterSpacing:.4}}>EXPIRED</span>}
                 {needsFollowUp&&<span style={{fontSize:12,flexShrink:0}} title="Follow-up needed">⭐</span>}
               </div>
@@ -1570,49 +1570,49 @@ function QuoteDetail({bp,quote,allQuotes,settings,onBack,onEdit,onDuplicate,onDe
           </div>
         </Card>
       )}
-      {quote.status==="declined"&&quote.declined_reason&&<div style={{fontSize:12,color:"#94a3b8",marginTop:4}}>Declined: {quote.declined_reason}</div>}
+      {quote.status==="declined"&&quote.declined_reason&&<div style={{fontSize:12,color:"#94a3b8",marginTop:4}}>{t("declined_label",lang)} {quote.declined_reason}</div>}
       {quote.is_recurring&&(quote.status==="accepted"||quote.status==="seasonal_complete")&&(
         <>
           <Card style={{marginTop:8}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <div>
-                <div style={{fontSize:13,fontWeight:700,color:"#0f172a"}}>↻ {quote.recurring_frequency==="weekly"?"Weekly":quote.recurring_frequency==="monthly"?"Monthly":"Biweekly"} Service</div>
-                <div style={{fontSize:12,color:"#64748b",marginTop:2}}>Visit {quote.visit_count||0}{quote.status==="seasonal_complete"?" · Season complete ✓":quote.next_due_at?` · Next: ${fmtD(quote.next_due_at)}`:" · Next visit TBD"}</div>
-                {quote.last_completed_at&&<div style={{fontSize:11,color:"#94a3b8",marginTop:2}}>Last completed: {fmtD(quote.last_completed_at)}</div>}
+                <div style={{fontSize:13,fontWeight:700,color:"#0f172a"}}>{"↻ "+t(quote.recurring_frequency==="weekly"?"weekly_service":quote.recurring_frequency==="monthly"?"monthly_service":"biweekly_service",lang)}</div>
+                <div style={{fontSize:12,color:"#64748b",marginTop:2}}>{t("visit_n",lang)} {quote.visit_count||0}{quote.status==="seasonal_complete"?" · "+t("season_complete_short",lang):quote.next_due_at?` · ${t("next_short",lang)} ${fmtD(quote.next_due_at)}`:" · "+t("next_visit_tbd_short",lang)}</div>
+                {quote.last_completed_at&&<div style={{fontSize:11,color:"#94a3b8",marginTop:2}}>{t("last_completed",lang)} {fmtD(quote.last_completed_at)}</div>}
               </div>
             </div>
           </Card>
-          {!visitOpen&&!nextDateOpen&&<Btn onClick={()=>setVisitOpen(true)} style={{width:"100%",marginTop:4}}>✓ Mark Visit Complete</Btn>}
+          {!visitOpen&&!nextDateOpen&&<Btn onClick={()=>setVisitOpen(true)} style={{width:"100%",marginTop:4}}>{"✓ "+t("mark_visit_complete",lang)}</Btn>}
           {!quote.next_due_at&&quote.status==="accepted"&&!visitOpen&&!nextDateOpen&&(
-            <Btn variant="outline" onClick={()=>setNextDateOpen(true)} style={{width:"100%",marginTop:4}}>Set Next Visit Date</Btn>
+            <Btn variant="outline" onClick={()=>setNextDateOpen(true)} style={{width:"100%",marginTop:4}}>{t("set_next_visit_btn",lang)}</Btn>
           )}
           {nextDateOpen&&(
             <Card style={{marginTop:4,border:"1.5px solid #e2e8f0"}}>
-              <div style={{fontSize:13,fontWeight:700,color:"#0f172a",marginBottom:8}}>Set next visit date</div>
+              <div style={{fontSize:13,fontWeight:700,color:"#0f172a",marginBottom:8}}>{t("set_next_visit_title",lang)}</div>
               <Inp type="date" value={nextDateVal} onChange={e=>setNextDateVal(e.target.value)} style={{marginBottom:10}}/>
               <div style={{display:"flex",gap:8}}>
-                <Btn onClick={()=>{onVisitComplete(null,"set_next_date",nextDateVal);setNextDateOpen(false);}} style={{flex:1,height:40,minHeight:40,fontSize:13}}>Set Date</Btn>
-                <Btn variant="secondary" onClick={()=>setNextDateOpen(false)} style={{flex:1,height:40,minHeight:40,fontSize:13}}>Cancel</Btn>
+                <Btn onClick={()=>{onVisitComplete(null,"set_next_date",nextDateVal);setNextDateOpen(false);}} style={{flex:1,height:40,minHeight:40,fontSize:13}}>{t("set_date_btn",lang)}</Btn>
+                <Btn variant="secondary" onClick={()=>setNextDateOpen(false)} style={{flex:1,height:40,minHeight:40,fontSize:13}}>{t("cancel",lang)}</Btn>
               </div>
             </Card>
           )}
           {visitOpen&&(
             <Card style={{marginTop:4,border:"1.5px solid #bbf7d0"}}>
-              <div style={{fontSize:13,fontWeight:700,color:"#0f172a",marginBottom:8}}>Visit completed on</div>
+              <div style={{fontSize:13,fontWeight:700,color:"#0f172a",marginBottom:8}}>{t("visit_completed_on_label",lang)}</div>
               <Inp type="date" value={visitDate} onChange={e=>setVisitDate(e.target.value)} style={{marginBottom:10}}/>
-              <div style={{fontSize:12,fontWeight:600,color:"#334155",marginBottom:6}}>Next visit:</div>
-              {[["original","Keep original schedule"],["completion","Calculate from completion date"],["manual","Schedule manually later"],["end","End service — season complete"]].map(([k,lbl])=>(
+              <div style={{fontSize:12,fontWeight:600,color:"#334155",marginBottom:6}}>{t("next_visit_label",lang)}</div>
+              {[["original","keep_original_schedule"],["completion","calc_from_completion"],["manual","schedule_manually_later"],["end","end_service_season"]].map(([k,lk])=>(
                 <label key={k} style={{display:"flex",alignItems:"center",gap:10,fontSize:13,color:k==="end"?"#dc2626":"#334155",cursor:"pointer",padding:"10px 0",borderBottom:"1px solid #f1f5f9",minHeight:44}}>
-                  <input type="radio" name="visitSch" value={k} checked={visitSchedule===k} onChange={()=>setVisitSchedule(k)} style={{width:18,height:18,cursor:"pointer",accentColor:k==="end"?"#dc2626":"#15803d",flexShrink:0}}/> <span>{lbl}</span>
+                  <input type="radio" name="visitSch" value={k} checked={visitSchedule===k} onChange={()=>setVisitSchedule(k)} style={{width:18,height:18,cursor:"pointer",accentColor:k==="end"?"#dc2626":"#15803d",flexShrink:0}}/> <span>{t(lk,lang)}</span>
                 </label>
               ))}
               <div style={{display:"flex",gap:8,marginTop:10}}>
-                <Btn onClick={()=>{onVisitComplete(visitDate,visitSchedule);setVisitOpen(false);setVisitSchedule("original");}} style={{flex:1,height:40,minHeight:40,fontSize:13}}>Mark Complete</Btn>
-                <Btn variant="secondary" onClick={()=>setVisitOpen(false)} style={{flex:1,height:40,minHeight:40,fontSize:13}}>Cancel</Btn>
+                <Btn onClick={()=>{onVisitComplete(visitDate,visitSchedule);setVisitOpen(false);setVisitSchedule("original");}} style={{flex:1,height:40,minHeight:40,fontSize:13}}>{t("mark_complete_btn",lang)}</Btn>
+                <Btn variant="secondary" onClick={()=>setVisitOpen(false)} style={{flex:1,height:40,minHeight:40,fontSize:13}}>{t("cancel",lang)}</Btn>
               </div>
             </Card>
           )}
-          {quote.status!=="seasonal_complete"&&<Btn variant="secondary" onClick={()=>{if(window.confirm(`End recurring service for ${quote.client_name}?`))onDecline("Service cancelled");}} style={{width:"100%",marginTop:4}}>Cancel Service</Btn>}
+          {quote.status!=="seasonal_complete"&&<Btn variant="secondary" onClick={()=>{if(window.confirm(`${t("end_recurring_confirm",lang)} ${quote.client_name}?`))onDecline("Service cancelled");}} style={{width:"100%",marginTop:4}}>{t("cancel_service_btn",lang)}</Btn>}
         </>
       )}
       <Btn variant="warning" onClick={onEdit} style={{width:"100%"}}>{isSent?`✏️ ${t("revise_quote",lang)}`:`✏️ ${t("edit_quote_title",lang)}`}</Btn>
@@ -1620,7 +1620,7 @@ function QuoteDetail({bp,quote,allQuotes,settings,onBack,onEdit,onDuplicate,onDe
         <Btn variant="secondary" onClick={onDuplicate}>📋 {t("duplicate",lang)}</Btn>
         {!confirmDel?<Btn variant="danger" onClick={()=>setConfirmDel(true)}>🗑 {t("delete",lang)}</Btn>:<Btn variant="danger" onClick={onDelete}>{t("delete_confirm",lang)}</Btn>}
       </div>
-      {confirmDel&&<Btn variant="secondary" onClick={()=>setConfirmDel(false)} style={{width:"100%"}}>Cancel</Btn>}
+      {confirmDel&&<Btn variant="secondary" onClick={()=>setConfirmDel(false)} style={{width:"100%"}}>{t("cancel",lang)}</Btn>}
     </div>
   );
   const lightboxEl = lightboxIdx!==null && imageAtts[lightboxIdx] && (
