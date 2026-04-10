@@ -2019,9 +2019,9 @@ function AuthScreen(){
         <form onSubmit={e=>{e.preventDefault();if(mode==="login")login();else if(mode==="signup")signup();else if(mode==="reset")sendReset();}}>
         <div style={{marginBottom:12}}>
           <div style={{fontSize:13,fontWeight:600,color:"#334155",marginBottom:4}}>{t("email",lang)}</div>
-          <Inp type="email" value={email} onChange={e=>{setEmail(e.target.value);setEmailBlurred(false);}} onBlur={()=>setEmailBlurred(true)} placeholder={t("ph_company_email",lang)} autoComplete="email"/>
+          <Inp tabIndex={1} type="email" value={email} onChange={e=>{setEmail(e.target.value);setEmailBlurred(false);}} onBlur={()=>setEmailBlurred(true)} placeholder={t("ph_company_email",lang)} autoComplete="email"/>
           {mode==="signup" && emailBlurred && emailLooksValid && (
-            <div style={{fontSize:12,color:"#64748b",marginTop:6}}>If you already have an account, <button type="button" onClick={()=>{clearMsgs();setMode("login");}} style={{background:"none",border:"none",color:"#15803d",fontSize:12,fontWeight:600,cursor:"pointer",textDecoration:"underline",padding:0,fontFamily:"inherit"}}>log in instead →</button></div>
+            <div style={{fontSize:12,color:"#64748b",marginTop:6}}>If you already have an account, <button type="button" tabIndex={-1} onClick={()=>{clearMsgs();setMode("login");}} style={{background:"none",border:"none",color:"#15803d",fontSize:12,fontWeight:600,cursor:"pointer",textDecoration:"underline",padding:0,fontFamily:"inherit"}}>log in instead →</button></div>
           )}
         </div>
         {mode==="login" && (
@@ -2029,19 +2029,19 @@ function AuthScreen(){
             <div style={{marginBottom:4}}>
               <div style={{fontSize:13,fontWeight:600,color:"#334155",marginBottom:4}}>{t("password",lang)}</div>
               <div style={{position:"relative"}}>
-                <Inp type={showPw?"text":"password"} value={password} onChange={e=>setPassword(e.target.value)} placeholder="••••••••" autoComplete="current-password" style={{paddingRight:44}}/>
-                <button type="button" onClick={()=>setShowPw(v=>!v)} aria-label={showPw?"Hide password":"Show password"} style={{position:"absolute",right:12,top:"50%",transform:"translateY(-50%)",width:24,height:24,minHeight:24,padding:0,border:"none",background:"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                <Inp tabIndex={2} type={showPw?"text":"password"} value={password} onChange={e=>setPassword(e.target.value)} placeholder="••••••••" autoComplete="current-password" style={{paddingRight:44}}/>
+                <button type="button" tabIndex={-1} onClick={()=>setShowPw(v=>!v)} aria-label={showPw?"Hide password":"Show password"} style={{position:"absolute",right:12,top:"50%",transform:"translateY(-50%)",width:24,height:24,minHeight:24,padding:0,border:"none",background:"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
                   {showPw ? <EyeOpen color="#15803d"/> : <EyeOff color="#94a3b8"/>}
                 </button>
               </div>
             </div>
             <div style={{textAlign:"right",marginBottom:12}}>
-              <button type="button" onClick={()=>{clearMsgs();setMode("reset");}} style={{background:"none",border:"none",color:"#15803d",fontSize:12,fontWeight:600,cursor:"pointer",textDecoration:"underline",padding:"4px 0",minHeight:28,fontFamily:"inherit"}}>{t("forgot_password",lang)}</button>
+              <button type="button" tabIndex={-1} onClick={()=>{clearMsgs();setMode("reset");}} style={{background:"none",border:"none",color:"#15803d",fontSize:12,fontWeight:600,cursor:"pointer",textDecoration:"underline",padding:"4px 0",minHeight:28,fontFamily:"inherit"}}>{t("forgot_password",lang)}</button>
             </div>
-            <Btn type="submit" disabled={busy||!email||!password} style={{width:"100%"}}>{t("log_in",lang)}</Btn>
+            <Btn tabIndex={3} type="submit" disabled={busy||!email||!password} style={{width:"100%"}}>{t("log_in",lang)}</Btn>
             <div style={{height:1,background:"#e2e8f0",margin:"16px 0"}}/>
             <div style={{textAlign:"center",fontSize:13,color:"#64748b"}}>
-              {t("no_account",lang)} <button type="button" onClick={()=>{clearMsgs();setMode("signup");}} style={{background:"none",border:"none",color:"#15803d",fontSize:13,fontWeight:600,cursor:"pointer",textDecoration:"underline",padding:"4px 2px",fontFamily:"inherit"}}>{t("create_one",lang)}</button>
+              {t("no_account",lang)} <button type="button" tabIndex={-1} onClick={()=>{clearMsgs();setMode("signup");}} style={{background:"none",border:"none",color:"#15803d",fontSize:13,fontWeight:600,cursor:"pointer",textDecoration:"underline",padding:"4px 2px",fontFamily:"inherit"}}>{t("create_one",lang)}</button>
             </div>
           </>
         )}
@@ -2050,8 +2050,8 @@ function AuthScreen(){
             <div style={{marginBottom:12}}>
               <div style={{fontSize:13,fontWeight:600,color:"#334155",marginBottom:4}}>{t("password",lang)}</div>
               <div style={{position:"relative"}}>
-                <Inp type={showPw?"text":"password"} value={password} onChange={e=>setPassword(e.target.value)} placeholder={t("ph_password_min",lang)} autoComplete="new-password" style={{paddingRight:44}}/>
-                <button type="button" onClick={()=>setShowPw(v=>!v)} aria-label={showPw?"Hide password":"Show password"} style={{position:"absolute",right:12,top:"50%",transform:"translateY(-50%)",width:24,height:24,minHeight:24,padding:0,border:"none",background:"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                <Inp tabIndex={2} type={showPw?"text":"password"} value={password} onChange={e=>setPassword(e.target.value)} placeholder={t("ph_password_min",lang)} autoComplete="new-password" style={{paddingRight:44}}/>
+                <button type="button" tabIndex={-1} onClick={()=>setShowPw(v=>!v)} aria-label={showPw?"Hide password":"Show password"} style={{position:"absolute",right:12,top:"50%",transform:"translateY(-50%)",width:24,height:24,minHeight:24,padding:0,border:"none",background:"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
                   {showPw ? <EyeOpen color="#15803d"/> : <EyeOff color="#94a3b8"/>}
                 </button>
               </div>
@@ -2059,7 +2059,7 @@ function AuthScreen(){
             <div style={{marginBottom:12}}>
               <div style={{fontSize:13,fontWeight:600,color:"#334155",marginBottom:4}}>{t("confirm_password",lang)}</div>
               <div style={{position:"relative"}}>
-                <Inp type={showPw2?"text":"password"} value={password2} onChange={e=>setPassword2(e.target.value)} placeholder={t("ph_password_retype",lang)} autoComplete="new-password" style={{paddingRight:72}}/>
+                <Inp tabIndex={3} type={showPw2?"text":"password"} value={password2} onChange={e=>setPassword2(e.target.value)} placeholder={t("ph_password_retype",lang)} autoComplete="new-password" style={{paddingRight:72}}/>
                 {password2.length>0 && (
                   <span style={{position:"absolute",right:44,top:"50%",transform:"translateY(-50%)",display:"flex",alignItems:"center",justifyContent:"center",pointerEvents:"none"}}>
                     {pwMatch
@@ -2067,27 +2067,27 @@ function AuthScreen(){
                       : <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#dc2626" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>}
                   </span>
                 )}
-                <button type="button" onClick={()=>setShowPw2(v=>!v)} aria-label={showPw2?"Hide password":"Show password"} style={{position:"absolute",right:12,top:"50%",transform:"translateY(-50%)",width:24,height:24,minHeight:24,padding:0,border:"none",background:"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                <button type="button" tabIndex={-1} onClick={()=>setShowPw2(v=>!v)} aria-label={showPw2?"Hide password":"Show password"} style={{position:"absolute",right:12,top:"50%",transform:"translateY(-50%)",width:24,height:24,minHeight:24,padding:0,border:"none",background:"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
                   {showPw2 ? <EyeOpen color="#15803d"/> : <EyeOff color="#94a3b8"/>}
                 </button>
               </div>
             </div>
             <label style={{display:"flex",alignItems:"flex-start",gap:10,fontSize:12,color:"#64748b",cursor:"pointer",padding:"12px 0",lineHeight:1.5}}>
-              <input type="checkbox" checked={dataConsent} onChange={e=>setDataConsent(e.target.checked)} style={{marginTop:2,width:16,height:16,cursor:"pointer",flexShrink:0}}/>
+              <input type="checkbox" tabIndex={4} checked={dataConsent} onChange={e=>setDataConsent(e.target.checked)} style={{marginTop:2,width:16,height:16,cursor:"pointer",flexShrink:0}}/>
               <span>{t("consent_agree",lang)}{" "}<a href="https://winwinlawnbid.com/terms" target="_blank" rel="noopener noreferrer" style={{color:"#15803d"}}>{t("consent_terms",lang)}</a>{" "}{t("consent_and",lang)}{" "}<a href="https://winwinlawnbid.com/privacy" target="_blank" rel="noopener noreferrer" style={{color:"#15803d"}}>{t("consent_privacy",lang)}</a>.{" "}{t("consent_data",lang)}</span>
             </label>
-            <Btn type="submit" disabled={busy||!canSignup} style={{width:"100%"}}>{busy?"...":t("create_account",lang)}</Btn>
+            <Btn tabIndex={5} type="submit" disabled={busy||!canSignup} style={{width:"100%"}}>{busy?"...":t("create_account",lang)}</Btn>
             <div style={{height:1,background:"#e2e8f0",margin:"16px 0"}}/>
             <div style={{textAlign:"center",fontSize:13,color:"#64748b"}}>
-              {t("already_account",lang)} <button type="button" onClick={()=>{clearMsgs();setMode("login");}} style={{background:"none",border:"none",color:"#15803d",fontSize:13,fontWeight:600,cursor:"pointer",textDecoration:"underline",padding:"4px 2px",fontFamily:"inherit"}}>{t("log_in_link",lang)}</button>
+              {t("already_account",lang)} <button type="button" tabIndex={-1} onClick={()=>{clearMsgs();setMode("login");}} style={{background:"none",border:"none",color:"#15803d",fontSize:13,fontWeight:600,cursor:"pointer",textDecoration:"underline",padding:"4px 2px",fontFamily:"inherit"}}>{t("log_in_link",lang)}</button>
             </div>
           </>
         )}
         {mode==="reset" && (
           <>
-            <Btn type="submit" disabled={busy||!email} style={{width:"100%",marginTop:4}}>{t("send_reset",lang)}</Btn>
+            <Btn tabIndex={2} type="submit" disabled={busy||!email} style={{width:"100%",marginTop:4}}>{t("send_reset",lang)}</Btn>
             <div style={{textAlign:"center",marginTop:12}}>
-              <button type="button" onClick={()=>{clearMsgs();setMode("login");}} style={{background:"none",border:"none",color:"#15803d",fontSize:13,fontWeight:600,cursor:"pointer",textDecoration:"underline",padding:"6px 0",minHeight:28,fontFamily:"inherit"}}>← Back to login</button>
+              <button type="button" tabIndex={-1} onClick={()=>{clearMsgs();setMode("login");}} style={{background:"none",border:"none",color:"#15803d",fontSize:13,fontWeight:600,cursor:"pointer",textDecoration:"underline",padding:"6px 0",minHeight:28,fontFamily:"inherit"}}>← Back to login</button>
             </div>
           </>
         )}
@@ -2151,8 +2151,8 @@ function ResetPasswordScreen({onDone}){
         <div style={{marginBottom:12}}>
           <div style={{fontSize:13,fontWeight:600,color:"#334155",marginBottom:4}}>{t("new_pw",lang)}</div>
           <div style={{position:"relative"}}>
-            <Inp type={showPw?"text":"password"} value={pw} onChange={e=>setPw(e.target.value)} placeholder="••••••••" autoComplete="new-password" style={{paddingRight:44}}/>
-            <button type="button" onClick={()=>setShowPw(v=>!v)} aria-label={showPw?"Hide password":"Show password"} style={{position:"absolute",right:12,top:"50%",transform:"translateY(-50%)",width:24,height:24,minHeight:24,padding:0,border:"none",background:"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
+            <Inp tabIndex={1} type={showPw?"text":"password"} value={pw} onChange={e=>setPw(e.target.value)} placeholder="••••••••" autoComplete="new-password" style={{paddingRight:44}}/>
+            <button type="button" tabIndex={-1} onClick={()=>setShowPw(v=>!v)} aria-label={showPw?"Hide password":"Show password"} style={{position:"absolute",right:12,top:"50%",transform:"translateY(-50%)",width:24,height:24,minHeight:24,padding:0,border:"none",background:"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
               {showPw ? <EyeOpen color="#15803d"/> : <EyeOff color="#94a3b8"/>}
             </button>
           </div>
@@ -2160,13 +2160,13 @@ function ResetPasswordScreen({onDone}){
         <div style={{marginBottom:12}}>
           <div style={{fontSize:13,fontWeight:600,color:"#334155",marginBottom:4}}>{t("confirm_new_pw",lang)}</div>
           <div style={{position:"relative"}}>
-            <Inp type={showPw2?"text":"password"} value={pw2} onChange={e=>setPw2(e.target.value)} placeholder="••••••••" autoComplete="new-password" style={{paddingRight:44}}/>
-            <button type="button" onClick={()=>setShowPw2(v=>!v)} aria-label={showPw2?"Hide password":"Show password"} style={{position:"absolute",right:12,top:"50%",transform:"translateY(-50%)",width:24,height:24,minHeight:24,padding:0,border:"none",background:"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
+            <Inp tabIndex={2} type={showPw2?"text":"password"} value={pw2} onChange={e=>setPw2(e.target.value)} placeholder="••••••••" autoComplete="new-password" style={{paddingRight:44}}/>
+            <button type="button" tabIndex={-1} onClick={()=>setShowPw2(v=>!v)} aria-label={showPw2?"Hide password":"Show password"} style={{position:"absolute",right:12,top:"50%",transform:"translateY(-50%)",width:24,height:24,minHeight:24,padding:0,border:"none",background:"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
               {showPw2 ? <EyeOpen color="#15803d"/> : <EyeOff color="#94a3b8"/>}
             </button>
           </div>
         </div>
-        <Btn type="submit" disabled={busy||!pw||!pw2} style={{width:"100%",marginTop:4}}>{busy?t("updating",lang):t("update_password",lang)}</Btn>
+        <Btn tabIndex={3} type="submit" disabled={busy||!pw||!pw2} style={{width:"100%",marginTop:4}}>{busy?t("updating",lang):t("update_password",lang)}</Btn>
         </form>
         {err && <ErrBox style={{marginTop:12}}>{err}</ErrBox>}
         {info && <div style={{marginTop:12,padding:"10px 12px",background:"#f0fdf4",borderLeft:"3px solid #16a34a",borderRadius:"0 8px 8px 0",color:"#166534",fontSize:13,fontWeight:500}}>✓ {info}</div>}
