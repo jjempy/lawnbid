@@ -2939,7 +2939,7 @@ function S4({bp,flow,set,setFlow,area,perim,calc,time,onSend,saving}){
         )}
       </Card>
       <Card>
-        <Lbl>{t("notes",lang)}</Lbl>
+        <Lbl>{t("notes",lang)}<span style={{fontSize:11,color:"#94a3b8",fontWeight:400,marginLeft:6,textTransform:"none",letterSpacing:0}}>· {t("internal_only",lang)}</span></Lbl>
         <textarea value={flow.notes} onChange={e=>set("notes",e.target.value)} placeholder={t("ph_notes",lang)} style={{width:"100%",minHeight:80,border:"1.5px solid #e2e8f0",borderRadius:12,padding:"12px 14px",fontSize:14,fontFamily:"inherit",resize:"vertical",boxSizing:"border-box",outline:"none",color:"#0f172a"}}/>
       </Card>
       {!canAttachPhotos && (

@@ -372,6 +372,7 @@ export const translations = {
     revision_created: 'Revision created successfully',
     client_received_note: 'Client has already received this quote',
     draft_actions_note: 'This quote has not been sent yet',
+    internal_only: 'internal only',
     ready_to_send: 'Ready to Send',
     revision_of: 'Revision of',
     // Recurring service
@@ -809,6 +810,7 @@ export const translations = {
     revision_created: 'Revisión creada correctamente',
     client_received_note: 'El cliente ya recibió este precio',
     draft_actions_note: 'Este precio aún no ha sido enviado',
+    internal_only: 'solo interno',
     // Recurring service
     weekly_service: 'Servicio Semanal',
     biweekly_service: 'Servicio Quincenal',
