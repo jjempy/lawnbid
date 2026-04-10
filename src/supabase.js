@@ -327,19 +327,41 @@ export async function recordMarketData(quote, outcome = 'sent') {
       : month >= 8 && month <= 10 ? 'fall'
       : 'winter'
 
+    const areaSqft = Math.round(Number(quote.area_sqft)) || null
+    const perimeterFt = Math.round(Number(quote.linear_ft)) || null
+    const finalPrice = quote.final_price
+      ? Math.round(Number(quote.final_price) * 100) / 100
+      : null
+    const pricePerSqft = areaSqft && finalPrice
+      ? Math.round((finalPrice / areaSqft) * 10000) / 10000
+      : null
+
     const payload = {
       zip_prefix: zipPrefix,
-      area_sqft: Math.round(quote.area_sqft) || null,
-      perimeter_ft: Math.round(quote.linear_ft) || null,
-      complexity: quote.complexity || 1.0,
-      risk: quote.risk || 1.0,
-      crew_size: quote.crew_size || 1,
-      est_minutes: quote.est_minutes || null,
-      final_price: quote.final_price || null,
-      price_per_sqft: quote.area_sqft
-        ? Math.round((quote.final_price / quote.area_sqft) * 10000) / 10000
-        : null,
-      discount_pct: quote.discount_pct || 0,
+      area_sqft: areaSqft,
+      perimeter_ft: perimeterFt,
+      complexity: quote.complexity
+        ? Math.round(Number(quote.complexity) * 100) / 100
+        : 1.0,
+      risk: quote.risk
+        ? Math.round(Number(quote.risk) * 100) / 100
+        : 1.0,
+      crew_size: Number(quote.crew_size) || 1,
+      est_minutes: quote.est_minutes
+        ? Math.round(Number(quote.est_minutes))
+        : areaSqft && perimeterFt
+          ? Math.round(
+              (Number(quote.crew_size) > 1
+                ? Math.max(areaSqft / 20000, perimeterFt / 3000)
+                : (areaSqft / 20000) + (perimeterFt / 3000)
+              ) * 60
+            )
+          : null,
+      final_price: finalPrice,
+      price_per_sqft: pricePerSqft,
+      discount_pct: quote.discount_pct
+        ? Math.round(Number(quote.discount_pct) * 100) / 100
+        : 0,
       is_recurring: quote.is_recurring || false,
       recurring_frequency: quote.recurring_frequency || null,
       outcome,
@@ -348,9 +370,13 @@ export async function recordMarketData(quote, outcome = 'sent') {
       season,
     }
 
-    await supabase.from('market_data').insert(payload)
+    console.log('[LawnBid Data] Recording market data:', payload)
+
+    const { error } = await supabase.from('market_data').insert(payload)
+    if (error) console.error('[LawnBid Data] Insert error:', error)
+    else console.log('[LawnBid Data] Market data recorded successfully')
+
   } catch (e) {
-    // Silent fail — never block the user flow for data collection
-    console.log('[Market data] Collection skipped:', e.message)
+    console.log('[LawnBid Data] Collection skipped:', e.message)
   }
 }

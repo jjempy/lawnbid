@@ -783,6 +783,7 @@ export default function LawnBid() {
         const newStatus=schedule==="end"?"seasonal_complete":"accepted";
         try{await updateQuoteStatus(activeQ.quote_id,newStatus,updates);
         setQuotes(prev=>prev.map(q=>q.quote_id===activeQ.quote_id?{...q,status:newStatus,...updates}:q));
+        if(schedule!=="set_next_date") recordMarketData({...activeQ,...updates},"completed");
         setToast(schedule==="end"?"Season complete — service ended.":schedule==="set_next_date"?"Next visit date set.":"Visit marked complete.");}catch(e){alert(dbErrorMessage(e));}
       }}
       onDecline={async(reason)=>{
