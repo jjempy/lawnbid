@@ -765,6 +765,15 @@ export default function LawnBid() {
       onDuplicate={()=>editQuote(activeQ,true)}
       onDelete={()=>handleDeleteQuote(activeQ.quote_id)}
       onAccepted={()=>handleAccepted(activeQ.quote_id)}
+      onSend={async()=>{
+        const now=new Date().toISOString();
+        try{
+          await updateQuoteStatus(activeQ.quote_id,"sent",{sent_at:now});
+          setQuotes(prev=>prev.map(q=>q.quote_id===activeQ.quote_id?{...q,status:"sent",sent_at:now}:q));
+          recordMarketData({...activeQ,status:"sent",sent_at:now},"sent");
+          track("quote_sent");
+        }catch(e){alert(dbErrorMessage(e));}
+      }}
       onVisitComplete={async(dateStr,schedule,manualDate)=>{
         const freq=activeQ.recurring_frequency;
         const addFreq=(base)=>{const d=new Date(base);if(freq==="weekly")d.setDate(d.getDate()+7);else if(freq==="monthly")d.setMonth(d.getMonth()+1);else d.setDate(d.getDate()+14);return d.toISOString();};
@@ -1406,7 +1415,7 @@ function ClientDetail({bp,client,quotes,onBack,onViewQuote,onUpdateClient,onDele
 }
 
 // ─── Quote Detail ─────────────────────────────────────────────────────────────
-function QuoteDetail({bp,quote,allQuotes,settings,onBack,onEdit,onDuplicate,onDelete,onAccepted,onDecline,onVisitComplete}){
+function QuoteDetail({bp,quote,allQuotes,settings,onBack,onEdit,onDuplicate,onDelete,onAccepted,onDecline,onVisitComplete,onSend}){
   const {canExportPDF,showUpgrade} = usePlan();
   const lang = useLang();
   const [declineOpen,setDeclineOpen]=useState(false);
@@ -1440,6 +1449,10 @@ function QuoteDetail({bp,quote,allQuotes,settings,onBack,onEdit,onDuplicate,onDe
     const title=`Quote ${quote.quote_id} — ${quote.client_name||""}`.trim();
     if(navigator.share){navigator.share({title,text:txt}).catch(()=>{});}
     else{navigator.clipboard?.writeText(txt);setCopied(true);setTimeout(()=>setCopied(false),2000);}
+  };
+  const sendDraft=async()=>{
+    share();
+    if(onSend) await onSend();
   };
   const downloadPDF=async()=>{
     try { await generateQuotePDF(quote, settings, calc, time); track("pdf_downloaded"); }
@@ -1532,7 +1545,10 @@ function QuoteDetail({bp,quote,allQuotes,settings,onBack,onEdit,onDuplicate,onDe
   );
   const actions = (
     <div style={{display:"flex",flexDirection:"column",gap:8}}>
-      <Btn onClick={share} style={{width:"100%"}}>{copied?"✓ Copied!":"📤 "+t("resend_quote",lang)}</Btn>
+      {quote.status==="draft"
+        ? <Btn onClick={sendDraft} style={{width:"100%"}}>{copied?"✓ Copied!":"📤 "+t("send_quote",lang)}</Btn>
+        : <Btn onClick={share} style={{width:"100%"}}>{copied?"✓ Copied!":"📤 "+t("resend_quote",lang)}</Btn>
+      }
       {canExportPDF
         ? <Btn variant="outline" onClick={downloadPDF} style={{width:"100%"}}>⬇ Download PDF</Btn>
         : <Btn variant="outline" onClick={()=>showUpgrade("PDF Quote Export")} style={{width:"100%",opacity:.7,display:"inline-flex",alignItems:"center",justifyContent:"center",gap:8}}><LockIcon size={14} color="#15803d"/>Download PDF — Pro</Btn>
