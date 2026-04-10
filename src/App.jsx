@@ -790,12 +790,13 @@ export default function LawnBid() {
       errors={errors} setErrors={setErrors} settings={settings}
       clients={clients} quotes={quotes} onSave={handleSave} onCancel={goHome} saving={saving}/>
   ):screen==="quote-detail"&&activeQ ? (
-    <QuoteDetail bp={bp} quote={activeQ} allQuotes={quotes} settings={settings}
+    <QuoteDetail bp={bp} quote={activeQ} allQuotes={quotes} settings={settings} clients={clients}
       onBack={()=>setScreen(selC&&tab==="clients"?"client-detail":"home")}
       onEdit={()=>editQuote(activeQ, activeQ.status==="sent"||activeQ.status==="accepted")}
       onDuplicate={()=>editQuote(activeQ,true)}
       onDelete={()=>handleDeleteQuote(activeQ.quote_id)}
       onAccepted={()=>handleAccepted(activeQ.quote_id)}
+      onViewClient={()=>{ if(activeQ.client_id){ setSelC(activeQ.client_id); setTab("clients"); setScreen("client-detail"); } }}
       onSend={async()=>{
         const now=new Date().toISOString();
         try{
@@ -1446,7 +1447,7 @@ function ClientDetail({bp,client,quotes,onBack,onViewQuote,onUpdateClient,onDele
 }
 
 // ─── Quote Detail ─────────────────────────────────────────────────────────────
-function QuoteDetail({bp,quote,allQuotes,settings,onBack,onEdit,onDuplicate,onDelete,onAccepted,onDecline,onVisitComplete,onSend}){
+function QuoteDetail({bp,quote,allQuotes,settings,clients,onBack,onEdit,onDuplicate,onDelete,onAccepted,onDecline,onVisitComplete,onSend,onViewClient}){
   const {canExportPDF,showUpgrade} = usePlan();
   const lang = useLang();
   const [declineOpen,setDeclineOpen]=useState(false);
@@ -1498,12 +1499,14 @@ function QuoteDetail({bp,quote,allQuotes,settings,onBack,onEdit,onDuplicate,onDe
       <div style={{marginTop:10,fontSize:11,color:"#64748b",fontWeight:500}}>{t("sent_date",lang)}: {quote.sent_at?fmtTS(quote.sent_at):t("not_yet_sent",lang)}</div>
     </Card>
   );
+  const hasClientLink = quote.client_id && onViewClient;
   const clientCard = quote.client_name && (
-    <Card>
+    <Card onClick={hasClientLink?onViewClient:undefined} style={hasClientLink?{cursor:"pointer"}:undefined}>
       <Lbl>{t("client_label",lang)}</Lbl>
       <div style={{fontWeight:700,fontSize:16,marginBottom:4}}>{quote.client_name}</div>
-      {quote.client_phone&&<a href={`tel:${quote.client_phone}`} style={{display:"block",fontSize:14,color:"#16a34a",textDecoration:"none",marginBottom:2}}>📞 {formatPhone(quote.client_phone)}</a>}
+      {quote.client_phone&&<a href={`tel:${quote.client_phone}`} onClick={e=>e.stopPropagation()} style={{display:"block",fontSize:14,color:"#16a34a",textDecoration:"none",marginBottom:2}}>📞 {formatPhone(quote.client_phone)}</a>}
       {quote.client_email&&<div style={{fontSize:14,color:"#64748b"}}>✉ {quote.client_email}</div>}
+      {hasClientLink&&<div style={{fontSize:11,color:"#15803d",marginTop:8,fontWeight:600}}>{t("view_client_profile",lang)} →</div>}
     </Card>
   );
   const jobDetailsCard = (
