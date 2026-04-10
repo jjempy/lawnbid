@@ -2694,7 +2694,8 @@ function MapMeasure({bp,address,confirmed,setConfirmed,onConfirm,onSwitchManual,
   // ── API-fail → auto-switch to manual ──
   useEffect(() => { if (mapState==="api-fail") onSwitchManual?.(); }, [mapState, onSwitchManual]);
 
-  const mapHeight = isDesktop ? "calc(100vh - 240px)" : "max(300px, calc(100dvh - 300px))";
+  // Card fills the viewport minus everything above/below it (header + step progress + tabs + bottom nav).
+  const cardHeight = isDesktop ? "calc(100vh - 200px)" : "calc(100dvh - 220px)";
   const totalPointsPlaced = pointCount + polygonsRef.current.reduce((s,p)=>s+p.getPath().getLength(),0);
   const tbBtnHeight = isDesktop ? 40 : 48;
 
@@ -2713,8 +2714,8 @@ function MapMeasure({bp,address,confirmed,setConfirmed,onConfirm,onSwitchManual,
   const drawingSomething = pointCount > 0 || polyCount > 0;
 
   return (
-    <Card style={{padding:0,overflow:"hidden"}}>
-      <div style={{position:"relative",width:"100%",height:mapHeight,minHeight:300,background:"#e5e7eb"}}>
+    <Card style={{padding:0,overflow:"hidden",display:"flex",flexDirection:"column",height:cardHeight,minHeight:420}}>
+      <div style={{position:"relative",width:"100%",flex:1,minHeight:0,background:"#e5e7eb"}}>
         {/* Search input overlay */}
         <input ref={searchInputRef} defaultValue={address||""} placeholder="Search for an address…"
           style={{position:"absolute",top:10,left:10,right:10,zIndex:5,height:40,padding:"0 14px",border:"none",borderRadius:10,boxShadow:"0 2px 8px rgba(0,0,0,.15)",fontSize:16,fontFamily:"inherit",background:"#ffffff",color:"#0f172a",outline:"none"}}/>
@@ -2767,39 +2768,33 @@ function MapMeasure({bp,address,confirmed,setConfirmed,onConfirm,onSwitchManual,
         )}
       </div>
 
-      {/* Prominent measurement readout card */}
+      {/* Compact measurement readout — single row */}
       {mapState==="ready" && (
-        <div style={{padding:"14px 16px",borderTop:"1px solid #e2e8f0",background:"#ffffff"}}>
+        <div style={{flexShrink:0,padding:"8px 14px",borderTop:"1px solid #e2e8f0",background:"#ffffff"}}>
           {totalPointsPlaced < 3 ? (
-            <div style={{fontSize:13,color:"#94a3b8",fontWeight:500,textAlign:"center",padding:"6px 0"}}>{t("map_drop_3",lang)}</div>
+            <div style={{fontSize:12,color:"#94a3b8",fontWeight:500,textAlign:"center"}}>{t("map_drop_3",lang)}</div>
           ) : (
-            <div style={{display:"flex",flexDirection:"column",gap:10}}>
-              <div>
-                <div style={{fontSize:14,fontWeight:700,color:"#0f172a",letterSpacing:-.1}}>📐 Area: <span style={{color:"#15803d"}}>{totals.area.toLocaleString()} sqft</span> <span style={{color:"#64748b",fontSize:13,fontWeight:500}}>({(totals.area/43560).toFixed(2)} acres)</span></div>
-                <div style={{fontSize:11,color:"#94a3b8",fontWeight:500,marginTop:2,paddingLeft:22}}>This drives your mowing price</div>
-              </div>
-              <div>
-                <div style={{fontSize:14,fontWeight:700,color:"#0f172a",letterSpacing:-.1}}>📏 Perimeter: <span style={{color:"#15803d"}}>{totals.perim.toLocaleString()} ft</span></div>
-                <div style={{fontSize:11,color:"#94a3b8",fontWeight:500,marginTop:2,paddingLeft:22}}>This drives your trimming price</div>
-              </div>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap"}}>
+              <div style={{fontSize:13,fontWeight:700,color:"#0f172a",letterSpacing:-.1}}>📐 <span style={{color:"#15803d"}}>{totals.area.toLocaleString()} sqft</span> <span style={{color:"#64748b",fontSize:12,fontWeight:500}}>({(totals.area/43560).toFixed(2)} ac)</span></div>
+              <div style={{fontSize:13,fontWeight:700,color:"#0f172a",letterSpacing:-.1}}>📏 <span style={{color:"#15803d"}}>{totals.perim.toLocaleString()} ft</span></div>
             </div>
           )}
         </div>
       )}
 
-      {/* Toolbar */}
-      <div style={{padding:12,display:"flex",gap:8,flexWrap:"wrap"}}>
+      {/* Toolbar — always visible */}
+      <div style={{flexShrink:0,padding:"8px 12px",display:"flex",gap:8,flexWrap:"wrap"}}>
         <Btn variant="secondary" onClick={undoPoint} disabled={!drawingSomething || confirmed} style={{flex:1,minWidth:0,height:tbBtnHeight,minHeight:tbBtnHeight,padding:"0 10px",fontSize:13}}>{t("map_undo",lang)}</Btn>
         {!confirmed && canClose && <Btn onClick={closePolygon} style={{flex:"1.3",minWidth:0,height:tbBtnHeight,minHeight:tbBtnHeight,padding:"0 10px",fontSize:13}}>{t("map_close_shape",lang)}</Btn>}
         {!confirmed && polyCount>0 && pointCount===0 && <Btn variant="outline" onClick={()=>mapDivRef.current?.scrollIntoView({behavior:"smooth",block:"nearest"})} style={{flex:"1.3",minWidth:0,height:tbBtnHeight,minHeight:tbBtnHeight,padding:"0 10px",fontSize:13}}>{t("map_add_area",lang)}</Btn>}
         <Btn variant="secondary" onClick={()=>clearAll(false)} disabled={!drawingSomething} style={{flex:1,minWidth:0,height:tbBtnHeight,minHeight:tbBtnHeight,padding:"0 10px",fontSize:13}}>{t("map_clear",lang)}</Btn>
         {confirmed
           ? <Btn variant="outline" onClick={()=>clearAll(true)} style={{flex:"1.3",minWidth:0,height:tbBtnHeight,minHeight:tbBtnHeight,padding:"0 10px",fontSize:13}}>{t("map_redraw",lang)}</Btn>
-          : <Btn onClick={confirmNow} disabled={polyCount===0} style={{flex:"1.6",minWidth:0,height:tbBtnHeight,minHeight:tbBtnHeight,padding:"0 10px",fontSize:13}}>✓ {t("use_measurements",lang)}</Btn>
+          : <Btn onClick={confirmNow} disabled={polyCount===0} style={{flex:"1.6",minWidth:0,height:tbBtnHeight,minHeight:tbBtnHeight,padding:"0 10px",fontSize:13}}>{"✓ "+t("use_measurements",lang)}</Btn>
         }
       </div>
 
-      <div style={{padding:"8px 14px 12px",fontSize:11,color:"#94a3b8",fontWeight:500,lineHeight:1.4}}>{t("map_imagery_note",lang)}</div>
+      <div style={{flexShrink:0,padding:"4px 14px 8px",fontSize:10,color:"#94a3b8",fontWeight:500,lineHeight:1.3}}>{t("map_imagery_note",lang)}</div>
     </Card>
   );
 }
