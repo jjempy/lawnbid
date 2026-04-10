@@ -416,7 +416,7 @@ const Btn   = ({children,variant="primary",style={},...p}) => {
   return <button style={{height:48,minHeight:48,padding:"0 20px",borderRadius:16,fontSize:15,fontWeight:600,cursor:p.disabled?"not-allowed":"pointer",opacity:p.disabled?.55:1,fontFamily:"inherit",letterSpacing:-.1,...vs[variant],...style}} {...p}>{children}</button>;
 };
 const Chip  = ({label,active,onClick,style={}}) => <button onClick={onClick} style={{height:36,minHeight:36,padding:"0 16px",borderRadius:18,border:active?"1.5px solid #15803d":"1.5px solid #e2e8f0",background:active?"#15803d":"#ffffff",color:active?"#ffffff":"#374151",fontSize:13,fontWeight:600,cursor:"pointer",whiteSpace:"nowrap",fontFamily:"inherit",flexShrink:0,display:"inline-flex",alignItems:"center",...style}}>{label}</button>;
-const Badge = ({status}) => <span style={{padding:"3px 9px",borderRadius:999,fontSize:10,fontWeight:700,background:STATUS_BG[status]||"#f1f5f9",color:STATUS_COLOR[status]||"#64748b",letterSpacing:.6}}>{status==="seasonal_complete"?"Season Complete ✓":status?.toUpperCase()}</span>;
+const Badge = ({status}) => { const lang = useContext(LangContext); const label = status==="seasonal_complete"?(t("season_complete",lang)||"Season Complete ✓"):(t("status_"+status,lang)||status||"").toUpperCase(); return <span style={{padding:"3px 9px",borderRadius:999,fontSize:10,fontWeight:700,background:STATUS_BG[status]||"#f1f5f9",color:STATUS_COLOR[status]||"#64748b",letterSpacing:.6}}>{label}</span>; };
 const ErrMsg= ({msg}) => msg?<div style={{color:"#dc2626",fontSize:13,marginTop:6,fontWeight:500,background:"#fef2f2",borderLeft:"3px solid #dc2626",padding:"8px 10px",borderRadius:"0 8px 8px 0"}}>⚠ {msg}</div>:null;
 const ErrBox= ({children,style={}}) => children?<div style={{color:"#dc2626",fontSize:13,fontWeight:500,background:"#fef2f2",borderLeft:"3px solid #dc2626",padding:"10px 12px",borderRadius:"0 8px 8px 0",...style}}>⚠ {children}</div>:null;
 const QID   = ({id}) => <span style={{fontFamily:"ui-monospace, SFMono-Regular, Menlo, monospace",fontSize:11,background:"#f1f5f9",color:"#475569",padding:"2px 7px",borderRadius:6,letterSpacing:.3,fontWeight:600}}>{id}</span>;
@@ -557,10 +557,10 @@ export default function LawnBid() {
             const fresh = await loadSettings();
             if (fresh) setSettings(prev => ({ ...prev, ...fresh }));
             track("upgrade_success", { plan: fresh?.plan || "pro" });
-            setToast("Welcome to Pro! All features are now unlocked.");
+            setToast(t("welcome_pro_toast",lang));
             window.history.replaceState({}, "", "/app/");
           } else if (up === "cancelled") {
-            setToast("Upgrade cancelled — you can upgrade anytime from Settings.");
+            setToast(t("upgrade_cancelled_toast",lang));
             window.history.replaceState({}, "", "/app/");
           }
         } catch {}
@@ -1152,7 +1152,7 @@ function HomeScreen({bp,quotes,settings,onNew,onView}){
             </div>
             <div style={{textAlign:"right",flexShrink:0}}>
               <div style={{fontSize:20,fontWeight:900,color:"#0f172a",letterSpacing:-.5}}>{$$(q.final_price)}</div>
-              <div style={{marginTop:4,fontSize:10,fontWeight:700,letterSpacing:.6,color:STATUS_COLOR[q.status]||"#64748b"}}>{q.status==="seasonal_complete"?"Season Complete ✓":q.status?.toUpperCase()}</div>
+              <div style={{marginTop:4,fontSize:10,fontWeight:700,letterSpacing:.6,color:STATUS_COLOR[q.status]||"#64748b"}}>{q.status==="seasonal_complete"?t("season_complete",lang):(t("status_"+q.status,lang)||q.status||"").toUpperCase()}</div>
             </div>
           </div>
         </Card>
@@ -1495,7 +1495,7 @@ function QuoteDetail({bp,quote,allQuotes,settings,clients,onBack,onEdit,onDuplic
   };
   const downloadPDF=async()=>{
     try { await generateQuotePDF(quote, settings, calc, time); track("pdf_downloaded"); }
-    catch(e){ alert("Could not generate PDF: "+(e.message||"Unknown error")); }
+    catch(e){ alert(t("pdf_error",lang)+": "+(e.message||"")); }
   };
 
   const heroCard = (
@@ -1732,8 +1732,8 @@ function PlanBadge(){
         <div style={{fontSize:14,fontWeight:700,color:"#166534"}}>{t("plan_free",lang)}</div>
         <div style={{fontSize:12,color:"#15803d",fontWeight:500,marginTop:3}}>{quotesUsed} {t("quotes_used",lang)} · Rolling 30 days</div>
         <div style={{display:"flex",gap:8,marginTop:10,flexWrap:"wrap"}}>
-          <button onClick={()=>redirectToStripeCheckout(import.meta.env.VITE_STRIPE_PRO_PRICE_ID)} style={primary}>Start Pro Trial — $19/mo</button>
-          <button onClick={()=>redirectToStripeCheckout(import.meta.env.VITE_STRIPE_TEAM_PRICE_ID)} style={outline}>See Team Plan — $39/mo</button>
+          <button onClick={()=>redirectToStripeCheckout(import.meta.env.VITE_STRIPE_PRO_PRICE_ID)} style={primary}>{t("start_pro_trial",lang)}</button>
+          <button onClick={()=>redirectToStripeCheckout(import.meta.env.VITE_STRIPE_TEAM_PRICE_ID)} style={outline}>{t("see_team_plan",lang)}</button>
         </div>
       </Card>
     );
@@ -1824,7 +1824,7 @@ function SettingsScreen({bp,settings,onSave,onLogout,onLangChange}){
   });
   const onLogo=async e=>{
     const f=e.target.files?.[0]; if(!f) return;
-    if(!/^image\/(png|jpe?g|webp)$/i.test(f.type)){ alert("Please choose a PNG, JPG, or WebP image."); return; }
+    if(!/^image\/(png|jpe?g|webp)$/i.test(f.type)){ alert(t("image_format_error",lang)); return; }
     setLogoMsg("Processing…");
     const b64 = await compressLogo(f);
     if (!b64) { setLogoMsg("Could not read image."); setTimeout(()=>setLogoMsg(""), 3000); return; }
@@ -2454,7 +2454,7 @@ function S2({bp,flow,set,errors,area,perim,onAdvance}){
     <div>
       {flow.clientId&&flow.areaVal&&<div style={{background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:12,padding:"10px 14px",marginBottom:12,fontSize:13,color:"#166534"}}>📐 Measurements pre-filled from last quote. Adjust if area has changed.</div>}
       <div style={{display:"flex",gap:6,marginBottom:12,background:"#f1f5f9",borderRadius:12,padding:4}}>
-        {[["map","🗺 Map",true],["manual","✏️ Manual",true]].map(([k,lbl])=>{
+        {[["map","🗺 "+t("map_tab",lang),true],["manual","✏️ "+t("manual_tab",lang),true]].map(([k,lbl])=>{
           const active = mTab===k;
           const locked = k==="map" && !canUseMap;
           return (
@@ -2852,7 +2852,7 @@ function S3({bp,flow,set,area,perim,calc,time,settings}){
             <div onClick={()=>setEditing(true)} style={{fontSize:"var(--price-hero)",fontWeight:900,color:"#ffffff",letterSpacing:-2,cursor:"pointer",lineHeight:1,marginBottom:4}}>{$$(calc.disp)}</div>
           )}
           {editing?<button onClick={()=>{setEditing(false);set("override",null);}} style={{fontSize:12,color:"#4ade80",background:"none",border:"none",cursor:"pointer",marginBottom:14,fontFamily:"inherit",fontWeight:600,padding:0,minHeight:32}}>{t("reset_formula",lang)}</button>:<div style={{fontSize:12,color:"#64748b",marginBottom:14,fontWeight:500}}>{t("tap_override",lang)}</div>}
-          {calc.minA&&<div style={{fontSize:12,color:"#fbbf24",marginBottom:12,fontWeight:500}}>⚠ Minimum bid applied (formula: {$$(calc.ar)})</div>}
+          {calc.minA&&<div style={{fontSize:12,color:"#fbbf24",marginBottom:12,fontWeight:500}}>{"⚠ "+t("minimum_bid_applied_formula",lang).replace("{{amount}}",(calc.ar||0).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2}))}</div>}
           <div style={{borderTop:"1px solid #1e293b",paddingTop:14}}>
             <Lbl style={{color:"#64748b"}}>{t("breakdown",lang)}</Lbl>
             {calc.bd.map((r,i)=>(
@@ -2874,7 +2874,7 @@ function S3({bp,flow,set,area,perim,calc,time,settings}){
                   </button>
                 ))}
               </div>
-              <div style={{fontSize:12,color:"#94a3b8",fontWeight:500}}>{flow.crew}-person crew · {flow.crew>=2?"parallel work":"sequential"}</div>
+              <div style={{fontSize:12,color:"#94a3b8",fontWeight:500}}>{flow.crew>=2?t("person_crew_parallel",lang).replace("{{n}}",flow.crew):t("person_crew_sequential",lang)}</div>
             </div>
           )}
         </Card>
@@ -3031,7 +3031,7 @@ function S4({bp,flow,set,setFlow,area,perim,calc,time,onSend,saving}){
           <div style={{width:22,height:22,background:"#ffffff",borderRadius:"50%",position:"absolute",top:2,left:flow.saveClient?20:2,transition:"left .2s",boxShadow:"0 1px 3px rgba(0,0,0,.2)"}}/>
         </div>
       </div>
-      <Btn onClick={()=>onSend("sent")} disabled={saving} style={{width:"100%",marginBottom:10,fontSize:16}}>{saving?"Saving…":"📤 "+t("send_quote",lang)}</Btn>
+      <Btn onClick={()=>onSend("sent")} disabled={saving} style={{width:"100%",marginBottom:10,fontSize:16}}>{saving?t("saving",lang):"📤 "+t("send_quote",lang)}</Btn>
       <Btn variant="outline" onClick={()=>onSend("draft")} disabled={saving} style={{width:"100%"}}>💾 {t("save_draft",lang)}</Btn>
     </div>
   );

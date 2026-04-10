@@ -103,16 +103,32 @@ export async function loadQuotes() {
   return data || []
 }
 
+// Whitelist of valid quotes table columns — anything else is dropped before upsert
+const QUOTE_COLUMNS = [
+  'quote_id', 'user_id', 'client_id', 'client_name', 'client_phone',
+  'client_email', 'address', 'area_sqft', 'linear_ft', 'crew_size',
+  'complexity', 'risk', 'mow_rate_used', 'trim_rate_used',
+  'equipment_cost_used', 'discount_pct', 'formula_price', 'final_price',
+  'status', 'notes', 'sent_at', 'accepted_at', 'expiry_date',
+  'attachments', 'parent_id', 'declined_reason', 'is_recurring',
+  'recurring_frequency', 'last_completed_at', 'next_due_at',
+  'visit_count', 'map_polygons', 'est_minutes', 'revision_number',
+  'created_at', 'updated_at'
+]
+
 export async function upsertQuote(quote) {
   // Strip internal-only fields before saving
   const { isNew, existingId, parentId, saveClient, sentAt, clientId, ...rest } = quote
-  const record = {
+  const merged = {
     ...rest,
     parent_id: parentId || null,
     user_id: await currentUserId(),
   }
-  // Remove undefined/function values that Supabase can't store
-  Object.keys(record).forEach(k => { if (record[k] === undefined || typeof record[k] === 'function') delete record[k] })
+  // Whitelist: only known columns are sent to Supabase
+  const record = {}
+  for (const k of QUOTE_COLUMNS) {
+    if (merged[k] !== undefined && typeof merged[k] !== 'function') record[k] = merged[k]
+  }
   const { error } = await supabase
     .from('quotes')
     .upsert(record, { onConflict: 'quote_id' })
@@ -371,7 +387,7 @@ export async function recordMarketData(quote, outcome = 'sent') {
       season,
     }
 
-    console.log('[LawnBid Data] Recording market data:', payload)
+    if (import.meta.env.DEV) console.log('[LawnBid Data] Recording market data:', payload)
 
     const { error } = await supabase.from('market_data').insert(payload)
     if (error) console.error('[LawnBid Data] Insert error:', error)
