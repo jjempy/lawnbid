@@ -68,7 +68,7 @@ async function openStripePortal() {
 const track = (event, params = {}) => { try { if (typeof gtag !== 'undefined') gtag('event', event, params); } catch(e) {} };
 
 // ─── Constants ──────────────────────────────────────────────────────────────────
-const APP_VERSION = "0.9.0";
+const APP_VERSION = "0.9.4";
 const DEFAULT_SETTINGS = {
   mow_rate: 110, trim_rate: 18, equipment_cost: 12.35, hourly_rate: 22.80,
   minimum_bid: 55, complexity_default: 1.0, risk_default: 1.0,
@@ -464,6 +464,37 @@ export default function LawnBid() {
     });
     return () => sub.subscription.unsubscribe();
   }, []);
+
+  // ── Browser back button / mobile back gesture (PWA) ──
+  // Trap pattern: push a sentinel history entry on mount, intercept popstate
+  // and run the in-app back navigation instead of leaving the app.
+  const navStateRef = useRef({});
+  useEffect(() => {
+    if (!session) return;
+    navStateRef.current = { screen, tab, step, selC };
+  });
+  useEffect(() => {
+    if (!session) return;
+    try { window.history.pushState({ lb: 1 }, ""); } catch {}
+    const onPop = () => {
+      const s = navStateRef.current;
+      if (s.screen === "flow") {
+        if (s.step > 1) setStep(p => p - 1);
+        else { setScreen("home"); setFlow(null); setErrors({}); }
+      } else if (s.screen === "quote-detail") {
+        if (s.selC && s.tab === "clients") setScreen("client-detail");
+        else setScreen("home");
+      } else if (s.screen === "client-detail") {
+        setTab("clients"); setScreen("home");
+      } else if (s.tab !== "quotes") {
+        setTab("quotes");
+      }
+      // Re-push sentinel so the next back press is also intercepted
+      try { window.history.pushState({ lb: 1 }, ""); } catch {}
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, [session]);
 
   // ── Cache company logo for AuthScreen ──
   useEffect(() => {
