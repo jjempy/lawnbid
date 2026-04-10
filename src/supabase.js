@@ -11,6 +11,16 @@
 // ALTER TABLE quotes   ADD COLUMN IF NOT EXISTS last_completed_at timestamptz;
 // ALTER TABLE quotes   ADD COLUMN IF NOT EXISTS next_due_at timestamptz;
 // ALTER TABLE quotes   ADD COLUMN IF NOT EXISTS visit_count integer DEFAULT 0;
+// ALTER TABLE quotes   ADD COLUMN IF NOT EXISTS est_minutes integer;
+// -- Backfill est_minutes for existing quotes using the formula:
+// --   wall = (crew_size >= 2) ? GREATEST(area_sqft/20000, linear_ft/3000)
+// --                           : (area_sqft/20000 + linear_ft/3000)
+// --   est_minutes = ROUND(wall * complexity * 60)
+// -- UPDATE quotes SET est_minutes = ROUND(
+// --   (CASE WHEN crew_size >= 2 THEN GREATEST(area_sqft::decimal/20000, linear_ft::decimal/3000)
+// --         ELSE area_sqft::decimal/20000 + linear_ft::decimal/3000 END)
+// --   * COALESCE(complexity, 1.0) * 60
+// -- ) WHERE est_minutes IS NULL AND area_sqft > 0 AND linear_ft > 0;
 // ALTER TABLE settings ADD COLUMN IF NOT EXISTS follow_up_days integer DEFAULT 3;
 // ALTER TABLE settings ADD COLUMN IF NOT EXISTS language text DEFAULT 'en';
 // ALTER TABLE settings ADD COLUMN IF NOT EXISTS follow_up_enabled boolean DEFAULT true;

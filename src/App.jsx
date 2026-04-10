@@ -659,6 +659,7 @@ export default function LawnBid() {
         map_polygons: Array.isArray(rec.map_polygons) && rec.map_polygons.length > 0 ? rec.map_polygons : undefined,
         sent_at:     status === "sent" ? now : (rec.sentAt || null),
         expiry_date: rec.isNew ? addDays(now, settingsRef.current.quote_validity_days || 30) : undefined,
+        est_minutes: (() => { const _t = calcTime(rec.area_sqft, rec.linear_ft, rec.crew_size, rec.complexity); return _t ? Math.round(_t.adj * 60) : null; })(),
       };
 
       // Remove undefined fields
