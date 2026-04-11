@@ -181,15 +181,17 @@ const addDays = (iso, days) => new Date(new Date(iso).getTime() + (days||30)*864
 const COMPANY_LOGO_CACHE = "lb_company_logo";
 
 // ─── Smart error messages ───────────────────────────────────────────────────
-function authErrorMessage(err) {
+function authErrorMessage(err, lang = "en") {
   const msg = (err?.message || "").toLowerCase();
-  if (msg.includes("invalid login credentials")) return "Email or password is incorrect. Double-check your details or tap Forgot Password to reset.";
-  if (msg.includes("email not confirmed")) return "Please check your email and click the confirmation link we sent before logging in.";
-  if (msg.includes("user already registered") || msg.includes("already been registered")) return "An account with this email already exists. Try logging in instead.";
-  if (msg.includes("password should be at least")) return "Password must be at least 6 characters. Please choose a longer password.";
-  if (msg.includes("too many requests") || msg.includes("rate limit")) return "Too many attempts. Please wait a few minutes and try again.";
-  if (msg.includes("failed to fetch") || msg.includes("network")) return "Could not connect. Check your internet connection and try again.";
-  return "Something went wrong signing in. Check your internet connection and try again.";
+  if (msg.includes("invalid login credentials")) return t("err_wrong_password", lang);
+  if (msg.includes("email not confirmed")) return t("err_not_confirmed", lang);
+  if (msg.includes("user already registered") || msg.includes("already been registered")) return t("err_already_registered", lang);
+  if (msg.includes("password should be at least")) return t("err_password_too_short", lang);
+  if (msg.includes("unable to validate email") || msg.includes("invalid email")) return t("err_invalid_email", lang);
+  if (msg.includes("too many requests") || msg.includes("rate limit")) return t("err_rate_limit", lang);
+  if (msg.includes("failed to fetch") || msg.includes("network") || msg.includes("networkerror")) return t("err_network", lang);
+  if (msg.includes("token") || msg.includes("otp")) return t("err_otp_invalid", lang);
+  return t("err_generic_signin", lang);
 }
 function dbErrorMessage(err) {
   const msg = (err?.message || "").toLowerCase();
@@ -2244,7 +2246,7 @@ function AuthScreen(){
         setPendingEmail(email); setOtpCode(""); setOtpError(""); setMode("verify");
         return;
       }
-      setErr(authErrorMessage(error));
+      setErr(authErrorMessage(error, lang));
     } else {
       track("login");
     }
@@ -2253,12 +2255,12 @@ function AuthScreen(){
   const emailLooksValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
   const signup=async()=>{
     clearMsgs();
-    if (!pwLongEnough) { setErr("Password must be at least 6 characters long."); return; }
-    if (!pwMatch) { setErr("Passwords do not match. Please retype."); return; }
+    if (!pwLongEnough) { setErr(t("err_password_too_short",lang)); return; }
+    if (!pwMatch) { setErr(t("confirm_password",lang)); return; }
     setBusy(true);
     const { data, error } = await supabase.auth.signUp({ email, password });
     setBusy(false);
-    if (error) { setErr(authErrorMessage(error)); return; }
+    if (error) { setErr(authErrorMessage(error, lang)); return; }
     // Supabase returns an empty identities array when the email is already registered
     if (data?.user?.identities?.length === 0) {
       setErr("duplicate-email");
@@ -2299,14 +2301,14 @@ function AuthScreen(){
       setInfo(t("otp_resent",lang));
       setTimeout(() => setInfo(""), 3000);
     } catch (e) {
-      setOtpError(authErrorMessage(e));
+      setOtpError(authErrorMessage(e, lang));
     }
   };
   const sendReset=async()=>{
     clearMsgs(); setBusy(true);
     const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: "https://winwinlawnbid.com/app/" });
     setBusy(false);
-    if(error) setErr(authErrorMessage(error));
+    if(error) setErr(authErrorMessage(error, lang));
     else setInfo(`Check your email — we sent a password reset link to ${email}`);
   };
 
@@ -2486,7 +2488,7 @@ function ResetPasswordScreen({onDone}){
     setBusy(true);
     const { error } = await supabase.auth.updateUser({ password: pw });
     setBusy(false);
-    if (error) { setErr(authErrorMessage(error)); return; }
+    if (error) { setErr(authErrorMessage(error, lang)); return; }
     setInfo(t("pw_updated",lang));
     setTimeout(onDone, 1200);
   };
