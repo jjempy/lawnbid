@@ -2213,7 +2213,7 @@ function AuthScreen(){
   }
   const [mode,setMode]=useState(
     (initialPlanFromUrl || isNewFromUrl || upgradeSuccess) ? "signup" : "login"
-  ); // "login" | "signup" | "reset"
+  ); // "login" | "signup" | "reset" | "verify"
   const [email,setEmail]=useState("");
   const [password,setPassword]=useState("");
   const [password2,setPassword2]=useState("");
@@ -2223,6 +2223,9 @@ function AuthScreen(){
   const [info,setInfo]=useState("");
   const [busy,setBusy]=useState(false);
   const [dataConsent,setDataConsent]=useState(false);
+  const [pendingEmail,setPendingEmail]=useState("");
+  const [otpCode,setOtpCode]=useState("");
+  const [otpError,setOtpError]=useState("");
 
   const clearMsgs = () => { setErr(""); setInfo(""); };
   const pwLongEnough = password.length >= 6;
@@ -2233,8 +2236,18 @@ function AuthScreen(){
     clearMsgs(); setBusy(true);
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     setBusy(false);
-    if(error) setErr(authErrorMessage(error));
-    else track("login");
+    if (error) {
+      const msg = (error.message || "").toLowerCase();
+      if (msg.includes("email not confirmed")) {
+        // Resend OTP and route to the verify screen
+        try { await supabase.auth.resend({ type: "signup", email }); } catch {}
+        setPendingEmail(email); setOtpCode(""); setOtpError(""); setMode("verify");
+        return;
+      }
+      setErr(authErrorMessage(error));
+    } else {
+      track("login");
+    }
   };
   const [emailBlurred,setEmailBlurred]=useState(false);
   const emailLooksValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
@@ -2243,7 +2256,7 @@ function AuthScreen(){
     if (!pwLongEnough) { setErr("Password must be at least 6 characters long."); return; }
     if (!pwMatch) { setErr("Passwords do not match. Please retype."); return; }
     setBusy(true);
-    const { data, error } = await supabase.auth.signUp({ email, password, options: { emailRedirectTo: "https://winwinlawnbid.com/app/" } });
+    const { data, error } = await supabase.auth.signUp({ email, password });
     setBusy(false);
     if (error) { setErr(authErrorMessage(error)); return; }
     // Supabase returns an empty identities array when the email is already registered
@@ -2252,7 +2265,42 @@ function AuthScreen(){
       return;
     }
     track("signup_complete");
-    if (!data.session) setInfo("signup-check-email");
+    if (data.session) {
+      // Auto-confirm enabled — already logged in
+      return;
+    }
+    // OTP path: route to verify screen
+    setPendingEmail(email);
+    setOtpCode("");
+    setOtpError("");
+    setMode("verify");
+  };
+  const verifyOtp = async () => {
+    setOtpError("");
+    if (otpCode.length !== 6) { setOtpError(t("otp_length_error",lang)); return; }
+    setBusy(true);
+    const { data, error } = await supabase.auth.verifyOtp({
+      email: pendingEmail,
+      token: otpCode,
+      type: "signup",
+    });
+    setBusy(false);
+    if (error || !data?.session) {
+      setOtpError(t("otp_invalid",lang));
+      return;
+    }
+    // Session is established — onAuthStateChange will pick it up and unmount AuthScreen
+    track("signup_complete");
+  };
+  const resendOtp = async () => {
+    setOtpError("");
+    try {
+      await supabase.auth.resend({ type: "signup", email: pendingEmail });
+      setInfo(t("otp_resent",lang));
+      setTimeout(() => setInfo(""), 3000);
+    } catch (e) {
+      setOtpError(authErrorMessage(e));
+    }
   };
   const sendReset=async()=>{
     clearMsgs(); setBusy(true);
@@ -2289,7 +2337,8 @@ function AuthScreen(){
         <div style={{fontSize:13,color:"#64748b",textAlign:"center",marginBottom:12}}>Create an account or sign in to start your 14-day free trial</div>
       )}
       <Card>
-        <form onSubmit={e=>{e.preventDefault();if(mode==="login")login();else if(mode==="signup")signup();else if(mode==="reset")sendReset();}}>
+        <form onSubmit={e=>{e.preventDefault();if(mode==="login")login();else if(mode==="signup")signup();else if(mode==="reset")sendReset();else if(mode==="verify")verifyOtp();}}>
+        {mode!=="verify" && (
         <div style={{marginBottom:12}}>
           <div style={{fontSize:13,fontWeight:600,color:"#334155",marginBottom:4}}>{t("email",lang)}</div>
           <Inp tabIndex={1} type="email" value={email} onChange={e=>{setEmail(e.target.value);setEmailBlurred(false);}} onBlur={()=>setEmailBlurred(true)} placeholder={t("ph_company_email",lang)} autoComplete="email"/>
@@ -2297,6 +2346,7 @@ function AuthScreen(){
             <div style={{fontSize:12,color:"#64748b",marginTop:6}}>If you already have an account, <button type="button" tabIndex={-1} onClick={()=>{clearMsgs();setMode("login");}} style={{background:"none",border:"none",color:"#15803d",fontSize:12,fontWeight:600,cursor:"pointer",textDecoration:"underline",padding:0,fontFamily:"inherit"}}>log in instead →</button></div>
           )}
         </div>
+        )}
         {mode==="login" && (
           <>
             <div style={{marginBottom:4}}>
@@ -2361,6 +2411,35 @@ function AuthScreen(){
             <Btn tabIndex={2} type="submit" disabled={busy||!email} style={{width:"100%",marginTop:4}}>{t("send_reset",lang)}</Btn>
             <div style={{textAlign:"center",marginTop:12}}>
               <button type="button" tabIndex={-1} onClick={()=>{clearMsgs();setMode("login");}} style={{background:"none",border:"none",color:"#15803d",fontSize:13,fontWeight:600,cursor:"pointer",textDecoration:"underline",padding:"6px 0",minHeight:28,fontFamily:"inherit"}}>← Back to login</button>
+            </div>
+          </>
+        )}
+        {mode==="verify" && (
+          <>
+            <div style={{textAlign:"center",marginBottom:18}}>
+              <div style={{fontSize:20,fontWeight:800,color:"#0f172a",letterSpacing:-.3,marginBottom:6}}>{t("verify_email",lang)}</div>
+              <div style={{fontSize:13,color:"#64748b",lineHeight:1.5}}>{t("verify_desc",lang)} <strong style={{color:"#0f172a"}}>{pendingEmail}</strong></div>
+            </div>
+            <input
+              tabIndex={1}
+              type="text"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              maxLength={6}
+              placeholder="000000"
+              value={otpCode}
+              onChange={e=>{setOtpError("");setOtpCode(e.target.value.replace(/\D/g,"").slice(0,6));}}
+              autoFocus
+              style={{width:"100%",fontSize:28,letterSpacing:8,textAlign:"center",padding:"16px 0",border:"2px solid #e2e8f0",borderRadius:12,outline:"none",fontFamily:"ui-monospace, SFMono-Regular, Menlo, monospace",fontWeight:700,color:"#0f172a",background:"#ffffff",boxSizing:"border-box",marginBottom:10}}
+            />
+            {otpError && <div style={{fontSize:12,color:"#dc2626",fontWeight:500,textAlign:"center",marginBottom:10}}>⚠ {otpError}</div>}
+            <Btn tabIndex={2} type="submit" disabled={busy||otpCode.length!==6} style={{width:"100%"}}>{busy?"...":t("verify_btn",lang)}</Btn>
+            <div style={{textAlign:"center",fontSize:12,color:"#94a3b8",marginTop:14}}>
+              {t("verify_resend_note",lang)}
+              <button type="button" tabIndex={-1} onClick={resendOtp} style={{background:"none",border:"none",color:"#15803d",fontSize:12,fontWeight:600,cursor:"pointer",textDecoration:"underline",padding:0,fontFamily:"inherit"}}>{t("verify_resend_btn",lang)}</button>
+            </div>
+            <div style={{textAlign:"center",marginTop:8}}>
+              <button type="button" tabIndex={-1} onClick={()=>{setOtpCode("");setOtpError("");setMode("login");}} style={{background:"none",border:"none",color:"#94a3b8",fontSize:12,fontWeight:500,cursor:"pointer",padding:"4px 0",fontFamily:"inherit"}}>← Back to login</button>
             </div>
           </>
         )}

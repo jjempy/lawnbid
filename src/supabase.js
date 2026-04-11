@@ -90,6 +90,13 @@
 //   Redirect URLs: https://winwinlawnbid.com/app/
 // This ensures confirmation/reset emails redirect to the app, not the landing page.
 //
+// EMAIL OTP CONFIRMATION (Dashboard → Authentication → Email Templates → Confirm signup):
+//   Change the email template to show {{ .Token }} as a 6-digit code, NOT {{ .ConfirmationURL }}.
+//   Subject:  Your LawnBid verification code
+//   Body:     Your LawnBid verification code is: {{ .Token }}
+//             This code expires in 10 minutes.
+//   This switches confirmation from magic-link to OTP, fixing in-app browser handoff issues.
+//
 // ANONYMOUS MARKET DATA TABLE:
 // CREATE TABLE IF NOT EXISTS market_data (
 //   id bigserial PRIMARY KEY,
