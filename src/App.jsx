@@ -1593,6 +1593,11 @@ function QuoteDetail({bp,quote,allQuotes,settings,clients,onBack,onEdit,onDuplic
     <Card style={{background:"#0f172a",textAlign:"center",padding:"28px 24px",boxShadow:"0 4px 16px rgba(15,23,42,.12)"}}>
       <div style={{fontSize:"var(--price-hero)",fontWeight:900,color:"#ffffff",letterSpacing:-2,lineHeight:1}}>{$$(detailGrandTotal)}</div>
       <div style={{fontSize:12,color:"#94a3b8",marginTop:8,fontWeight:500,textTransform:"uppercase",letterSpacing:1}}>{t("service_line",lang)}</div>
+      {detailAddons.length>0 && (
+        <div style={{fontSize:11,color:"#4ade80",marginTop:4,fontWeight:500,letterSpacing:.2,padding:"0 12px",lineHeight:1.4}}>
+          + {detailAddons.map(a => a.name).join(" · ")}
+        </div>
+      )}
       {time&&<div style={{fontSize:13,color:"#4ade80",marginTop:8,fontWeight:700}}>Est. {fmtT(time.adj)}</div>}
       <div style={{marginTop:10,fontSize:11,color:"#64748b",fontWeight:500}}>{t("sent_date",lang)}: {quote.sent_at?fmtTS(quote.sent_at):t("not_yet_sent",lang)}</div>
     </Card>
