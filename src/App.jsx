@@ -1505,6 +1505,8 @@ function QuoteDetail({bp,quote,allQuotes,settings,clients,onBack,onEdit,onDuplic
   const [nextDateVal,setNextDateVal]=useState(new Date().toISOString().slice(0,10));
   const [confirmDel,setConfirmDel]=useState(false);
   const [copied,setCopied]=useState(false);
+  const [downloadingPDF,setDownloadingPDF]=useState(false); // false | true | 'done'
+  const [sendingState,setSendingState]=useState(false); // false | true | 'done'
   const [lightboxIdx,setLightboxIdx]=useState(null);
   const [freshAttachments,setFreshAttachments]=useState(Array.isArray(quote.attachments)?quote.attachments:[]);
   useEffect(()=>{
@@ -1532,12 +1534,37 @@ function QuoteDetail({bp,quote,allQuotes,settings,clients,onBack,onEdit,onDuplic
     else{navigator.clipboard?.writeText(txt);setCopied(true);setTimeout(()=>setCopied(false),2000);}
   };
   const sendDraft=async()=>{
-    share();
-    if(onSend) await onSend();
+    setSendingState(true);
+    try {
+      share();
+      if(onSend) await onSend();
+      setSendingState('done');
+      setTimeout(()=>setSendingState(false),3000);
+    } catch(e) {
+      setSendingState(false);
+    }
+  };
+  const handleResend=()=>{
+    setSendingState(true);
+    try {
+      share();
+      setSendingState('done');
+      setTimeout(()=>setSendingState(false),3000);
+    } catch(e) {
+      setSendingState(false);
+    }
   };
   const downloadPDF=async()=>{
-    try { await generateQuotePDF(quote, settings, calc, time); track("pdf_downloaded"); }
-    catch(e){ alert(t("pdf_error",lang)+": "+(e.message||"")); }
+    setDownloadingPDF(true);
+    try {
+      await generateQuotePDF(quote, settings, calc, time);
+      track("pdf_downloaded");
+      setDownloadingPDF('done');
+      setTimeout(()=>setDownloadingPDF(false),3000);
+    } catch(e) {
+      setDownloadingPDF(false);
+      alert(t("pdf_error",lang)+": "+(e.message||""));
+    }
   };
 
   const heroCard = (
@@ -1639,12 +1666,12 @@ function QuoteDetail({bp,quote,allQuotes,settings,clients,onBack,onEdit,onDuplic
   const actions = (
     <div style={{display:"flex",flexDirection:"column",gap:8}}>
       {quote.status==="draft"
-        ? <Btn onClick={sendDraft} style={{width:"100%"}}>{copied?"✓ Copied!":"📤 "+t("send_quote",lang)}</Btn>
-        : <Btn onClick={share} style={{width:"100%"}}>{copied?"✓ Copied!":"📤 "+t("resend_quote",lang)}</Btn>
+        ? <Btn onClick={sendDraft} disabled={sendingState===true} style={{width:"100%",opacity:sendingState===true?.7:1,background:sendingState==='done'?"#15803d":undefined,color:sendingState==='done'?"#fff":undefined}}>{sendingState===true?"⏳ "+t("sending",lang):sendingState==='done'?"✓ "+t("sent_short",lang):copied?"✓ Copied!":"📤 "+t("send_quote",lang)}</Btn>
+        : <Btn onClick={handleResend} disabled={sendingState===true} style={{width:"100%",opacity:sendingState===true?.7:1,background:sendingState==='done'?"#15803d":undefined,color:sendingState==='done'?"#fff":undefined}}>{sendingState===true?"⏳ "+t("sending",lang):sendingState==='done'?"✓ "+t("sent_short",lang):copied?"✓ Copied!":"📤 "+t("resend_quote",lang)}</Btn>
       }
       {canExportPDF
-        ? <Btn variant="outline" onClick={downloadPDF} style={{width:"100%"}}>⬇ Download PDF</Btn>
-        : <Btn variant="outline" onClick={()=>showUpgrade("PDF Quote Export")} style={{width:"100%",opacity:.7,display:"inline-flex",alignItems:"center",justifyContent:"center",gap:8}}><LockIcon size={14} color="#15803d"/>Download PDF — Pro</Btn>
+        ? <Btn variant="outline" onClick={downloadPDF} disabled={downloadingPDF===true} style={{width:"100%",opacity:downloadingPDF===true?.7:1,background:downloadingPDF==='done'?"#15803d":undefined,color:downloadingPDF==='done'?"#fff":undefined,borderColor:downloadingPDF==='done'?"#15803d":undefined}}>{downloadingPDF===true?"⏳ "+t("generating_pdf",lang):downloadingPDF==='done'?"✓ "+t("pdf_downloaded",lang):"⬇ "+t("download_pdf",lang)}</Btn>
+        : <Btn variant="outline" onClick={()=>showUpgrade("PDF Quote Export")} style={{width:"100%",opacity:.7,display:"inline-flex",alignItems:"center",justifyContent:"center",gap:8}}><LockIcon size={14} color="#15803d"/>{t("download_pdf",lang)} — Pro</Btn>
       }
       {quote.status==="sent"&&<Btn variant="outline" onClick={onAccepted} style={{width:"100%"}}>✅ {t("mark_accepted",lang)}</Btn>}
       {quote.status==="sent"&&!declineOpen&&<Btn variant="secondary" onClick={()=>setDeclineOpen(true)} style={{width:"100%"}}>{t("mark_declined",lang)}</Btn>}
