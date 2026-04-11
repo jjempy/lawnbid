@@ -2279,7 +2279,7 @@ function AuthScreen(){
   };
   const verifyOtp = async () => {
     setOtpError("");
-    if (otpCode.length !== 6) { setOtpError(t("otp_length_error",lang)); return; }
+    if (otpCode.length < 6) { setOtpError(t("otp_length_error",lang)); return; }
     setBusy(true);
     const { data, error } = await supabase.auth.verifyOtp({
       email: pendingEmail,
@@ -2421,21 +2421,22 @@ function AuthScreen(){
             <div style={{textAlign:"center",marginBottom:18}}>
               <div style={{fontSize:20,fontWeight:800,color:"#0f172a",letterSpacing:-.3,marginBottom:6}}>{t("verify_email",lang)}</div>
               <div style={{fontSize:13,color:"#64748b",lineHeight:1.5}}>{t("verify_desc",lang)} <strong style={{color:"#0f172a"}}>{pendingEmail}</strong></div>
+              <div style={{fontSize:12,color:"#94a3b8",marginTop:6}}>{t("verify_hint",lang)}</div>
             </div>
             <input
               tabIndex={1}
               type="text"
               inputMode="numeric"
               autoComplete="one-time-code"
-              maxLength={6}
-              placeholder="000000"
+              maxLength={8}
+              placeholder="________"
               value={otpCode}
-              onChange={e=>{setOtpError("");setOtpCode(e.target.value.replace(/\D/g,"").slice(0,6));}}
+              onChange={e=>{setOtpError("");setOtpCode(e.target.value.replace(/\D/g,"").slice(0,8));}}
               autoFocus
-              style={{width:"100%",fontSize:28,letterSpacing:8,textAlign:"center",padding:"16px 0",border:"2px solid #e2e8f0",borderRadius:12,outline:"none",fontFamily:"ui-monospace, SFMono-Regular, Menlo, monospace",fontWeight:700,color:"#0f172a",background:"#ffffff",boxSizing:"border-box",marginBottom:10}}
+              style={{width:"100%",fontSize:26,letterSpacing:6,textAlign:"center",padding:"16px 0",border:"2px solid #e2e8f0",borderRadius:12,outline:"none",fontFamily:"ui-monospace, SFMono-Regular, Menlo, monospace",fontWeight:700,color:"#0f172a",background:"#ffffff",boxSizing:"border-box",marginBottom:10}}
             />
             {otpError && <div style={{fontSize:12,color:"#dc2626",fontWeight:500,textAlign:"center",marginBottom:10}}>⚠ {otpError}</div>}
-            <Btn tabIndex={2} type="submit" disabled={busy||otpCode.length!==6} style={{width:"100%"}}>{busy?"...":t("verify_btn",lang)}</Btn>
+            <Btn tabIndex={2} type="submit" disabled={busy||otpCode.length<6} style={{width:"100%"}}>{busy?"...":t("verify_btn",lang)}</Btn>
             <div style={{textAlign:"center",fontSize:12,color:"#94a3b8",marginTop:14}}>
               {t("verify_resend_note",lang)}
               <button type="button" tabIndex={-1} onClick={resendOtp} style={{background:"none",border:"none",color:"#15803d",fontSize:12,fontWeight:600,cursor:"pointer",textDecoration:"underline",padding:0,fontFamily:"inherit"}}>{t("verify_resend_btn",lang)}</button>

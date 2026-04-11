@@ -91,7 +91,8 @@
 // This ensures confirmation/reset emails redirect to the app, not the landing page.
 //
 // EMAIL OTP CONFIRMATION (Dashboard → Authentication → Email Templates → Confirm signup):
-//   Change the email template to show {{ .Token }} as a 6-digit code, NOT {{ .ConfirmationURL }}.
+//   Change the email template to show {{ .Token }} as the verification code, NOT {{ .ConfirmationURL }}.
+//   Supabase generates 6-8 digit codes; the app accepts any length in that range.
 //   Subject:  Your LawnBid verification code
 //   Body:     Your LawnBid verification code is: {{ .Token }}
 //             This code expires in 10 minutes.
