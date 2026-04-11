@@ -227,7 +227,9 @@ function calcTime(area, perim, crew, cx) {
     crew_times:[1,2,3,4].map(n=>({n, t:(n>=2?Math.max(mh,th):mh+th)*cx})) };
 }
 
-async function generateQuotePDF(quote, settings, calc, time) {
+async function generateQuotePDF(quote, settings, calc, time, quoteLang) {
+  const L = quoteLang || settings?.quote_language || 'en';
+  const tq = (key) => t(key, L);
   const { default: jsPDF } = await import("jspdf");
   const doc = new jsPDF({ unit: "pt", format: "letter" });
   const W = doc.internal.pageSize.getWidth();
@@ -261,7 +263,7 @@ async function generateQuotePDF(quote, settings, calc, time) {
   const phone = settings.company_phone ? formatPhone(settings.company_phone) : null;
   if (phone) doc.text(phone, textX, y + 18 + nameHeight + 2);
   // Right column: document type + quote number (right-aligned, 45% of page)
-  const docType = quote.is_recurring ? "SERVICE AGREEMENT" : "QUOTE";
+  const docType = quote.is_recurring ? tq("doc_type_agreement") : tq("doc_type_quote");
   const docFontSize = quote.is_recurring ? 13 : 20;
   doc.setFont("helvetica","bold"); doc.setFontSize(docFontSize); doc.setTextColor(...PRIMARY);
   doc.text(docType, W - M, y + 18, { align: "right" });
@@ -276,9 +278,9 @@ async function generateQuotePDF(quote, settings, calc, time) {
 
   // ── Meta row: dates ──
   doc.setFont("helvetica","bold"); doc.setFontSize(8); doc.setTextColor(...MUTED);
-  doc.text("DATE ISSUED", M, y);
-  doc.text("EXPIRES", M + 180, y);
-  doc.text("QUOTE ID", M + 340, y);
+  doc.text(tq("pdf_date_issued"), M, y);
+  doc.text(tq("pdf_expires"), M + 180, y);
+  doc.text(tq("pdf_quote_id"), M + 340, y);
   doc.setFont("helvetica","normal"); doc.setFontSize(11); doc.setTextColor(...DARK);
   doc.text(fmtD(quote.created_at), M, y + 14);
   doc.text(expiryStr, M + 180, y + 14);
@@ -289,7 +291,7 @@ async function generateQuotePDF(quote, settings, calc, time) {
   doc.setDrawColor(...LINE); doc.setFillColor(248,250,252);
   doc.roundedRect(M, y, W - M*2, 76, 6, 6, "FD");
   doc.setFont("helvetica","bold"); doc.setFontSize(8); doc.setTextColor(...MUTED);
-  doc.text("BILL TO", M + 14, y + 18);
+  doc.text(tq("pdf_bill_to"), M + 14, y + 18);
   doc.setFont("helvetica","bold"); doc.setFontSize(12); doc.setTextColor(...DARK);
   doc.text(quote.client_name || "—", M + 14, y + 34);
   doc.setFont("helvetica","normal"); doc.setFontSize(10); doc.setTextColor(...MUTED);
@@ -299,14 +301,14 @@ async function generateQuotePDF(quote, settings, calc, time) {
 
   // ── Service & measurements ──
   doc.setFont("helvetica","bold"); doc.setFontSize(8); doc.setTextColor(...MUTED);
-  doc.text("SERVICE", M, y);
+  doc.text(tq("pdf_service"), M, y);
   doc.setFont("helvetica","normal"); doc.setFontSize(11); doc.setTextColor(...DARK);
-  doc.text("Lawn Mowing, Trimming & Edging", M, y + 14);
+  doc.text(tq("pdf_service_name"), M, y + 14);
   y += 32;
 
   doc.setFont("helvetica","bold"); doc.setFontSize(8); doc.setTextColor(...MUTED);
-  doc.text("AREA", M, y);
-  doc.text("PERIMETER", M + 220, y);
+  doc.text(tq("pdf_area"), M, y);
+  doc.text(tq("pdf_perimeter"), M + 220, y);
   doc.setFont("helvetica","normal"); doc.setFontSize(11); doc.setTextColor(...DARK);
   doc.text(fmtArea(quote.area_sqft), M, y + 14);
   const perimFt = Math.round(quote.linear_ft);
@@ -317,8 +319,8 @@ async function generateQuotePDF(quote, settings, calc, time) {
   // ── Line item table (client-facing: no complexity, risk, margin, time) ──
   doc.setDrawColor(...LINE); doc.line(M, y, W - M, y); y += 14;
   doc.setFont("helvetica","bold"); doc.setFontSize(8); doc.setTextColor(...MUTED);
-  doc.text("DESCRIPTION", M, y);
-  doc.text("AMOUNT", W - M, y, { align: "right" });
+  doc.text(tq("pdf_description"), M, y);
+  doc.text(tq("pdf_amount"), W - M, y, { align: "right" });
   y += 10;
   doc.line(M, y, W - M, y); y += 14;
 
@@ -333,12 +335,12 @@ async function generateQuotePDF(quote, settings, calc, time) {
   const addonTotalPdf = pdfAddons.reduce((s,a)=>s+Number(a.price||0),0);
   const grandTotalPdf = Number(finalPrice) + addonTotalPdf;
   doc.setFont("helvetica","normal"); doc.setFontSize(10); doc.setTextColor(...DARK);
-  doc.text("Lawn Service", M, y);
+  doc.text(tq("lawn_service_line"), M, y);
   doc.text($$(hasDiscount ? preDiscountPrice : finalPrice), W - M, y, { align: "right" });
   y += 18;
   if (hasDiscount) {
     doc.setFont("helvetica","normal"); doc.setTextColor(...MUTED);
-    doc.text(`Discount (${quote.discount_pct}%)`, M, y);
+    doc.text(`${tq("discount")} (${quote.discount_pct}%)`, M, y);
     doc.text(`-${$$(discountAmt)}`, W - M, y, { align: "right" });
     y += 18;
   }
@@ -355,7 +357,7 @@ async function generateQuotePDF(quote, settings, calc, time) {
   y += 6;
   doc.setDrawColor(...DARK); doc.setLineWidth(1.2); doc.line(M, y, W - M, y); y += 26;
   doc.setFont("helvetica","bold"); doc.setFontSize(14); doc.setTextColor(...DARK);
-  doc.text("TOTAL", M, y);
+  doc.text(tq("pdf_total"), M, y);
   doc.setFontSize(22); doc.setTextColor(...PRIMARY);
   doc.text($$(grandTotalPdf), W - M, y + 2, { align: "right" });
   y += 36;
@@ -363,7 +365,7 @@ async function generateQuotePDF(quote, settings, calc, time) {
   // ── Notes ──
   if (quote.notes) {
     doc.setFont("helvetica","bold"); doc.setFontSize(8); doc.setTextColor(...MUTED);
-    doc.text("NOTES", M, y); y += 14;
+    doc.text(tq("pdf_notes"), M, y); y += 14;
     doc.setFont("helvetica","normal"); doc.setFontSize(10); doc.setTextColor(...DARK);
     const lines = doc.splitTextToSize(quote.notes, W - M*2);
     doc.text(lines, M, y); y += lines.length * 14 + 10;
@@ -373,7 +375,7 @@ async function generateQuotePDF(quote, settings, calc, time) {
   const attachCount = Array.isArray(quote.attachments) ? quote.attachments.length : 0;
   if (attachCount > 0) {
     doc.setFont("helvetica","italic"); doc.setFontSize(9); doc.setTextColor(...MUTED);
-    doc.text(`📎 ${attachCount} photo${attachCount>1?"s":""} attached to digital quote`, M, y);
+    doc.text(`📎 ${attachCount} ${tq("pdf_photos_attached")}`, M, y);
     y += 18;
   }
 
@@ -381,41 +383,49 @@ async function generateQuotePDF(quote, settings, calc, time) {
   const footerY = doc.internal.pageSize.getHeight() - M;
   doc.setDrawColor(...LINE); doc.line(M, footerY - 24, W - M, footerY - 24);
   doc.setFont("helvetica","normal"); doc.setFontSize(9); doc.setTextColor(...MUTED);
+  const freqKey = quote.recurring_frequency === "weekly" ? "sms_weekly"
+    : quote.recurring_frequency === "monthly" ? "sms_monthly"
+    : "sms_biweekly";
   const footerText = quote.is_recurring
-    ? `Recurring ${quote.recurring_frequency||"biweekly"} service. Valid until cancelled.${settings.company_phone?" Call "+formatPhone(settings.company_phone)+" to cancel.":""}`
-    : `Quote valid until ${expiryStr}. To accept${settings.company_phone?` reply or call ${formatPhone(settings.company_phone)}`:" please reply"}.`;
+    ? `${tq("pdf_recurring_prefix")} ${tq(freqKey).toLowerCase()}${tq("pdf_valid_until_cancelled")}${settings.company_phone?" "+tq("pdf_footer_call_cancel")+" "+formatPhone(settings.company_phone)+" "+tq("pdf_footer_to_cancel"):""}`
+    : `${tq("pdf_valid_until")} ${expiryStr}. ${settings.company_phone?`${tq("pdf_footer_accept_reply")} ${tq("pdf_footer_accept_call")} ${formatPhone(settings.company_phone)}.`:tq("pdf_footer_please_reply")}`;
   doc.text(footerText, M, footerY - 8, { maxWidth: W - M*2 });
 
   const safeName = (quote.client_name || "client").replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "");
   doc.save(`LawnBid-${quote.quote_id}-${safeName}.pdf`);
 }
 
-function quoteText(q, s) {
+function quoteText(q, s, quoteLang) {
+  const L = quoteLang || s?.quote_language || 'en';
+  const tq = (key) => t(key, L);
   const txtAddons = Array.isArray(q.addons) ? q.addons : (q.addons ? (()=>{try{return JSON.parse(q.addons)}catch{return[]}})() : []);
   const txtAddonTotal = txtAddons.reduce((sum,a)=>sum+Number(a.price||0),0);
   const txtGrandTotal = Number(q.final_price||0) + txtAddonTotal;
+  const freqKey = q.recurring_frequency === "weekly" ? "sms_weekly"
+    : q.recurring_frequency === "monthly" ? "sms_monthly"
+    : "sms_biweekly";
   return [
-    q.is_recurring ? "LAWN SERVICE AGREEMENT" : "LAWN CARE QUOTE",
+    q.is_recurring ? tq("doc_type_agreement") : tq("sms_quote_header"),
     s.company_name ? `${s.company_name}${s.company_phone?" | "+formatPhone(s.company_phone):""}` : "",
     "",
-    `Quote ID: ${q.quote_id}`,
-    `Date: ${fmtTS(q.created_at)}`,
-    q.parent_id ? `Revision of: ${q.parent_id}` : "",
+    `${tq("sms_quote_id")} ${q.quote_id}`,
+    `${tq("sms_date")} ${fmtTS(q.created_at)}`,
+    q.parent_id ? `${tq("sms_revision_of")} ${q.parent_id}` : "",
     "",
-    `Client: ${q.client_name||"—"}`,
-    `Property: ${q.address}`,
+    `${tq("sms_client")} ${q.client_name||"—"}`,
+    `${tq("sms_property")} ${q.address}`,
     "",
-    "Service: Lawn Mowing, Trimming & Edging",
-    q.is_recurring ? `Frequency: ${q.recurring_frequency==="weekly"?"Weekly":q.recurring_frequency==="monthly"?"Monthly":"Biweekly"}` : "",
-    `Area: ${fmtArea(q.area_sqft)}`,
-    `Perimeter: ${Math.round(q.linear_ft).toLocaleString()} linear ft`,
+    `${tq("sms_service")} ${tq("pdf_service_name")}`,
+    q.is_recurring ? `${tq("sms_frequency")} ${tq(freqKey)}` : "",
+    `${tq("sms_area")} ${fmtArea(q.area_sqft)}`,
+    `${tq("sms_perimeter")} ${Math.round(q.linear_ft).toLocaleString()} ft`,
     "",
-    txtAddons.length > 0 ? `Lawn Service: ${$$(q.final_price)}` : "",
+    txtAddons.length > 0 ? `${tq("sms_lawn_service")} ${$$(q.final_price)}` : "",
     ...txtAddons.map(a => `${a.name}: ${$$(a.price)}`),
     txtAddons.length > 0 ? "" : "",
-    `TOTAL: ${$$(txtGrandTotal)}`,
+    `${tq("sms_total")} ${$$(txtGrandTotal)}`,
     "",
-    s.company_phone ? `To accept, reply or call ${formatPhone(s.company_phone)}.` : "To accept, please reply.",
+    s.company_phone ? `${tq("pdf_footer_accept_reply")} ${tq("pdf_footer_accept_call")} ${formatPhone(s.company_phone)}.` : tq("pdf_footer_please_reply"),
   ].filter(Boolean).join("\n");
 }
 
@@ -1528,7 +1538,7 @@ function QuoteDetail({bp,quote,allQuotes,settings,clients,onBack,onEdit,onDuplic
   const isDesktop = bp==="desktop";
 
   const share=()=>{
-    const txt=quoteText(quote,settings);
+    const txt=quoteText(quote,settings,settings?.quote_language);
     const title=`Quote ${quote.quote_id} — ${quote.client_name||""}`.trim();
     if(navigator.share){navigator.share({title,text:txt}).catch(()=>{});}
     else{navigator.clipboard?.writeText(txt);setCopied(true);setTimeout(()=>setCopied(false),2000);}
@@ -1557,7 +1567,7 @@ function QuoteDetail({bp,quote,allQuotes,settings,clients,onBack,onEdit,onDuplic
   const downloadPDF=async()=>{
     setDownloadingPDF(true);
     try {
-      await generateQuotePDF(quote, settings, calc, time);
+      await generateQuotePDF(quote, settings, calc, time, settings?.quote_language);
       track("pdf_downloaded");
       setDownloadingPDF('done');
       setTimeout(()=>setDownloadingPDF(false),3000);
@@ -2465,7 +2475,7 @@ function QuoteFlow({bp,step,setStep,flow,setFlow,errors,setErrors,settings,clien
         catch(e){ alert(dbErrorMessage(e)); return; }
       }
       const preview={...rec,quote_id:rec.existingId,created_at:new Date().toISOString()};
-      const txt=quoteText(preview,settings);
+      const txt=quoteText(preview,settings,settings?.quote_language);
       if(navigator.share){try{await navigator.share({text:txt});}catch(_){}onSave(rec,cli,status);}
       else setSharePay({txt,rec,cli});
     } else onSave(rec,cli,status);
