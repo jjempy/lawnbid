@@ -13,6 +13,22 @@
 // ALTER TABLE quotes   ADD COLUMN IF NOT EXISTS visit_count integer DEFAULT 0;
 // ALTER TABLE quotes   ADD COLUMN IF NOT EXISTS est_minutes integer;
 // ALTER TABLE quotes   ADD COLUMN IF NOT EXISTS revision_number integer DEFAULT 0;
+// ALTER TABLE quotes   ADD COLUMN IF NOT EXISTS addons jsonb DEFAULT '[]';
+// ALTER TABLE settings ADD COLUMN IF NOT EXISTS quote_language text DEFAULT 'en';
+// ALTER TABLE market_data ADD COLUMN IF NOT EXISTS addon_count integer DEFAULT 0;
+// ALTER TABLE market_data ADD COLUMN IF NOT EXISTS addon_total decimal DEFAULT 0;
+// ALTER TABLE market_data ADD COLUMN IF NOT EXISTS addon_names text;
+//
+// CREATE TABLE IF NOT EXISTS addons (
+//   id bigserial PRIMARY KEY,
+//   user_id uuid NOT NULL,
+//   name text NOT NULL,
+//   default_price decimal NOT NULL,
+//   created_at timestamptz DEFAULT NOW()
+// );
+// CREATE INDEX IF NOT EXISTS addons_user_id_idx ON addons(user_id);
+// ALTER TABLE addons ENABLE ROW LEVEL SECURITY;
+// CREATE POLICY "Users can manage own addons" ON addons FOR ALL USING (auth.uid() = user_id);
 // -- Backfill est_minutes for existing quotes using the formula:
 // --   wall = (crew_size >= 2) ? GREATEST(area_sqft/20000, linear_ft/3000)
 // --                           : (area_sqft/20000 + linear_ft/3000)
@@ -113,7 +129,7 @@ const QUOTE_COLUMNS = [
   'attachments', 'parent_id', 'declined_reason', 'is_recurring',
   'recurring_frequency', 'last_completed_at', 'next_due_at',
   'visit_count', 'map_polygons', 'est_minutes', 'revision_number',
-  'created_at', 'updated_at'
+  'addons', 'created_at', 'updated_at'
 ]
 
 export async function upsertQuote(quote) {
@@ -225,7 +241,7 @@ export async function loadSettings() {
 const SETTINGS_COLUMNS = [
   'mow_rate','trim_rate','equipment_cost','hourly_rate','minimum_bid',
   'complexity_default','risk_default','profit_margin','quote_validity_days',
-  'follow_up_days','follow_up_enabled','language',
+  'follow_up_days','follow_up_enabled','language','quote_language',
   'company_name','company_phone','company_email','company_logo_base64',
   'plan','plan_cancelled','plan_expires_at',
   'quote_count_this_month','quote_count_reset_at',
@@ -385,6 +401,11 @@ export async function recordMarketData(quote, outcome = 'sent') {
       declined_reason: quote.declined_reason || null,
       quote_month: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`,
       season,
+      addon_count: (quote.addons?.length) || 0,
+      addon_total: Math.round(((quote.addons || []).reduce((s, a) => s + Number(a.price || 0), 0)) * 100) / 100,
+      addon_names: (quote.addons?.length)
+        ? quote.addons.map(a => (a.name || '').toLowerCase().trim()).filter(Boolean).join(', ')
+        : null,
     }
 
     if (import.meta.env.DEV) console.log('[LawnBid Data] Recording market data:', payload)
@@ -396,4 +417,45 @@ export async function recordMarketData(quote, outcome = 'sent') {
   } catch (e) {
     console.log('[LawnBid Data] Collection skipped:', e.message)
   }
+}
+
+// ─── Add-on services library ──────────────────────────────────────────────────
+export async function fetchAddons(userId) {
+  const uid = userId || await currentUserId()
+  if (!uid) return []
+  const { data, error } = await supabase
+    .from('addons')
+    .select('*')
+    .eq('user_id', uid)
+    .order('created_at', { ascending: true })
+  if (error) { console.error('[LawnBid] fetchAddons error:', error); return [] }
+  return data || []
+}
+
+export async function createAddon(userId, name, defaultPrice) {
+  const uid = userId || await currentUserId()
+  if (!uid) throw new Error('Not authenticated')
+  const { data, error } = await supabase
+    .from('addons')
+    .insert({ user_id: uid, name, default_price: defaultPrice })
+    .select()
+    .single()
+  if (error) { console.error('[LawnBid] createAddon error:', error); throw error }
+  return data
+}
+
+export async function updateAddon(id, name, defaultPrice) {
+  const { error } = await supabase
+    .from('addons')
+    .update({ name, default_price: defaultPrice })
+    .eq('id', id)
+  if (error) { console.error('[LawnBid] updateAddon error:', error); throw error }
+}
+
+export async function deleteAddon(id) {
+  const { error } = await supabase
+    .from('addons')
+    .delete()
+    .eq('id', id)
+  if (error) { console.error('[LawnBid] deleteAddon error:', error); throw error }
 }

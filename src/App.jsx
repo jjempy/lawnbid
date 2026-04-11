@@ -9,6 +9,7 @@ import supabase, {
   countRecentQuotes, updateQuotesForClient, refreshAttachmentUrls,
   initializeUserSettings,
   recordMarketData,
+  fetchAddons, createAddon, updateAddon, deleteAddon,
 } from "./supabase.js";
 
 // ─── Stripe checkout ────────────────────────────────────────────────────────────
@@ -74,7 +75,7 @@ const DEFAULT_SETTINGS = {
   minimum_bid: 55, complexity_default: 1.0, risk_default: 1.0,
   profit_margin: 0.30,
   quote_validity_days: 30,
-  follow_up_days: 3, follow_up_enabled: true, language: "en",
+  follow_up_days: 3, follow_up_enabled: true, language: "en", quote_language: "en",
   company_name: "", company_phone: "", company_email: "", company_logo_base64: "",
   plan: "free", quote_count_this_month: 0, quote_count_reset_at: new Date().toISOString(),
 };
@@ -327,6 +328,10 @@ async function generateQuotePDF(quote, settings, calc, time) {
   // Pre-discount = final / (1 - disc/100) to reverse the discount for display
   const preDiscountPrice = hasDiscount ? finalPrice / (1 - quote.discount_pct / 100) : finalPrice;
   const discountAmt = hasDiscount ? preDiscountPrice - finalPrice : 0;
+  // Parse add-ons (jsonb may come as array or string)
+  const pdfAddons = Array.isArray(quote.addons) ? quote.addons : (quote.addons ? (()=>{try{return JSON.parse(quote.addons)}catch{return[]}})() : []);
+  const addonTotalPdf = pdfAddons.reduce((s,a)=>s+Number(a.price||0),0);
+  const grandTotalPdf = Number(finalPrice) + addonTotalPdf;
   doc.setFont("helvetica","normal"); doc.setFontSize(10); doc.setTextColor(...DARK);
   doc.text("Lawn Service", M, y);
   doc.text($$(hasDiscount ? preDiscountPrice : finalPrice), W - M, y, { align: "right" });
@@ -337,13 +342,22 @@ async function generateQuotePDF(quote, settings, calc, time) {
     doc.text(`-${$$(discountAmt)}`, W - M, y, { align: "right" });
     y += 18;
   }
+  // Add-on line items
+  if (pdfAddons.length > 0) {
+    doc.setFont("helvetica","normal"); doc.setFontSize(10); doc.setTextColor(...DARK);
+    pdfAddons.forEach(a => {
+      doc.text(String(a.name||""), M, y);
+      doc.text($$(a.price), W - M, y, { align: "right" });
+      y += 16;
+    });
+  }
 
   y += 6;
   doc.setDrawColor(...DARK); doc.setLineWidth(1.2); doc.line(M, y, W - M, y); y += 26;
   doc.setFont("helvetica","bold"); doc.setFontSize(14); doc.setTextColor(...DARK);
   doc.text("TOTAL", M, y);
   doc.setFontSize(22); doc.setTextColor(...PRIMARY);
-  doc.text($$(quote.final_price), W - M, y + 2, { align: "right" });
+  doc.text($$(grandTotalPdf), W - M, y + 2, { align: "right" });
   y += 36;
 
   // ── Notes ──
@@ -377,6 +391,9 @@ async function generateQuotePDF(quote, settings, calc, time) {
 }
 
 function quoteText(q, s) {
+  const txtAddons = Array.isArray(q.addons) ? q.addons : (q.addons ? (()=>{try{return JSON.parse(q.addons)}catch{return[]}})() : []);
+  const txtAddonTotal = txtAddons.reduce((sum,a)=>sum+Number(a.price||0),0);
+  const txtGrandTotal = Number(q.final_price||0) + txtAddonTotal;
   return [
     q.is_recurring ? "LAWN SERVICE AGREEMENT" : "LAWN CARE QUOTE",
     s.company_name ? `${s.company_name}${s.company_phone?" | "+formatPhone(s.company_phone):""}` : "",
@@ -393,7 +410,10 @@ function quoteText(q, s) {
     `Area: ${fmtArea(q.area_sqft)}`,
     `Perimeter: ${Math.round(q.linear_ft).toLocaleString()} linear ft`,
     "",
-    `TOTAL: ${$$(q.final_price)}`,
+    txtAddons.length > 0 ? `Lawn Service: ${$$(q.final_price)}` : "",
+    ...txtAddons.map(a => `${a.name}: ${$$(a.price)}`),
+    txtAddons.length > 0 ? "" : "",
+    `TOTAL: ${$$(txtGrandTotal)}`,
     "",
     s.company_phone ? `To accept, reply or call ${formatPhone(s.company_phone)}.` : "To accept, please reply.",
   ].filter(Boolean).join("\n");
@@ -433,6 +453,7 @@ export default function LawnBid() {
   const [dbErr,    setDbErr]    = useState(null);
   const [quotes,   setQuotes]   = useState([]);
   const [clients,  setClients]  = useState([]);
+  const [addonLibrary, setAddonLibrary] = useState([]);
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
   const [tab,      setTab]      = useState("quotes");
   const [screen,   setScreen]   = useState("home");
@@ -542,9 +563,10 @@ export default function LawnBid() {
     if (!session) { setReady(false); setQuotes([]); setClients([]); const cl=(()=>{try{return localStorage.getItem("lb_language")||"en";}catch{return"en";}})(); setSettings({...DEFAULT_SETTINGS,language:cl}); setLang(cl); setQuotesUsedLive(0); return; }
     (async () => {
       try {
-        const [q, c, s, qCount] = await Promise.all([loadQuotes(), loadClients(), loadSettings(), countRecentQuotes(30)]);
+        const [q, c, s, qCount, addonsList] = await Promise.all([loadQuotes(), loadClients(), loadSettings(), countRecentQuotes(30), fetchAddons()]);
         setQuotes(q);
         setClients(c);
+        setAddonLibrary(addonsList);
         if (s) setSettings(prev => ({ ...prev, ...s }));
         if (s?.language) try { localStorage.setItem("lb_language", s.language); } catch {}
         setQuotesUsedLive(qCount);
@@ -593,6 +615,10 @@ export default function LawnBid() {
     })();
   }, [session]);
 
+  const reloadAddonLibrary = useCallback(async () => {
+    try { const list = await fetchAddons(); setAddonLibrary(list); } catch (e) { console.error("[LawnBid] addon reload failed:", e); }
+  }, []);
+
   const goHome = useCallback(() => { setScreen("home"); setFlow(null); setErrors({}); }, []);
 
   const startNew = useCallback(() => {
@@ -608,6 +634,7 @@ export default function LawnBid() {
       crew:1, cx:settings.complexity_default, risk:settings.risk_default,
       disc:0, customDisc:"", override:null, notes:"", saveClient:true,
       attachments:[], map_polygons:[], is_recurring:false, recurring_frequency:"",
+      addons:[],
     });
     setStep(1); setErrors({}); setScreen("flow");
   }, [settings]);
@@ -629,6 +656,7 @@ export default function LawnBid() {
       attachments:Array.isArray(q.attachments)?q.attachments:[],
       map_polygons:Array.isArray(q.map_polygons)?q.map_polygons:[],
       is_recurring:!!q.is_recurring, recurring_frequency:q.recurring_frequency||"",
+      addons:(Array.isArray(q.addons)?q.addons:(q.addons?(()=>{try{return JSON.parse(q.addons)}catch{return[]}})():[])).map(a=>({id:uid(),name:a.name||"",price:Number(a.price)||0,savedToLibrary:true})),
     });
     setStep(2); setErrors({}); setScreen("flow");
   }, []);
@@ -700,7 +728,18 @@ export default function LawnBid() {
         sent_at:     status === "sent" ? now : (rec.sentAt || null),
         expiry_date: rec.isNew ? addDays(now, settingsRef.current.quote_validity_days || 30) : undefined,
         est_minutes: (() => { const _t = calcTime(rec.area_sqft, rec.linear_ft, rec.crew_size, rec.complexity); return _t ? Math.round(_t.adj * 60) : null; })(),
+        addons: (rec.addons || []).filter(a => a.name && Number(a.price) > 0).map(a => ({ name: a.name, price: Number(a.price) })),
       };
+      // Pro/Team only: silently save new add-ons to the user's library
+      const planKey = (settingsRef.current?.plan || "free");
+      if (planKey === "pro" || planKey === "team") {
+        for (const a of (rec.addons || [])) {
+          if (!a.savedToLibrary && a.name && Number(a.price) > 0) {
+            try { await createAddon(null, a.name, Number(a.price)); } catch (e) { console.error("[LawnBid] addon save failed:", e); }
+          }
+        }
+        reloadAddonLibrary();
+      }
 
       // Remove undefined fields
       Object.keys(record).forEach(k => record[k] === undefined && delete record[k]);
@@ -795,7 +834,7 @@ export default function LawnBid() {
   const screenContent = screen==="flow" ? (
     <QuoteFlow bp={bp} step={step} setStep={setStep} flow={flow} setFlow={setFlow}
       errors={errors} setErrors={setErrors} settings={settings}
-      clients={clients} quotes={quotes} onSave={handleSave} onCancel={goHome} saving={saving}/>
+      clients={clients} quotes={quotes} addonLibrary={addonLibrary} onSave={handleSave} onCancel={goHome} saving={saving}/>
   ):screen==="quote-detail"&&activeQ ? (
     <QuoteDetail bp={bp} quote={activeQ} allQuotes={quotes} settings={settings} clients={clients}
       onBack={()=>setScreen(selC&&tab==="clients"?"client-detail":"home")}
@@ -877,7 +916,7 @@ export default function LawnBid() {
   ):tab==="business" ? (
     <BusinessScreen bp={bp} quotes={quotes} settings={settings} clients={clients}/>
   ):(
-    <SettingsScreen bp={bp} settings={settings} onSave={handleSaveSettings} onLogout={()=>supabase.auth.signOut()} onLangChange={setLang}/>
+    <SettingsScreen bp={bp} settings={settings} onSave={handleSaveSettings} onLogout={()=>supabase.auth.signOut()} onLangChange={setLang} addonLibrary={addonLibrary} reloadAddonLibrary={reloadAddonLibrary}/>
   );
 
   const dbBanner = dbErr && (
@@ -1475,6 +1514,9 @@ function QuoteDetail({bp,quote,allQuotes,settings,clients,onBack,onEdit,onDuplic
   },[quote.quote_id]);
   const attachments=freshAttachments;
   const imageAtts=attachments.filter(a=>a.type?.startsWith("image/"));
+  const detailAddons = Array.isArray(quote.addons)?quote.addons:(quote.addons?(()=>{try{return JSON.parse(quote.addons)}catch{return[]}})():[]);
+  const detailAddonTotal = detailAddons.reduce((s,a)=>s+Number(a.price||0),0);
+  const detailGrandTotal = Number(quote.final_price||0) + detailAddonTotal;
   const snap={...settings,mow_rate:quote.mow_rate_used||settings.mow_rate,trim_rate:quote.trim_rate_used||settings.trim_rate,equipment_cost:quote.equipment_cost_used||settings.equipment_cost};
   const calc=calcQ(quote.area_sqft,quote.linear_ft,quote.complexity,quote.risk,quote.discount_pct||0,snap);
   const time=calcTime(quote.area_sqft,quote.linear_ft,quote.crew_size,quote.complexity);
@@ -1500,7 +1542,7 @@ function QuoteDetail({bp,quote,allQuotes,settings,clients,onBack,onEdit,onDuplic
 
   const heroCard = (
     <Card style={{background:"#0f172a",textAlign:"center",padding:"28px 24px",boxShadow:"0 4px 16px rgba(15,23,42,.12)"}}>
-      <div style={{fontSize:"var(--price-hero)",fontWeight:900,color:"#ffffff",letterSpacing:-2,lineHeight:1}}>{$$(quote.final_price)}</div>
+      <div style={{fontSize:"var(--price-hero)",fontWeight:900,color:"#ffffff",letterSpacing:-2,lineHeight:1}}>{$$(detailGrandTotal)}</div>
       <div style={{fontSize:12,color:"#94a3b8",marginTop:8,fontWeight:500,textTransform:"uppercase",letterSpacing:1}}>{t("service_line",lang)}</div>
       {time&&<div style={{fontSize:13,color:"#4ade80",marginTop:8,fontWeight:700}}>Est. {fmtT(time.adj)}</div>}
       <div style={{marginTop:10,fontSize:11,color:"#64748b",fontWeight:500}}>{t("sent_date",lang)}: {quote.sent_at?fmtTS(quote.sent_at):t("not_yet_sent",lang)}</div>
@@ -1539,7 +1581,17 @@ function QuoteDetail({bp,quote,allQuotes,settings,clients,onBack,onEdit,onDuplic
           <div style={{fontSize:13,fontWeight:600}}>{r.modifier&&r.value>0?"+":""}{$$(r.value)}</div>
         </div>
       ))}
-      <div style={{display:"flex",justifyContent:"space-between",marginTop:10,fontSize:18,fontWeight:900,color:"#16a34a"}}><span>{t("final_bid",lang)}</span><span>{$$(quote.final_price)}</span></div>
+      <div style={{display:"flex",justifyContent:"space-between",marginTop:10,fontSize:detailAddons.length>0?15:18,fontWeight:detailAddons.length>0?700:900,color:detailAddons.length>0?"#334155":"#16a34a"}}><span>{t("lawn_service_line",lang)}</span><span>{$$(quote.final_price)}</span></div>
+      {detailAddons.length>0 && (
+        <div style={{marginTop:8,paddingTop:8,borderTop:"1px solid #e2e8f0"}}>
+          {detailAddons.map((a,i)=>(
+            <div key={i} style={{display:"flex",justifyContent:"space-between",padding:"5px 0",fontSize:13,color:"#334155"}}>
+              <span>{a.name}</span><span style={{fontWeight:600}}>{$$(a.price)}</span>
+            </div>
+          ))}
+          <div style={{display:"flex",justifyContent:"space-between",marginTop:8,paddingTop:8,borderTop:"1.5px solid #e2e8f0",fontSize:18,fontWeight:900,color:"#16a34a"}}><span>{t("final_total",lang)}</span><span>{$$(detailGrandTotal)}</span></div>
+        </div>
+      )}
       {quote.mow_rate_used&&<div style={{marginTop:10,padding:"8px 10px",background:"#f8fafc",borderRadius:8,fontSize:11,color:"#64748b"}}>{t("rates_at_time",lang)}: mow ${quote.mow_rate_used}/20k · trim ${quote.trim_rate_used}/3k · equip ${quote.equipment_cost_used}/hr</div>}
     </Card>
   );
@@ -1760,7 +1812,7 @@ function PlanBadge(){
   );
 }
 
-function SettingsScreen({bp,settings,onSave,onLogout,onLangChange}){
+function SettingsScreen({bp,settings,onSave,onLogout,onLangChange,addonLibrary,reloadAddonLibrary}){
   const lang = useLang();
   const [userEmail,setUserEmail]=useState("");
   useEffect(()=>{supabase.auth.getUser().then(({data})=>{if(data?.user?.email)setUserEmail(data.user.email);});},[]);
@@ -1768,6 +1820,14 @@ function SettingsScreen({bp,settings,onSave,onLogout,onLangChange}){
   const [tip,setTip]=useState(null);
   const [saved,setSaved]=useState(false);
   const [autoSaveErr,setAutoSaveErr]=useState("");
+  const [editingAddonId,setEditingAddonId]=useState(null);
+  const [editAddonName,setEditAddonName]=useState("");
+  const [editAddonPrice,setEditAddonPrice]=useState("");
+  const [confirmDeleteAddonId,setConfirmDeleteAddonId]=useState(null);
+  const [showNewAddon,setShowNewAddon]=useState(false);
+  const [newAddonName,setNewAddonName]=useState("");
+  const [newAddonPrice,setNewAddonPrice]=useState("");
+  const isProPlan = (settings?.plan === "pro" || settings?.plan === "team");
   const set=(k,v)=>setLoc(s=>({...s,[k]:v}));
   // Auto-save with 1.5s debounce — "set it and forget it"
   const isFirstRender = useRef(true);
@@ -1923,12 +1983,103 @@ function SettingsScreen({bp,settings,onSave,onLogout,onLangChange}){
         ))}
         <div style={{marginTop:14,paddingTop:14,borderTop:"1px solid #e2e8f0"}}>
           <div style={{fontSize:13,fontWeight:600,color:"#334155",marginBottom:8}}>{t("language",lang)}</div>
-          <div style={{display:"flex",gap:6}}>
-            <Chip label="🇺🇸 English" active={loc.language!=="es"} onClick={()=>{set("language","en");try{localStorage.setItem("lb_language","en");}catch{} if(onLangChange)onLangChange("en");}}/>
-            <Chip label="🇲🇽 Español" active={loc.language==="es"} onClick={()=>{set("language","es");try{localStorage.setItem("lb_language","es");}catch{} if(onLangChange)onLangChange("es");}}/>
+          <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
+            <div style={{width:60,fontSize:12,color:"#64748b",fontWeight:600}}>{t("app_language_label",lang)}</div>
+            <div style={{display:"flex",gap:6}}>
+              <Chip label="🇺🇸 English" active={loc.language!=="es"} onClick={()=>{set("language","en");try{localStorage.setItem("lb_language","en");}catch{} if(onLangChange)onLangChange("en");}}/>
+              <Chip label="🇲🇽 Español" active={loc.language==="es"} onClick={()=>{set("language","es");try{localStorage.setItem("lb_language","es");}catch{} if(onLangChange)onLangChange("es");}}/>
+            </div>
+          </div>
+          <div style={{display:"flex",alignItems:"center",gap:10}}>
+            <div style={{width:60,fontSize:12,color:"#64748b",fontWeight:600}}>{t("quote_language_label",lang)}</div>
+            <div style={{display:"flex",gap:6}}>
+              <Chip label="🇺🇸 English" active={(loc.quote_language||"en")!=="es"} onClick={()=>set("quote_language","en")}/>
+              <Chip label="🇲🇽 Español" active={(loc.quote_language||"en")==="es"} onClick={()=>set("quote_language","es")}/>
+            </div>
           </div>
         </div>
       </Card>
+  );
+  const startEditAddon = (a) => { setEditingAddonId(a.id); setEditAddonName(a.name); setEditAddonPrice(String(a.default_price)); };
+  const saveEditAddon = async () => {
+    if (!editAddonName.trim() || !(Number(editAddonPrice)>0)) return;
+    try { await updateAddon(editingAddonId, editAddonName.trim(), Number(editAddonPrice)); await reloadAddonLibrary(); }
+    catch(e) { console.error("[LawnBid] addon update failed:",e); }
+    setEditingAddonId(null);
+  };
+  const removeAddonFromLib = async (id) => {
+    try { await deleteAddon(id); await reloadAddonLibrary(); } catch(e) { console.error(e); }
+    setConfirmDeleteAddonId(null);
+  };
+  const createNewAddon = async () => {
+    if (!newAddonName.trim() || !(Number(newAddonPrice)>0)) return;
+    try { await createAddon(null, newAddonName.trim(), Number(newAddonPrice)); await reloadAddonLibrary(); }
+    catch(e) { console.error("[LawnBid] addon create failed:",e); }
+    setNewAddonName(""); setNewAddonPrice(""); setShowNewAddon(false);
+  };
+  const addonsCard = (
+    <Card>
+      <Lbl>{t("addon_services",lang)}</Lbl>
+      {!isProPlan ? (
+        <div style={{padding:"16px 12px",borderRadius:10,background:"#f0fdf4",border:"1px solid #bbf7d0",textAlign:"center"}}>
+          <div style={{fontSize:13,fontWeight:600,color:"#166534",marginBottom:6}}>{t("addon_pro_locked",lang)}</div>
+          <button type="button" onClick={()=>redirectToStripeCheckout(import.meta.env.VITE_STRIPE_PRO_PRICE_ID)} style={{background:"#15803d",color:"#fff",border:"none",padding:"8px 16px",borderRadius:8,fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>{t("upgrade_to_pro",lang)}</button>
+        </div>
+      ) : (
+        <>
+          <div style={{fontSize:12,color:"#64748b",marginBottom:10}}>{t("addon_manage_subtitle",lang)}</div>
+          {(addonLibrary||[]).length === 0 ? (
+            <div style={{padding:"16px",textAlign:"center",fontSize:13,color:"#94a3b8",border:"1px solid #e2e8f0",borderRadius:8,marginBottom:10}}>{t("addon_empty",lang)}</div>
+          ) : (
+            <div style={{maxHeight:180,overflowY:"auto",WebkitOverflowScrolling:"touch",border:"1px solid #e2e8f0",borderRadius:8,marginBottom:10}}>
+              {addonLibrary.map(a => (
+                <div key={a.id} style={{padding:"10px 12px",borderBottom:"1px solid #f1f5f9"}}>
+                  {editingAddonId===a.id ? (
+                    <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                      <Inp value={editAddonName} onChange={e=>setEditAddonName(e.target.value)} style={{flex:1,height:36,fontSize:13}}/>
+                      <Inp type="number" value={editAddonPrice} onChange={e=>setEditAddonPrice(e.target.value)} style={{width:80,height:36,fontSize:13,textAlign:"right"}}/>
+                      <button type="button" onClick={saveEditAddon} style={{height:36,padding:"0 10px",borderRadius:8,border:"none",background:"#15803d",color:"#fff",fontWeight:700,fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>{t("save",lang)}</button>
+                      <button type="button" onClick={()=>setEditingAddonId(null)} style={{height:36,padding:"0 10px",borderRadius:8,border:"1px solid #e2e8f0",background:"#fff",color:"#64748b",fontWeight:600,fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>{t("cancel",lang)}</button>
+                    </div>
+                  ) : confirmDeleteAddonId===a.id ? (
+                    <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                      <span style={{flex:1,fontSize:12,color:"#dc2626",fontWeight:500,minWidth:0}}>{t("addon_remove_confirm",lang)}</span>
+                      <button type="button" onClick={()=>setConfirmDeleteAddonId(null)} style={{height:32,padding:"0 10px",borderRadius:6,border:"1px solid #e2e8f0",background:"#fff",color:"#64748b",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>{t("cancel",lang)}</button>
+                      <button type="button" onClick={()=>removeAddonFromLib(a.id)} style={{height:32,padding:"0 10px",borderRadius:6,border:"none",background:"#dc2626",color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{t("addon_remove_btn",lang)}</button>
+                    </div>
+                  ) : (
+                    <div style={{display:"flex",alignItems:"center",gap:8}}>
+                      <div style={{flex:1,minWidth:0,fontSize:14,fontWeight:600,color:"#0f172a",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{a.name}</div>
+                      <div style={{fontSize:14,fontWeight:700,color:"#15803d"}}>{$$(a.default_price)}</div>
+                      <button type="button" onClick={()=>startEditAddon(a)} aria-label="Edit" style={{width:30,height:30,borderRadius:6,border:"none",background:"transparent",color:"#64748b",fontSize:14,cursor:"pointer",fontFamily:"inherit"}}>✎</button>
+                      <button type="button" onClick={()=>setConfirmDeleteAddonId(a.id)} aria-label="Delete" style={{width:30,height:30,borderRadius:6,border:"none",background:"transparent",color:"#dc2626",fontSize:14,cursor:"pointer",fontFamily:"inherit"}}>🗑</button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+          {showNewAddon ? (
+            <div style={{padding:"10px",border:"1.5px solid #15803d",borderRadius:8}}>
+              <div style={{marginBottom:8}}>
+                <div style={{fontSize:11,fontWeight:600,color:"#334155",marginBottom:4}}>{t("addon_name_label",lang)}</div>
+                <Inp value={newAddonName} onChange={e=>setNewAddonName(e.target.value)} placeholder={t("addon_name_label",lang)} autoFocus/>
+              </div>
+              <div style={{marginBottom:10}}>
+                <div style={{fontSize:11,fontWeight:600,color:"#334155",marginBottom:4}}>{t("addon_price_label",lang)}</div>
+                <Inp type="number" value={newAddonPrice} onChange={e=>setNewAddonPrice(e.target.value)} placeholder="$"/>
+              </div>
+              <div style={{display:"flex",gap:8}}>
+                <Btn onClick={createNewAddon} disabled={!newAddonName.trim()||!(Number(newAddonPrice)>0)} style={{flex:1,height:40,minHeight:40,fontSize:13}}>{t("save",lang)}</Btn>
+                <Btn variant="secondary" onClick={()=>{setShowNewAddon(false);setNewAddonName("");setNewAddonPrice("");}} style={{flex:1,height:40,minHeight:40,fontSize:13}}>{t("cancel",lang)}</Btn>
+              </div>
+            </div>
+          ) : (
+            <button type="button" onClick={()=>setShowNewAddon(true)} style={{width:"100%",padding:"10px",borderRadius:10,border:"1.5px dashed #cbd5e1",background:"transparent",color:"#15803d",fontSize:14,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>{t("addon_add_new_btn",lang)}</button>
+          )}
+        </>
+      )}
+    </Card>
   );
   const footer = (
     <>
@@ -1949,7 +2100,7 @@ function SettingsScreen({bp,settings,onSave,onLogout,onLangChange}){
           <button onClick={reset} style={{background:"none",border:"none",color:"#dc2626",fontSize:13,fontWeight:700,cursor:"pointer",padding:"8px 12px",minHeight:36}}>{"↺ "+t("reset_defaults",lang)}</button>
         </div>
         <div style={{display:"grid",gridTemplateColumns:"minmax(0,1fr) minmax(0,1fr)",gap:24,marginBottom:16}}>
-          <div style={{minWidth:0}}>{formulaCard}</div>
+          <div style={{minWidth:0}}>{formulaCard}{addonsCard}</div>
           <div style={{minWidth:0}}>{businessCard}</div>
         </div>
         <div style={{maxWidth:480,marginLeft:"auto",marginRight:"auto"}}>{footer}</div>
@@ -1965,6 +2116,7 @@ function SettingsScreen({bp,settings,onSave,onLogout,onLangChange}){
         <button onClick={reset} style={{background:"none",border:"none",color:"#dc2626",fontSize:13,fontWeight:700,cursor:"pointer",minHeight:36,padding:"6px 0"}}>{"↺ "+t("reset_defaults",lang)}</button>
       </div>
       {formulaCard}
+      {addonsCard}
       {businessCard}
       {footer}
     </div>
@@ -2238,7 +2390,7 @@ function ResetPasswordScreen({onDone}){
 }
 
 // ─── Quote Flow ────────────────────────────────────────────────────────────────
-function QuoteFlow({bp,step,setStep,flow,setFlow,errors,setErrors,settings,clients,quotes,onSave,onCancel,saving}){
+function QuoteFlow({bp,step,setStep,flow,setFlow,errors,setErrors,settings,clients,quotes,addonLibrary,onSave,onCancel,saving}){
   const lang = useLang();
   const isDesktop = bp==="desktop";
   const [sharePay,setSharePay]=useState(null);
@@ -2272,6 +2424,7 @@ function QuoteFlow({bp,step,setStep,flow,setFlow,errors,setErrors,settings,clien
     clientId:flow.clientId, client_name:flow.clientName, client_phone:flow.clientPhone, client_email:flow.clientEmail,
     notes:flow.notes, attachments:flow.attachments||[], map_polygons:flow.map_polygons||[],
     is_recurring:!!flow.is_recurring, recurring_frequency:flow.recurring_frequency||null,
+    addons:flow.addons||[],
     saveClient:flow.saveClient, sentAt:flow.sentAt||null,
   });
   const buildCli=()=>flow.saveClient?{name:flow.clientName,phone:flow.clientPhone,email:flow.clientEmail,default_address:flow.address,last_area_sqft:area,last_linear_ft:perim}:null;
@@ -2335,7 +2488,7 @@ function QuoteFlow({bp,step,setStep,flow,setFlow,errors,setErrors,settings,clien
       <div style={{padding:isDesktop?0:16}}>
         {step===1&&<S1 flow={flow} set={set} errors={errors} clients={clients}/>}
         {step===2&&<S2 bp={bp} flow={flow} set={set} errors={errors} area={area} perim={perim} onAdvance={()=>setStep(3)}/>}
-        {step===3&&<S3 bp={bp} flow={flow} set={set} area={area} perim={perim} calc={calc} time={time} settings={settings}/>}
+        {step===3&&<S3 bp={bp} flow={flow} setFlow={setFlow} set={set} area={area} perim={perim} calc={calc} time={time} settings={settings} addonLibrary={addonLibrary}/>}
         {step===4&&<S4 bp={bp} flow={flow} set={set} setFlow={setFlow} area={area} perim={perim} calc={calc} time={time} onSend={handleSend} saving={saving}/>}
         {step<4&&<Btn onClick={next} style={{width:"100%",marginTop:8}}>{t("next_btn",lang)}</Btn>}
         {isDesktop&&step>1&&<Btn variant="secondary" onClick={()=>setStep(s=>s-1)} style={{width:"100%",marginTop:8}}>{t("back_btn",lang)}</Btn>}
@@ -2799,10 +2952,46 @@ function MapMeasure({bp,address,confirmed,setConfirmed,onConfirm,onSwitchManual,
   );
 }
 
-function S3({bp,flow,set,area,perim,calc,time,settings}){
+function S3({bp,flow,setFlow,set,area,perim,calc,time,settings,addonLibrary}){
   const lang = useLang();
+  const {plan} = usePlan();
+  const isPro = plan === "pro" || plan === "team";
   const [editing,setEditing]=useState(false);
+  const [addonSheetOpen,setAddonSheetOpen]=useState(false);
+  const [addonView,setAddonView]=useState("library"); // "library" | "create"
+  const [newAddonName,setNewAddonName]=useState("");
+  const [newAddonPrice,setNewAddonPrice]=useState("");
+  const [editingAddonId,setEditingAddonId]=useState(null);
+  const [editingAddonPrice,setEditingAddonPrice]=useState("");
   const isDesktop = bp==="desktop";
+  const flowAddons = flow.addons || [];
+  const addonTotal = flowAddons.reduce((s,a)=>s+(Number(a.price)||0),0);
+  const grandTotal = (calc?.disp||0) + addonTotal;
+
+  const addAddonRow = (name, price, savedToLibrary=false) => {
+    setFlow(f => ({...f, addons: [...(f.addons||[]), { id: uid(), name, price: Number(price)||0, savedToLibrary }]}));
+  };
+  const removeAddon = (id) => {
+    setFlow(f => ({...f, addons: (f.addons||[]).filter(a => a.id !== id)}));
+  };
+  const updateAddonPrice = (id, price) => {
+    setFlow(f => ({...f, addons: (f.addons||[]).map(a => a.id === id ? {...a, price: Number(price)||0} : a)}));
+  };
+  const openAddonPicker = () => {
+    setAddonView(isPro ? "library" : "create");
+    setNewAddonName(""); setNewAddonPrice("");
+    setAddonSheetOpen(true);
+  };
+  const handleCreateAddon = () => {
+    if (!newAddonName.trim() || !(Number(newAddonPrice) > 0)) return;
+    addAddonRow(newAddonName.trim(), newAddonPrice, false);
+    setNewAddonName(""); setNewAddonPrice("");
+    setAddonSheetOpen(false);
+  };
+  const handlePickFromLibrary = (libAddon) => {
+    addAddonRow(libAddon.name, libAddon.default_price, true);
+    setAddonSheetOpen(false);
+  };
   const leftCol = (<>
       <Card>
         <Lbl>{t("job_complexity",lang)}</Lbl>
@@ -2826,12 +3015,36 @@ function S3({bp,flow,set,area,perim,calc,time,settings}){
         <Card>
           <Lbl>{t("discount",lang)}</Lbl>
           <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
-            {[0,5,10,15,20].map(p=><Chip key={p} label={p===0?"None":`${p}%`} active={flow.disc===p&&!flow.customDisc} onClick={()=>{set("disc",p);set("customDisc","");}}/>)}
+            {[0,5,10,15,20].map(p=><Chip key={p} label={p===0?t("none",lang):`${p}%`} active={flow.disc===p&&!flow.customDisc} onClick={()=>{set("disc",p);set("customDisc","");}}/>)}
             <div style={{display:"flex",alignItems:"center",gap:4}}>
               <Inp type="number" min="0" max="100" placeholder="—" value={flow.customDisc} onChange={e=>{set("customDisc",e.target.value);set("disc",parseFloat(e.target.value)||0);}} style={{width:72,height:40,padding:"0 8px",fontSize:16,textAlign:"center",borderRadius:10}}/>
               <span style={{fontSize:13,color:"#64748b"}}>%</span>
             </div>
           </div>
+        </Card>
+        );
+        const addonsCard = (
+        <Card>
+          <Lbl>{t("addon_services",lang)}</Lbl>
+          {flowAddons.length>0 && (
+            <div style={{marginBottom:10}}>
+              {flowAddons.map(a => (
+                <div key={a.id} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 0",borderBottom:"1px solid #f1f5f9"}}>
+                  <div style={{flex:1,minWidth:0,fontSize:14,fontWeight:600,color:"#0f172a",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{a.name}</div>
+                  {editingAddonId===a.id ? (
+                    <input type="number" value={editingAddonPrice} onChange={e=>setEditingAddonPrice(e.target.value)} onBlur={()=>{updateAddonPrice(a.id,editingAddonPrice);setEditingAddonId(null);}} onKeyDown={e=>{if(e.key==='Enter'){updateAddonPrice(a.id,editingAddonPrice);setEditingAddonId(null);}}} autoFocus style={{width:80,height:32,padding:"0 8px",border:"1.5px solid #15803d",borderRadius:8,fontSize:14,textAlign:"right",fontFamily:"inherit"}}/>
+                  ) : (
+                    <button onClick={()=>{setEditingAddonId(a.id);setEditingAddonPrice(String(a.price));}} style={{background:"none",border:"none",fontSize:14,fontWeight:700,color:"#15803d",cursor:"pointer",fontFamily:"inherit",padding:"4px 6px"}}>{$$(a.price)}</button>
+                  )}
+                  <button onClick={()=>removeAddon(a.id)} aria-label="Remove" style={{width:28,height:28,borderRadius:6,border:"none",background:"transparent",color:"#94a3b8",fontSize:18,cursor:"pointer",fontFamily:"inherit",lineHeight:1}}>×</button>
+                </div>
+              ))}
+            </div>
+          )}
+          <button type="button" onClick={openAddonPicker} style={{width:"100%",padding:"10px",borderRadius:10,border:"1.5px dashed #cbd5e1",background:"transparent",color:"#15803d",fontSize:14,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>{t("addon_add",lang)}</button>
+          {!isPro && flowAddons.length>0 && (
+            <div style={{fontSize:11,color:"#15803d",marginTop:8,fontWeight:500,textAlign:"center"}}>{t("addon_pro_upsell",lang)}</div>
+          )}
         </Card>
         );
         const calcCard = calc && (
@@ -2856,7 +3069,17 @@ function S3({bp,flow,set,area,perim,calc,time,settings}){
                 <div style={{fontSize:13,fontWeight:600}}>{r.modifier&&r.value>0?"+":""}{$$(r.value)}</div>
               </div>
             ))}
-            <div style={{display:"flex",justifyContent:"space-between",marginTop:12,fontSize:16,fontWeight:900,color:"#4ade80",letterSpacing:.3}}><span>{t("final_bid",lang)}</span><span>{$$(calc.disp)}</span></div>
+            <div style={{display:"flex",justifyContent:"space-between",marginTop:12,fontSize:16,fontWeight:flowAddons.length>0?700:900,color:flowAddons.length>0?"#cbd5e1":"#4ade80",letterSpacing:.3}}><span>{t("lawn_service_line",lang)}</span><span>{$$(calc.disp)}</span></div>
+            {flowAddons.length>0 && (
+              <div style={{marginTop:10,paddingTop:10,borderTop:"1px solid #1e293b"}}>
+                {flowAddons.map(a => (
+                  <div key={a.id} style={{display:"flex",justifyContent:"space-between",padding:"4px 0",fontSize:13,color:"#cbd5e1"}}>
+                    <span>{a.name}</span><span style={{fontWeight:600}}>{$$(a.price)}</span>
+                  </div>
+                ))}
+                <div style={{display:"flex",justifyContent:"space-between",marginTop:10,paddingTop:10,borderTop:"1px solid #334155",fontSize:16,fontWeight:900,color:"#4ade80",letterSpacing:.3}}><span>{t("final_total",lang)}</span><span>{$$(grandTotal)}</span></div>
+              </div>
+            )}
           </div>
           {time&&(
             <div style={{borderTop:"1px solid #1e293b",paddingTop:14,marginTop:14}}>
@@ -2877,13 +3100,59 @@ function S3({bp,flow,set,area,perim,calc,time,settings}){
         if (isDesktop) {
           return (
             <div style={{display:"grid",gridTemplateColumns:"minmax(0,1fr) minmax(0,1fr)",gap:20,alignItems:"start"}}>
-              <div style={{minWidth:0}}>{leftCol}{discountCard}</div>
+              <div style={{minWidth:0}}>{leftCol}{discountCard}{addonsCard}</div>
               <div style={{minWidth:0,position:"sticky",top:80}}>{calcCard}</div>
             </div>
           );
         }
-        return (<>{leftCol}{discountCard}{calcCard}</>);
+        return (<>{leftCol}{discountCard}{addonsCard}{calcCard}</>);
       })()}
+      {addonSheetOpen && (
+        <div onClick={()=>setAddonSheetOpen(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.55)",zIndex:500,display:"flex",alignItems:"flex-end",justifyContent:"center"}}>
+          <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:"20px 20px 0 0",padding:"20px 20px calc(20px + env(safe-area-inset-bottom))",width:"100%",maxWidth:480,boxSizing:"border-box",boxShadow:"0 -8px 32px rgba(0,0,0,.2)"}}>
+            <div style={{width:40,height:4,borderRadius:2,background:"#e2e8f0",margin:"0 auto 14px"}}/>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
+              {isPro && addonView==="create" ? (
+                <button type="button" onClick={()=>setAddonView("library")} style={{background:"none",border:"none",color:"#15803d",fontSize:14,fontWeight:600,cursor:"pointer",fontFamily:"inherit",padding:0}}>‹ {t("back_btn",lang)}</button>
+              ) : <span/>}
+              <div style={{fontSize:15,fontWeight:700,color:"#0f172a"}}>{addonView==="create"?t("addon_new",lang):t("addon_your_services",lang)}</div>
+              <button type="button" onClick={()=>setAddonSheetOpen(false)} aria-label="Close" style={{width:32,height:32,borderRadius:"50%",border:"none",background:"transparent",color:"#94a3b8",fontSize:20,cursor:"pointer",fontFamily:"inherit"}}>×</button>
+            </div>
+            {isPro && addonView==="library" && (
+              <>
+                <div style={{maxHeight:200,overflowY:"auto",WebkitOverflowScrolling:"touch",border:"1px solid #e2e8f0",borderRadius:10,marginBottom:10}}>
+                  {addonLibrary.length===0 ? (
+                    <div style={{padding:"24px 16px",textAlign:"center",fontSize:13,color:"#94a3b8"}}>{t("addon_empty",lang)}</div>
+                  ) : addonLibrary.map(a => (
+                    <button key={a.id} type="button" onClick={()=>handlePickFromLibrary(a)} style={{width:"100%",display:"flex",alignItems:"center",gap:10,padding:"12px 14px",borderBottom:"1px solid #f1f5f9",background:"#fff",border:"none",cursor:"pointer",fontFamily:"inherit",textAlign:"left"}}>
+                      <span style={{flex:1,fontSize:14,fontWeight:600,color:"#0f172a"}}>{a.name}</span>
+                      <span style={{fontSize:14,fontWeight:700,color:"#15803d"}}>{$$(a.default_price)}</span>
+                      <span style={{width:24,height:24,borderRadius:"50%",background:"#15803d",color:"#fff",display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:16,fontWeight:700}}>+</span>
+                    </button>
+                  ))}
+                </div>
+                <button type="button" onClick={()=>setAddonView("create")} style={{width:"100%",padding:"12px",borderRadius:10,border:"1.5px dashed #cbd5e1",background:"transparent",color:"#15803d",fontSize:14,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>{t("addon_new",lang)}</button>
+              </>
+            )}
+            {(addonView==="create" || !isPro) && (
+              <div>
+                <div style={{marginBottom:10}}>
+                  <div style={{fontSize:12,fontWeight:600,color:"#334155",marginBottom:4}}>{t("addon_name_label",lang)}</div>
+                  <Inp value={newAddonName} onChange={e=>setNewAddonName(e.target.value)} placeholder={t("addon_name_label",lang)} autoFocus/>
+                </div>
+                <div style={{marginBottom:14}}>
+                  <div style={{fontSize:12,fontWeight:600,color:"#334155",marginBottom:4}}>{t("addon_price_label",lang)}</div>
+                  <Inp type="number" min="0" value={newAddonPrice} onChange={e=>setNewAddonPrice(e.target.value)} placeholder="$"/>
+                </div>
+                <Btn onClick={handleCreateAddon} disabled={!newAddonName.trim() || !(Number(newAddonPrice)>0)} style={{width:"100%"}}>{t("addon_add_to_quote",lang)}</Btn>
+                {!isPro && (
+                  <div style={{fontSize:12,color:"#15803d",marginTop:10,fontWeight:500,textAlign:"center"}}>{t("addon_pro_upsell",lang)}</div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
