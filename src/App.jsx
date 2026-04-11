@@ -168,6 +168,12 @@ const fmtT = h => { if(!h||h<=0) return "—"; const hr=Math.floor(h),m=Math.rou
 const fmtD = iso => new Date(iso).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"});
 const fmtTS= iso => new Date(iso).toLocaleString("en-US",{month:"short",day:"numeric",year:"numeric",hour:"numeric",minute:"2-digit"});
 const fmtArea = (sqft) => { if(!sqft) return "—"; return `${Math.round(sqft).toLocaleString()} sqft (${(sqft/43560).toFixed(2)} ac)`; };
+// Quote grand total = lawn service final_price + sum of addons. Handles addons as array or JSON string.
+const quoteGrandTotal = (q) => {
+  const adds = Array.isArray(q?.addons) ? q.addons : (q?.addons ? (()=>{try{return JSON.parse(q.addons)}catch{return[]}})() : []);
+  const addonSum = adds.reduce((s,a)=>s+Number(a?.price||0),0);
+  return Number(q?.final_price||0) + addonSum;
+};
 const formatPhone = (val) => { const d=(val||"").replace(/\D/g,"").slice(0,10); if(d.length<4)return d; if(d.length<7)return `(${d.slice(0,3)}) ${d.slice(3)}`; return `(${d.slice(0,3)}) ${d.slice(3,6)}-${d.slice(6)}`; };
 const isExpired = iso => iso && new Date(iso) < new Date();
 const addDays = (iso, days) => new Date(new Date(iso).getTime() + (days||30)*86400000).toISOString();
@@ -1206,7 +1212,7 @@ function HomeScreen({bp,quotes,settings,onNew,onView}){
               </div>
             </div>
             <div style={{textAlign:"right",flexShrink:0}}>
-              <div style={{fontSize:20,fontWeight:900,color:"#0f172a",letterSpacing:-.5}}>{$$(q.final_price)}</div>
+              <div style={{fontSize:20,fontWeight:900,color:"#0f172a",letterSpacing:-.5}}>{$$(quoteGrandTotal(q))}</div>
               <div style={{marginTop:4,fontSize:10,fontWeight:700,letterSpacing:.6,color:STATUS_COLOR[q.status]||"#64748b"}}>{q.status==="seasonal_complete"?t("season_complete",lang):(t("status_"+q.status,lang)||q.status||"").toUpperCase()}</div>
             </div>
           </div>
@@ -1376,7 +1382,7 @@ function ClientsScreen({bp,clients,quotes,onView}){
                 <div style={{fontSize:11,color:"#94a3b8",marginTop:4}}>{cqs.length} quote{cqs.length!==1?"s":""}</div>
               </div>
               <div style={{textAlign:"right",flexShrink:0}}>
-                {last&&<div style={{fontSize:18,fontWeight:900,color:"#0f172a",letterSpacing:-.3}}>{$$(last.final_price)}</div>}
+                {last&&<div style={{fontSize:18,fontWeight:900,color:"#0f172a",letterSpacing:-.3}}>{$$(quoteGrandTotal(last))}</div>}
                 {last&&<div style={{fontSize:11,color:"#94a3b8",marginTop:2}}>{fmtD(last.created_at)}</div>}
                 {cqs.length>1&&<div style={{fontSize:11,color:"#64748b",marginTop:2}}>Total: {$$(total)}</div>}
               </div>
@@ -1466,7 +1472,7 @@ function ClientDetail({bp,client,quotes,onBack,onViewQuote,onUpdateClient,onDele
               </div>
               {q.parent_id&&<div style={{fontSize:11,color:"#94a3b8",marginTop:2}}>{t("revision_of",lang)} {q.parent_id}</div>}
             </div>
-            <div style={{textAlign:"right",flexShrink:0}}><div style={{fontSize:20,fontWeight:900,color:"#0f172a",letterSpacing:-.4}}>{$$(q.final_price)}</div></div>
+            <div style={{textAlign:"right",flexShrink:0}}><div style={{fontSize:20,fontWeight:900,color:"#0f172a",letterSpacing:-.4}}>{$$(quoteGrandTotal(q))}</div></div>
           </div>
         </Card>
       ))}
@@ -1668,7 +1674,7 @@ function QuoteDetail({bp,quote,allQuotes,settings,clients,onBack,onEdit,onDuplic
       {versions.sort((a,b)=>new Date(a.created_at)-new Date(b.created_at)).map((v,i,arr)=>(
         <div key={v.quote_id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 0",borderBottom:i<arr.length-1?"1px solid #e2e8f0":"none"}}>
           <div style={{display:"flex",alignItems:"center",gap:8}}><QID id={v.quote_id}/><Badge status={v.status}/></div>
-          <div style={{fontSize:14,fontWeight:700,color:"#0f172a"}}>{$$(v.final_price)}</div>
+          <div style={{fontSize:14,fontWeight:700,color:"#0f172a"}}>{$$(quoteGrandTotal(v))}</div>
         </div>
       ))}
     </Card>
