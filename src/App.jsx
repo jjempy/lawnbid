@@ -229,6 +229,7 @@ function calcTime(area, perim, crew, cx) {
 
 async function generateQuotePDF(quote, settings, calc, time, quoteLang) {
   const L = quoteLang || settings?.quote_language || 'en';
+  console.log('[LawnBid PDF] quoteLang param:', quoteLang, '| settings.quote_language:', settings?.quote_language, '| using:', L);
   const tq = (key) => t(key, L);
   const { default: jsPDF } = await import("jspdf");
   const doc = new jsPDF({ unit: "pt", format: "letter" });
@@ -397,6 +398,7 @@ async function generateQuotePDF(quote, settings, calc, time, quoteLang) {
 
 function quoteText(q, s, quoteLang) {
   const L = quoteLang || s?.quote_language || 'en';
+  console.log('[LawnBid SMS] quoteLang param:', quoteLang, '| settings.quote_language:', s?.quote_language, '| using:', L);
   const tq = (key) => t(key, L);
   const txtAddons = Array.isArray(q.addons) ? q.addons : (q.addons ? (()=>{try{return JSON.parse(q.addons)}catch{return[]}})() : []);
   const txtAddonTotal = txtAddons.reduce((sum,a)=>sum+Number(a.price||0),0);
@@ -755,7 +757,11 @@ export default function LawnBid() {
       Object.keys(record).forEach(k => record[k] === undefined && delete record[k]);
 
       await upsertQuote(record);
-      if (status === "sent") { track("quote_sent"); recordMarketData(record, "sent"); }
+      if (status === "sent") track("quote_sent");
+      // Record anonymous market data for any new quote (draft OR sent) so we capture pricing trends
+      if (rec.isNew) {
+        try { await recordMarketData(record, status); } catch (e) { console.error("[LawnBid] recordMarketData failed:", e); }
+      }
 
       // 3. Update local quotes state
       setQuotes(prev => {
@@ -1853,7 +1859,12 @@ function SettingsScreen({bp,settings,onSave,onLogout,onLangChange,addonLibrary,r
   const lang = useLang();
   const [userEmail,setUserEmail]=useState("");
   useEffect(()=>{supabase.auth.getUser().then(({data})=>{if(data?.user?.email)setUserEmail(data.user.email);});},[]);
-  const [loc,setLoc]=useState(settings);
+  const [loc,setLoc]=useState(()=>({...settings, quote_language: settings?.quote_language || 'en'}));
+  // Keep loc in sync when parent settings change (e.g. after login data load)
+  useEffect(()=>{
+    setLoc(prev => ({...prev, ...settings, quote_language: settings?.quote_language || prev.quote_language || 'en'}));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settings?.quote_language, settings?.language, settings?.plan]);
   const [tip,setTip]=useState(null);
   const [saved,setSaved]=useState(false);
   const [autoSaveErr,setAutoSaveErr]=useState("");
@@ -2030,8 +2041,8 @@ function SettingsScreen({bp,settings,onSave,onLogout,onLangChange,addonLibrary,r
           <div style={{display:"flex",alignItems:"center",gap:10}}>
             <div style={{width:60,fontSize:12,color:"#64748b",fontWeight:600}}>{t("quote_language_label",lang)}</div>
             <div style={{display:"flex",gap:6}}>
-              <Chip label="🇺🇸 English" active={(loc.quote_language||"en")!=="es"} onClick={()=>set("quote_language","en")}/>
-              <Chip label="🇲🇽 Español" active={(loc.quote_language||"en")==="es"} onClick={()=>set("quote_language","es")}/>
+              <Chip label="🇺🇸 English" active={(loc.quote_language||"en")!=="es"} onClick={()=>{const ns={...loc,quote_language:"en"};setLoc(ns);onSave(ns).catch(e=>console.error("[LawnBid] quote_language save failed:",e));}}/>
+              <Chip label="🇲🇽 Español" active={(loc.quote_language||"en")==="es"} onClick={()=>{const ns={...loc,quote_language:"es"};setLoc(ns);onSave(ns).catch(e=>console.error("[LawnBid] quote_language save failed:",e));}}/>
             </div>
           </div>
         </div>

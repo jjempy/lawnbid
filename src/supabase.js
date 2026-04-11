@@ -27,6 +27,30 @@
 //   created_at timestamptz DEFAULT NOW()
 // );
 // CREATE INDEX IF NOT EXISTS addons_user_id_idx ON addons(user_id);
+//
+// Backfill a specific quote into market_data (run in Supabase SQL Editor):
+// INSERT INTO market_data (
+//   zip_prefix, area_sqft, perimeter_ft, complexity, risk, crew_size,
+//   est_minutes, final_price, price_per_sqft, discount_pct, is_recurring,
+//   recurring_frequency, outcome, quote_month, season
+// )
+// SELECT
+//   SUBSTRING((regexp_match(address, '\b(\d{5})\b'))[1] FROM 1 FOR 3),
+//   ROUND(area_sqft)::int,
+//   ROUND(linear_ft)::int,
+//   complexity, risk, crew_size, est_minutes,
+//   final_price,
+//   ROUND((final_price / NULLIF(area_sqft,0))::numeric, 4),
+//   COALESCE(discount_pct, 0), COALESCE(is_recurring, false),
+//   recurring_frequency, status,
+//   TO_CHAR(created_at, 'YYYY-MM'),
+//   CASE
+//     WHEN EXTRACT(MONTH FROM created_at) BETWEEN 3 AND 5 THEN 'spring'
+//     WHEN EXTRACT(MONTH FROM created_at) BETWEEN 6 AND 8 THEN 'summer'
+//     WHEN EXTRACT(MONTH FROM created_at) BETWEEN 9 AND 11 THEN 'fall'
+//     ELSE 'winter'
+//   END
+// FROM quotes WHERE quote_id = 'PASTE-QUOTE-ID-HERE';
 // ALTER TABLE addons ENABLE ROW LEVEL SECURITY;
 // CREATE POLICY "Users can manage own addons" ON addons FOR ALL USING (auth.uid() = user_id);
 // -- Backfill est_minutes for existing quotes using the formula:
@@ -347,6 +371,7 @@ export async function nextQuoteId() {
 
 // ─── Anonymous market data collection ─────────────────────────────────────────
 export async function recordMarketData(quote, outcome = 'sent') {
+  console.log('[Market Data] recordMarketData called:', outcome, 'area:', quote?.area_sqft, 'price:', quote?.final_price)
   try {
     const address = quote.address || ''
     const zipMatch = address.match(/\b(\d{5})\b/)
@@ -401,11 +426,18 @@ export async function recordMarketData(quote, outcome = 'sent') {
       declined_reason: quote.declined_reason || null,
       quote_month: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`,
       season,
-      addon_count: (quote.addons?.length) || 0,
-      addon_total: Math.round(((quote.addons || []).reduce((s, a) => s + Number(a.price || 0), 0)) * 100) / 100,
-      addon_names: (quote.addons?.length)
-        ? quote.addons.map(a => (a.name || '').toLowerCase().trim()).filter(Boolean).join(', ')
-        : null,
+      ...(() => {
+        const addonsArr = Array.isArray(quote.addons)
+          ? quote.addons
+          : (quote.addons ? (() => { try { return JSON.parse(quote.addons) } catch { return [] } })() : [])
+        return {
+          addon_count: addonsArr.length,
+          addon_total: Math.round(addonsArr.reduce((s, a) => s + Number(a.price || 0), 0) * 100) / 100,
+          addon_names: addonsArr.length > 0
+            ? addonsArr.map(a => (a.name || '').toLowerCase().trim()).filter(Boolean).join(', ')
+            : null,
+        }
+      })(),
     }
 
     if (import.meta.env.DEV) console.log('[LawnBid Data] Recording market data:', payload)
