@@ -2165,7 +2165,7 @@ function SettingsScreen({bp,settings,onSave,onLogout,onLangChange,addonLibrary,r
       <div style={{textAlign:"center",fontSize:11,color:"#94a3b8",marginTop:6}}>{t("auto_save_note",lang)}</div>
       <Btn variant="danger" onClick={onLogout} style={{width:"100%",marginTop:10}}>{t("log_out",lang)}</Btn>
       {userEmail&&<div style={{textAlign:"center",fontSize:11,color:"#94a3b8",marginTop:16}}>{t("logged_in_as",lang)} {userEmail}</div>}
-      <div onClick={handleVersionTap} style={{textAlign:"center",fontSize:11,color:"#94a3b8",marginTop:4,cursor:isAdmin?"pointer":"default",userSelect:"none"}}>LawnBid v{APP_VERSION} · Built for lawn care professionals{isAdmin&&adminTaps>0&&adminTaps<5?` (${5-adminTaps})`:""}</div>
+      <div onClick={handleVersionTap} style={{textAlign:"center",fontSize:11,color:isAdmin?"#64748b":"#94a3b8",marginTop:4,cursor:isAdmin?"pointer":"default",userSelect:"none",padding:"8px 0",WebkitTapHighlightColor:"transparent"}}>LawnBid v{APP_VERSION}{isAdmin&&adminTaps>0&&adminTaps<5?` · tap ${5-adminTaps} more`:""}</div>
     </>
   );
 
