@@ -52,6 +52,31 @@
 //   END
 // FROM quotes WHERE quote_id = 'PASTE-QUOTE-ID-HERE';
 // ALTER TABLE addons ENABLE ROW LEVEL SECURITY;
+//
+// ADMIN VIEW & POLICY (run in Supabase SQL Editor):
+// CREATE OR REPLACE VIEW user_plan_admin AS
+// SELECT
+//   u.email,
+//   u.id as user_id,
+//   s.plan,
+//   s.stripe_customer_id,
+//   u.created_at as signed_up,
+//   u.last_sign_in_at
+// FROM auth.users u
+// LEFT JOIN settings s ON s.user_id = u.id
+// ORDER BY u.created_at DESC;
+//
+// GRANT SELECT ON user_plan_admin TO authenticated;
+//
+// CREATE POLICY "Admin can update any plan"
+// ON settings FOR UPDATE
+// TO authenticated
+// USING (
+//   auth.jwt() ->> 'email' IN ('grove.winwin@gmail.com', 'jjempy@yahoo.com')
+// )
+// WITH CHECK (
+//   auth.jwt() ->> 'email' IN ('grove.winwin@gmail.com', 'jjempy@yahoo.com')
+// );
 // CREATE POLICY "Users can manage own addons" ON addons FOR ALL USING (auth.uid() = user_id);
 // -- Backfill est_minutes for existing quotes using the formula:
 // --   wall = (crew_size >= 2) ? GREATEST(area_sqft/20000, linear_ft/3000)
@@ -457,6 +482,24 @@ export async function recordMarketData(quote, outcome = 'sent') {
   } catch (e) {
     console.log('[LawnBid Data] Collection skipped:', e.message)
   }
+}
+
+// ─── Admin ────────────────────────────────────────────────────────────────────
+export async function adminFetchAllUsers() {
+  const { data, error } = await supabase
+    .from('user_plan_admin')
+    .select('*')
+    .order('signed_up', { ascending: false })
+  if (error) { console.error('[LawnBid] adminFetchAllUsers error:', error); throw error }
+  return data || []
+}
+
+export async function adminUpdatePlan(userId, plan) {
+  const { error } = await supabase
+    .from('settings')
+    .update({ plan })
+    .eq('user_id', userId)
+  if (error) { console.error('[LawnBid] adminUpdatePlan error:', error); throw error }
 }
 
 // ─── Add-on services library ──────────────────────────────────────────────────

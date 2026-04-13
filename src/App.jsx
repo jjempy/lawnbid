@@ -10,6 +10,7 @@ import supabase, {
   initializeUserSettings,
   recordMarketData,
   fetchAddons, createAddon, updateAddon, deleteAddon,
+  adminFetchAllUsers, adminUpdatePlan,
 } from "./supabase.js";
 
 // ─── Stripe checkout ────────────────────────────────────────────────────────────
@@ -70,6 +71,7 @@ const track = (event, params = {}) => { try { if (typeof gtag !== 'undefined') g
 
 // ─── Constants ──────────────────────────────────────────────────────────────────
 const APP_VERSION = "0.9.4";
+const ADMIN_EMAILS = ["grove.winwin@gmail.com","jjempy@yahoo.com"];
 const DEFAULT_SETTINGS = {
   mow_rate: 110, trim_rate: 18, equipment_cost: 12.35, hourly_rate: 22.80,
   minimum_bid: 55, complexity_default: 1.0, risk_default: 1.0,
@@ -1889,6 +1891,20 @@ function SettingsScreen({bp,settings,onSave,onLogout,onLangChange,addonLibrary,r
   const [newAddonName,setNewAddonName]=useState("");
   const [newAddonPrice,setNewAddonPrice]=useState("");
   const isProPlan = (settings?.plan === "pro" || settings?.plan === "team");
+  // Admin panel unlock — tap version 5 times
+  const isAdmin = ADMIN_EMAILS.includes(userEmail);
+  const [adminTaps,setAdminTaps]=useState(0);
+  const [showAdmin,setShowAdmin]=useState(false);
+  const adminTapRef=useRef(0);
+  const adminTimerRef=useRef(null);
+  const handleVersionTap=()=>{
+    if(!isAdmin)return;
+    adminTapRef.current++;
+    setAdminTaps(adminTapRef.current);
+    if(adminTimerRef.current)clearTimeout(adminTimerRef.current);
+    if(adminTapRef.current>=5){setShowAdmin(true);adminTapRef.current=0;setAdminTaps(0);}
+    else{adminTimerRef.current=setTimeout(()=>{adminTapRef.current=0;setAdminTaps(0);},2000);}
+  };
   const set=(k,v)=>setLoc(s=>({...s,[k]:v}));
   // Auto-save with 1.5s debounce — "set it and forget it"
   const isFirstRender = useRef(true);
@@ -2149,9 +2165,14 @@ function SettingsScreen({bp,settings,onSave,onLogout,onLangChange,addonLibrary,r
       <div style={{textAlign:"center",fontSize:11,color:"#94a3b8",marginTop:6}}>{t("auto_save_note",lang)}</div>
       <Btn variant="danger" onClick={onLogout} style={{width:"100%",marginTop:10}}>{t("log_out",lang)}</Btn>
       {userEmail&&<div style={{textAlign:"center",fontSize:11,color:"#94a3b8",marginTop:16}}>{t("logged_in_as",lang)} {userEmail}</div>}
-      <div style={{textAlign:"center",fontSize:11,color:"#94a3b8",marginTop:4}}>LawnBid v{APP_VERSION} · Built for lawn care professionals</div>
+      <div onClick={handleVersionTap} style={{textAlign:"center",fontSize:11,color:"#94a3b8",marginTop:4,cursor:isAdmin?"pointer":"default",userSelect:"none"}}>LawnBid v{APP_VERSION} · Built for lawn care professionals{isAdmin&&adminTaps>0&&adminTaps<5?` (${5-adminTaps})`:""}</div>
     </>
   );
+
+  // ── Admin panel (overlay) ──
+  if (showAdmin && isAdmin) {
+    return <AdminPanel onClose={()=>setShowAdmin(false)} bp={bp}/>;
+  }
 
   if (isDesktop) {
     return (
@@ -2180,6 +2201,93 @@ function SettingsScreen({bp,settings,onSave,onLogout,onLangChange,addonLibrary,r
       {addonsCard}
       {businessCard}
       {footer}
+    </div>
+  );
+}
+
+// ─── Admin Panel (hidden, owner only) ─────────────────────────────────────────
+function AdminPanel({onClose,bp}){
+  const [users,setUsers]=useState([]);
+  const [loading,setLoading]=useState(true);
+  const [search,setSearch]=useState("");
+  const [savingId,setSavingId]=useState(null);
+  const [planEdits,setPlanEdits]=useState({});
+  const [msg,setMsg]=useState("");
+
+  useEffect(()=>{
+    adminFetchAllUsers().then(d=>{setUsers(d);setLoading(false);}).catch(e=>{console.error(e);setLoading(false);});
+  },[]);
+
+  const handleSave=async(userId)=>{
+    const newPlan=planEdits[userId];
+    if(!newPlan)return;
+    setSavingId(userId);
+    try{
+      await adminUpdatePlan(userId,newPlan);
+      setUsers(prev=>prev.map(u=>u.user_id===userId?{...u,plan:newPlan}:u));
+      setMsg(`Updated to ${newPlan}`);
+      setTimeout(()=>setMsg(""),2000);
+    }catch(e){setMsg("Error: "+e.message);}
+    setSavingId(null);
+  };
+
+  const shown=users.filter(u=>{
+    if(!search.trim())return true;
+    const s=search.toLowerCase();
+    return (u.email||"").toLowerCase().includes(s)||(u.plan||"").toLowerCase().includes(s);
+  });
+
+  const isDesktop=bp==="desktop";
+  return(
+    <div style={{padding:isDesktop?0:16}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+        <div style={{fontSize:22,fontWeight:900,color:"#0f172a"}}>Admin Panel</div>
+        <Btn variant="secondary" onClick={onClose} style={{height:36,minHeight:36,fontSize:13}}>← Back to Settings</Btn>
+      </div>
+      {msg&&<div style={{background:"#dcfce7",borderRadius:8,padding:"8px 14px",marginBottom:10,fontSize:13,color:"#166534",fontWeight:600}}>{msg}</div>}
+      <Inp value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search by email..." style={{marginBottom:14}}/>
+      {loading?(
+        <div style={{textAlign:"center",padding:40,color:"#64748b"}}>Loading users...</div>
+      ):(
+        <Card style={{padding:0,overflow:"hidden"}}>
+          <div style={{overflowX:"auto"}}>
+            <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+              <thead>
+                <tr style={{background:"#f8fafc",borderBottom:"2px solid #e2e8f0"}}>
+                  <th style={{padding:"10px 14px",textAlign:"left",fontWeight:700,color:"#334155"}}>Email</th>
+                  <th style={{padding:"10px 14px",textAlign:"left",fontWeight:700,color:"#334155"}}>Plan</th>
+                  <th style={{padding:"10px 14px",textAlign:"left",fontWeight:700,color:"#334155"}}>Signed Up</th>
+                  <th style={{padding:"10px 14px",textAlign:"left",fontWeight:700,color:"#334155"}}>Last Login</th>
+                  <th style={{padding:"10px 14px",textAlign:"center",fontWeight:700,color:"#334155"}}></th>
+                </tr>
+              </thead>
+              <tbody>
+                {shown.map(u=>{
+                  const edited=planEdits[u.user_id]&&planEdits[u.user_id]!==u.plan;
+                  return(
+                    <tr key={u.user_id} style={{borderBottom:"1px solid #f1f5f9"}}>
+                      <td style={{padding:"10px 14px",fontWeight:500,color:"#0f172a",maxWidth:200,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{u.email||"—"}</td>
+                      <td style={{padding:"10px 14px"}}>
+                        <select value={planEdits[u.user_id]||u.plan||"free"} onChange={e=>setPlanEdits(p=>({...p,[u.user_id]:e.target.value}))} style={{height:32,padding:"0 8px",border:"1.5px solid #e2e8f0",borderRadius:8,fontSize:13,fontFamily:"inherit",background:edited?"#dcfce7":"#fff",fontWeight:edited?700:500,color:edited?"#15803d":"#0f172a"}}>
+                          <option value="free">Free</option>
+                          <option value="pro">Pro</option>
+                          <option value="team">Team</option>
+                        </select>
+                      </td>
+                      <td style={{padding:"10px 14px",fontSize:12,color:"#64748b"}}>{u.signed_up?fmtD(u.signed_up):"—"}</td>
+                      <td style={{padding:"10px 14px",fontSize:12,color:"#64748b"}}>{u.last_sign_in_at?fmtD(u.last_sign_in_at):"Never"}</td>
+                      <td style={{padding:"10px 14px",textAlign:"center"}}>
+                        {edited&&<button onClick={()=>handleSave(u.user_id)} disabled={savingId===u.user_id} style={{height:30,padding:"0 12px",borderRadius:6,border:"none",background:"#15803d",color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit",opacity:savingId===u.user_id?.6:1}}>{savingId===u.user_id?"...":"Save"}</button>}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <div style={{padding:"10px 14px",fontSize:12,color:"#94a3b8",borderTop:"1px solid #e2e8f0"}}>{shown.length} of {users.length} users</div>
+        </Card>
+      )}
     </div>
   );
 }
