@@ -18,7 +18,8 @@
       "Bash(node -e ':*)",
       "Bash(npx sharp-cli:*)",
       "Bash(node -e \"require\\('sharp'\\)\")",
-      "Bash(node:*)"
+      "Bash(node:*)",
+      "Bash(curl -s http://localhost:5173/app/)"
     ]
   }
 }

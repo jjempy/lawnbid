@@ -585,10 +585,11 @@ export default function LawnBid() {
     if (!session) { setReady(false); setQuotes([]); setClients([]); const cl=(()=>{try{return localStorage.getItem("lb_language")||"en";}catch{return"en";}})(); setSettings({...DEFAULT_SETTINGS,language:cl}); setLang(cl); setQuotesUsedLive(0); return; }
     (async () => {
       try {
-        const [q, c, s, qCount, addonsList] = await Promise.all([loadQuotes(), loadClients(), loadSettings(), countRecentQuotes(30), fetchAddons()]);
+        const [q, c, s, qCount] = await Promise.all([loadQuotes(), loadClients(), loadSettings(), countRecentQuotes(30)]);
         setQuotes(q);
         setClients(c);
-        setAddonLibrary(addonsList);
+        // Load addons separately — table may not exist yet
+        try { const al = await fetchAddons(); setAddonLibrary(al); } catch(e) { console.log("[LawnBid] addons table not ready:", e.message); }
         if (s) setSettings(prev => ({ ...prev, ...s }));
         if (s?.language) try { localStorage.setItem("lb_language", s.language); } catch {}
         setQuotesUsedLive(qCount);
@@ -2238,24 +2239,25 @@ function AdminPanel({onClose,bp}){
     return (u.email||"").toLowerCase().includes(s)||(u.plan||"").toLowerCase().includes(s);
   });
 
-  // Revenue metrics
+  // Revenue metrics — exclude admin emails from revenue calcs
+  const nonAdmin=users.filter(u=>!ADMIN_EMAILS.includes(u.email));
   const PRO_PRICE=19, TEAM_PRICE=39;
-  const payingPro=users.filter(u=>u.plan==="pro"&&u.stripe_customer_id);
-  const payingTeam=users.filter(u=>u.plan==="team"&&u.stripe_customer_id);
-  const betaPro=users.filter(u=>u.plan==="pro"&&!u.stripe_customer_id);
-  const betaTeam=users.filter(u=>u.plan==="team"&&!u.stripe_customer_id);
-  const freeUsers=users.filter(u=>!u.plan||u.plan==="free");
-  const cancelledUsers=users.filter(u=>u.plan_cancelled===true);
+  const payingPro=nonAdmin.filter(u=>u.plan==="pro"&&u.stripe_customer_id);
+  const payingTeam=nonAdmin.filter(u=>u.plan==="team"&&u.stripe_customer_id);
+  const betaPro=nonAdmin.filter(u=>u.plan==="pro"&&!u.stripe_customer_id);
+  const betaTeam=nonAdmin.filter(u=>u.plan==="team"&&!u.stripe_customer_id);
+  const freeUsers=nonAdmin.filter(u=>!u.plan||u.plan==="free");
+  const cancelledUsers=nonAdmin.filter(u=>u.plan_cancelled===true);
   const mrr=(payingPro.length*PRO_PRICE)+(payingTeam.length*TEAM_PRICE);
   const arr=mrr*12;
   const now=new Date();
-  const signups7=users.filter(u=>u.signed_up&&new Date(u.signed_up)>new Date(now-7*864e5)).length;
-  const signups30=users.filter(u=>u.signed_up&&new Date(u.signed_up)>new Date(now-30*864e5)).length;
+  const signups7=nonAdmin.filter(u=>u.signed_up&&new Date(u.signed_up)>new Date(now-7*864e5)).length;
+  const signups30=nonAdmin.filter(u=>u.signed_up&&new Date(u.signed_up)>new Date(now-30*864e5)).length;
 
   const isDesktop=bp==="desktop";
   const tabStyle=(active)=>({flex:1,padding:"8px 0",borderRadius:8,border:"none",background:active?"#15803d":"#f1f5f9",color:active?"#fff":"#64748b",fontWeight:600,fontSize:13,cursor:"pointer",fontFamily:"inherit"});
   return(
-    <div style={{padding:isDesktop?0:16}}>
+    <div style={{position:"fixed",inset:0,background:"#f8fafc",zIndex:9999,overflowY:"auto",WebkitOverflowScrolling:"touch",padding:isDesktop?"24px":"16px 16px 80px 16px"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
         <div style={{fontSize:22,fontWeight:900,color:"#0f172a"}}>Admin Panel</div>
         <Btn variant="secondary" onClick={onClose} style={{height:36,minHeight:36,fontSize:13}}>← Back to Settings</Btn>
@@ -2345,7 +2347,7 @@ function AdminPanel({onClose,bp}){
           </div>
           <div style={{background:"#fff",borderRadius:10,padding:"12px 16px",marginBottom:12,border:"1px solid #e2e8f0"}}>
             <div style={{fontWeight:700,marginBottom:8,color:"#0f172a"}}>👥 All Users</div>
-            {[["Total",users.length],["Free",freeUsers.length],["Pro (paying)",payingPro.length],["Pro (beta)",betaPro.length],["Team (paying)",payingTeam.length],["Cancelled",cancelledUsers.length]].map(([label,count])=>(
+            {[["Total (excl. admin)",nonAdmin.length],["Free",freeUsers.length],["Pro (paying)",payingPro.length],["Pro (beta)",betaPro.length],["Team (paying)",payingTeam.length],["Cancelled",cancelledUsers.length]].map(([label,count])=>(
               <div key={label} style={{display:"flex",justifyContent:"space-between",marginBottom:4,color:"#475569"}}>
                 <span>{label}</span><span style={{fontWeight:600}}>{count}</span>
               </div>
