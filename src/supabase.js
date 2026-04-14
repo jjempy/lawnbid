@@ -525,6 +525,16 @@ export async function adminUpdatePlan(userId, plan) {
   return result.data
 }
 
+export async function fetchUserQuoteCounts() {
+  const { data, error } = await supabase
+    .from('quotes')
+    .select('user_id')
+  if (error) { console.error('[LawnBid] fetchUserQuoteCounts error:', error); return {} }
+  const counts = {};
+  (data || []).forEach(q => { counts[q.user_id] = (counts[q.user_id] || 0) + 1 })
+  return counts
+}
+
 export async function fetchMarketDataAll() {
   const { data, error } = await supabase
     .from('market_data')

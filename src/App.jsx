@@ -10,7 +10,7 @@ import supabase, {
   initializeUserSettings,
   recordMarketData,
   fetchAddons, createAddon, updateAddon, deleteAddon,
-  adminFetchAllUsers, adminUpdatePlan, fetchMarketDataAll,
+  adminFetchAllUsers, adminUpdatePlan, fetchMarketDataAll, fetchUserQuoteCounts,
 } from "./supabase.js";
 
 // ─── Stripe checkout ────────────────────────────────────────────────────────────
@@ -2219,10 +2219,11 @@ function AdminPanel({onClose,bp}){
   const [dataDateFilter,setDataDateFilter]=useState("all");
   const [dataDateFrom,setDataDateFrom]=useState("");
   const [dataDateTo,setDataDateTo]=useState("");
+  const [quoteCounts,setQuoteCounts]=useState({});
 
   useEffect(()=>{
-    Promise.all([adminFetchAllUsers(), fetchMarketDataAll()])
-      .then(([u,md])=>{setUsers(u);setMarketData(md);setLoading(false);})
+    Promise.all([adminFetchAllUsers(), fetchMarketDataAll(), fetchUserQuoteCounts()])
+      .then(([u,md,qc])=>{setUsers(u);setMarketData(md);setQuoteCounts(qc);setLoading(false);})
       .catch(e=>{console.error(e);setLoading(false);});
   },[]);
 
@@ -2304,7 +2305,12 @@ function AdminPanel({onClose,bp}){
                     const edited=planEdits[u.user_id]&&planEdits[u.user_id]!==u.plan;
                     return(
                       <tr key={u.user_id} style={{borderBottom:"1px solid #f1f5f9"}}>
-                        <td style={{padding:"10px 14px",fontWeight:500,color:"#0f172a",maxWidth:200,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{u.email||"—"}</td>
+                        <td style={{padding:"10px 14px",fontWeight:500,color:"#0f172a",maxWidth:260}}>
+                          <div style={{display:"flex",alignItems:"center",gap:6}}>
+                            <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{u.email||"—"}</span>
+                            {quoteCounts[u.user_id]>0&&<span style={{background:"#f0fdf4",color:"#15803d",border:"1px solid #bbf7d0",borderRadius:10,padding:"1px 7px",fontSize:11,fontWeight:700,whiteSpace:"nowrap",flexShrink:0}}>{quoteCounts[u.user_id]}</span>}
+                          </div>
+                        </td>
                         <td style={{padding:"10px 14px"}}>
                           <select value={planEdits[u.user_id]||u.plan||"free"} onChange={e=>setPlanEdits(p=>({...p,[u.user_id]:e.target.value}))} style={{height:32,padding:"0 8px",border:"1.5px solid #e2e8f0",borderRadius:8,fontSize:13,fontFamily:"inherit",background:edited?"#dcfce7":"#fff",fontWeight:edited?700:500,color:edited?"#15803d":"#0f172a"}}>
                             <option value="free">Free</option>
