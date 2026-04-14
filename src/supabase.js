@@ -525,6 +525,15 @@ export async function adminUpdatePlan(userId, plan) {
   return result.data
 }
 
+export async function fetchMarketDataAll() {
+  const { data, error } = await supabase
+    .from('market_data')
+    .select('*')
+    .order('created_at', { ascending: false })
+  if (error) { console.error('[LawnBid] fetchMarketDataAll error:', error); return [] }
+  return data || []
+}
+
 // ─── Add-on services library ──────────────────────────────────────────────────
 export async function fetchAddons(userId) {
   const uid = userId || await currentUserId()

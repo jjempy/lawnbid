@@ -10,7 +10,7 @@ import supabase, {
   initializeUserSettings,
   recordMarketData,
   fetchAddons, createAddon, updateAddon, deleteAddon,
-  adminFetchAllUsers, adminUpdatePlan,
+  adminFetchAllUsers, adminUpdatePlan, fetchMarketDataAll,
 } from "./supabase.js";
 
 // ─── Stripe checkout ────────────────────────────────────────────────────────────
@@ -2215,9 +2215,15 @@ function AdminPanel({onClose,bp}){
   const [planEdits,setPlanEdits]=useState({});
   const [msg,setMsg]=useState("");
   const [adminTab,setAdminTab]=useState("users");
+  const [marketData,setMarketData]=useState([]);
+  const [dataDateFilter,setDataDateFilter]=useState("all");
+  const [dataDateFrom,setDataDateFrom]=useState("");
+  const [dataDateTo,setDataDateTo]=useState("");
 
   useEffect(()=>{
-    adminFetchAllUsers().then(d=>{setUsers(d);setLoading(false);}).catch(e=>{console.error(e);setLoading(false);});
+    Promise.all([adminFetchAllUsers(), fetchMarketDataAll()])
+      .then(([u,md])=>{setUsers(u);setMarketData(md);setLoading(false);})
+      .catch(e=>{console.error(e);setLoading(false);});
   },[]);
 
   const handleSave=async(userId)=>{
@@ -2274,6 +2280,7 @@ function AdminPanel({onClose,bp}){
       <div style={{display:"flex",gap:8,marginBottom:16}}>
         <button onClick={()=>setAdminTab("users")} style={tabStyle(adminTab==="users")}>👥 Users</button>
         <button onClick={()=>setAdminTab("revenue")} style={tabStyle(adminTab==="revenue")}>💰 Revenue</button>
+        <button onClick={()=>setAdminTab("data")} style={tabStyle(adminTab==="data")}>📊 Data</button>
       </div>
       {loading?(
         <div style={{textAlign:"center",padding:40,color:"#64748b"}}>Loading...</div>
@@ -2319,7 +2326,7 @@ function AdminPanel({onClose,bp}){
             <div style={{padding:"10px 14px",fontSize:12,color:"#94a3b8",borderTop:"1px solid #e2e8f0"}}>{shown.length} of {users.length} users</div>
           </Card>
         </>
-      ):(
+      ):adminTab==="revenue"?(
         <div style={{fontSize:13}}>
           {(()=>{const rw={display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 0",borderBottom:"1px solid #f1f5f9"};const rwLast={...rw,borderBottom:"none"};return(<>
           <div style={{background:"#f0fdf4",borderRadius:10,padding:16,marginBottom:12,border:"1px solid #bbf7d0"}}>
@@ -2373,7 +2380,115 @@ function AdminPanel({onClose,bp}){
           </div>
           </>);})()}
         </div>
-      )}
+      ):adminTab==="data"?(
+        (()=>{
+          const fd=marketData.filter(r=>{
+            if(dataDateFilter==="all")return true;
+            const d=new Date(r.created_at),now=new Date();
+            if(dataDateFilter==="30d")return d>new Date(now-30*864e5);
+            if(dataDateFilter==="90d")return d>new Date(now-90*864e5);
+            if(dataDateFilter==="custom"&&dataDateFrom&&dataDateTo)return d>=new Date(dataDateFrom)&&d<=new Date(dataDateTo+"T23:59:59");
+            return true;
+          });
+          const totalRec=fd.length;
+          const accepted=fd.filter(r=>r.outcome==="accepted").length;
+          const sent=fd.filter(r=>r.outcome==="sent").length;
+          const declined=fd.filter(r=>r.outcome==="declined").length;
+          const draft=fd.filter(r=>r.outcome==="draft").length;
+          const seasonal=fd.filter(r=>r.outcome==="seasonal_complete"||r.outcome==="completed").length;
+          const prices=fd.map(r=>Number(r.final_price)).filter(Boolean);
+          const avgP=prices.length?(prices.reduce((a,b)=>a+b,0)/prices.length).toFixed(2):"0.00";
+          const minP=prices.length?Math.min(...prices).toFixed(2):"0.00";
+          const maxP=prices.length?Math.max(...prices).toFixed(2):"0.00";
+          const totV=prices.reduce((a,b)=>a+b,0).toFixed(2);
+          const sqfts=fd.map(r=>Number(r.area_sqft)).filter(Boolean);
+          const avgSq=sqfts.length?Math.round(sqfts.reduce((a,b)=>a+b,0)/sqfts.length):0;
+          const cr=(accepted+declined)>0?Math.round(accepted/(accepted+declined)*100):0;
+          const zips=[...new Set(fd.map(r=>r.zip_prefix).filter(Boolean))];
+          const byZip={};fd.forEach(r=>{if(!r.zip_prefix)return;if(!byZip[r.zip_prefix])byZip[r.zip_prefix]={n:0,a:0,p:[],s:[]};byZip[r.zip_prefix].n++;if(r.outcome==="accepted")byZip[r.zip_prefix].a++;if(r.final_price)byZip[r.zip_prefix].p.push(Number(r.final_price));if(r.area_sqft)byZip[r.zip_prefix].s.push(Number(r.area_sqft));});
+          const zipR=Object.entries(byZip).sort((a,b)=>b[1].n-a[1].n).map(([z,d])=>({z,n:d.n,a:d.a,ap:d.p.length?(d.p.reduce((a,b)=>a+b,0)/d.p.length).toFixed(2):"0",as:d.s.length?Math.round(d.s.reduce((a,b)=>a+b,0)/d.s.length):0}));
+          const byCx={};fd.forEach(r=>{const k=String(r.complexity||"?");if(!byCx[k])byCx[k]={n:0,p:[],s:[]};byCx[k].n++;if(r.final_price)byCx[k].p.push(Number(r.final_price));if(r.area_sqft)byCx[k].s.push(Number(r.area_sqft));});
+          const cxLabel=c=>c==="1"?"Simple":c==="1.3"?"Moderate":c==="1.6"?"Complex":c==="2"?"Very Complex":c;
+          const cxR=Object.entries(byCx).sort((a,b)=>Number(a[0])-Number(b[0])).map(([c,d])=>({c,l:cxLabel(c),n:d.n,ap:d.p.length?(d.p.reduce((a,b)=>a+b,0)/d.p.length).toFixed(2):"0",as:d.s.length?Math.round(d.s.reduce((a,b)=>a+b,0)/d.s.length):0}));
+          const byMo={};fd.forEach(r=>{if(!r.created_at)return;const m=r.created_at.substring(0,7);if(!byMo[m])byMo[m]={n:0,v:0,a:0};byMo[m].n++;byMo[m].v+=Number(r.final_price||0);if(r.outcome==="accepted")byMo[m].a++;});
+          const moR=Object.entries(byMo).sort();
+          const adNm={};fd.forEach(r=>{if(!r.addon_names)return;adNm[r.addon_names]=(adNm[r.addon_names]||0)+1;});
+          const adR=Object.entries(adNm).sort((a,b)=>b[1]-a[1]);
+          const rw={display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 0",borderBottom:"1px solid #f1f5f9"};
+          return(
+          <div style={{fontSize:13}}>
+            <div style={{background:"#fff",borderRadius:10,padding:"12px 16px",marginBottom:12,border:"1px solid #e2e8f0"}}>
+              <div style={{fontWeight:700,marginBottom:8}}>🗓 Date Range</div>
+              <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:8}}>
+                {[["all","All Time"],["30d","30 Days"],["90d","90 Days"],["custom","Custom"]].map(([v,l])=>(
+                  <button key={v} onClick={()=>setDataDateFilter(v)} style={{padding:"5px 10px",borderRadius:6,border:"none",fontSize:12,background:dataDateFilter===v?"#15803d":"#f1f5f9",color:dataDateFilter===v?"#fff":"#64748b",cursor:"pointer",fontWeight:600,fontFamily:"inherit"}}>{l}</button>
+                ))}
+              </div>
+              {dataDateFilter==="custom"&&(
+                <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                  <input type="date" value={dataDateFrom} onChange={e=>setDataDateFrom(e.target.value)} style={{flex:1,padding:"6px 8px",borderRadius:6,border:"1px solid #e2e8f0",fontSize:12,fontFamily:"inherit"}}/>
+                  <span style={{color:"#94a3b8"}}>→</span>
+                  <input type="date" value={dataDateTo} onChange={e=>setDataDateTo(e.target.value)} style={{flex:1,padding:"6px 8px",borderRadius:6,border:"1px solid #e2e8f0",fontSize:12,fontFamily:"inherit"}}/>
+                </div>
+              )}
+              <div style={{marginTop:8,color:"#94a3b8",fontSize:11}}>Showing {totalRec} records</div>
+            </div>
+            <div style={{background:"#f0fdf4",borderRadius:10,padding:"12px 16px",marginBottom:12,border:"1px solid #bbf7d0"}}>
+              <div style={{fontWeight:800,fontSize:14,color:"#15803d",marginBottom:8}}>📊 Summary</div>
+              {[["Total Records",totalRec],["Total Quoted Value","$"+Number(totV).toLocaleString()],["Avg Price","$"+avgP],["Min / Max","$"+minP+" / $"+maxP],["Avg Lawn Size",avgSq.toLocaleString()+" sqft"],["Close Rate",cr+"%"],["Zip Prefixes",zips.length]].map(([l,v])=>(
+                <div key={l} style={{...rw,borderBottomColor:"#dcfce7"}}><span style={{color:"#166534"}}>{l}</span><span style={{fontWeight:700,color:"#0f172a"}}>{v}</span></div>
+              ))}
+            </div>
+            <div style={{background:"#fff",borderRadius:10,padding:"12px 16px",marginBottom:12,border:"1px solid #e2e8f0"}}>
+              <div style={{fontWeight:700,marginBottom:8}}>📋 Outcomes</div>
+              {[["Accepted",accepted,"✅"],["Sent",sent,"📤"],["Declined",declined,"❌"],["Draft",draft,"✏️"],["Seasonal Complete",seasonal,"🌿"]].map(([l,v,i])=>(
+                <div key={l} style={rw}><span style={{color:"#64748b"}}>{i} {l}</span><span style={{fontWeight:600}}>{v}</span></div>
+              ))}
+            </div>
+            {zipR.length>0&&(
+            <div style={{background:"#fff",borderRadius:10,padding:"12px 16px",marginBottom:12,border:"1px solid #e2e8f0"}}>
+              <div style={{fontWeight:700,marginBottom:8}}>📍 By Zip Prefix</div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:4,marginBottom:6}}>
+                {["Zip","Records","Avg $","Avg sqft"].map(h=><div key={h} style={{fontSize:10,color:"#94a3b8",fontWeight:700,textTransform:"uppercase"}}>{h}</div>)}
+              </div>
+              {zipR.map(r=>(
+                <div key={r.z} style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:4,padding:"6px 0",borderBottom:"1px solid #f1f5f9"}}>
+                  <span style={{fontWeight:700}}>{r.z}</span><span style={{color:"#64748b"}}>{r.n}</span><span style={{color:"#64748b"}}>${r.ap}</span><span style={{color:"#64748b"}}>{r.as.toLocaleString()}</span>
+                </div>
+              ))}
+            </div>
+            )}
+            {cxR.length>0&&(
+            <div style={{background:"#fff",borderRadius:10,padding:"12px 16px",marginBottom:12,border:"1px solid #e2e8f0"}}>
+              <div style={{fontWeight:700,marginBottom:8}}>🌿 By Complexity</div>
+              <div style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr 1fr",gap:4,marginBottom:6}}>
+                {["Type","Records","Avg $","Avg sqft"].map(h=><div key={h} style={{fontSize:10,color:"#94a3b8",fontWeight:700,textTransform:"uppercase"}}>{h}</div>)}
+              </div>
+              {cxR.map(r=>(
+                <div key={r.c} style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr 1fr",gap:4,padding:"6px 0",borderBottom:"1px solid #f1f5f9"}}>
+                  <span style={{fontWeight:600,fontSize:12}}>{r.l}</span><span style={{color:"#64748b"}}>{r.n}</span><span style={{color:"#64748b"}}>${r.ap}</span><span style={{color:"#64748b"}}>{r.as.toLocaleString()}</span>
+                </div>
+              ))}
+            </div>
+            )}
+            {adR.length>0&&(
+            <div style={{background:"#fff",borderRadius:10,padding:"12px 16px",marginBottom:12,border:"1px solid #e2e8f0"}}>
+              <div style={{fontWeight:700,marginBottom:8}}>➕ Add-on Services</div>
+              {adR.map(([n,c])=>(
+                <div key={n} style={rw}><span style={{color:"#64748b",fontSize:12}}>{n}</span><span style={{fontWeight:600}}>{c}x</span></div>
+              ))}
+            </div>
+            )}
+            <div style={{background:"#fff",borderRadius:10,padding:"12px 16px",border:"1px solid #e2e8f0"}}>
+              <div style={{fontWeight:700,marginBottom:8}}>📅 By Month</div>
+              {moR.map(([m,d])=>(
+                <div key={m} style={rw}><span style={{color:"#64748b"}}>{m}</span><span style={{fontWeight:600}}>{d.n} records · ${d.v.toFixed(2)}</span></div>
+              ))}
+            </div>
+          </div>
+          );
+        })()
+      ):null}
     </div>
   );
 }
