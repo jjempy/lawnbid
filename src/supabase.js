@@ -60,6 +60,7 @@
 //   u.id as user_id,
 //   s.plan,
 //   s.stripe_customer_id,
+//   s.plan_cancelled,
 //   u.created_at as signed_up,
 //   u.last_sign_in_at
 // FROM auth.users u

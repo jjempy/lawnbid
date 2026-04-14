@@ -2213,6 +2213,7 @@ function AdminPanel({onClose,bp}){
   const [savingId,setSavingId]=useState(null);
   const [planEdits,setPlanEdits]=useState({});
   const [msg,setMsg]=useState("");
+  const [adminTab,setAdminTab]=useState("users");
 
   useEffect(()=>{
     adminFetchAllUsers().then(d=>{setUsers(d);setLoading(false);}).catch(e=>{console.error(e);setLoading(false);});
@@ -2237,7 +2238,22 @@ function AdminPanel({onClose,bp}){
     return (u.email||"").toLowerCase().includes(s)||(u.plan||"").toLowerCase().includes(s);
   });
 
+  // Revenue metrics
+  const PRO_PRICE=19, TEAM_PRICE=39;
+  const payingPro=users.filter(u=>u.plan==="pro"&&u.stripe_customer_id);
+  const payingTeam=users.filter(u=>u.plan==="team"&&u.stripe_customer_id);
+  const betaPro=users.filter(u=>u.plan==="pro"&&!u.stripe_customer_id);
+  const betaTeam=users.filter(u=>u.plan==="team"&&!u.stripe_customer_id);
+  const freeUsers=users.filter(u=>!u.plan||u.plan==="free");
+  const cancelledUsers=users.filter(u=>u.plan_cancelled===true);
+  const mrr=(payingPro.length*PRO_PRICE)+(payingTeam.length*TEAM_PRICE);
+  const arr=mrr*12;
+  const now=new Date();
+  const signups7=users.filter(u=>u.signed_up&&new Date(u.signed_up)>new Date(now-7*864e5)).length;
+  const signups30=users.filter(u=>u.signed_up&&new Date(u.signed_up)>new Date(now-30*864e5)).length;
+
   const isDesktop=bp==="desktop";
+  const tabStyle=(active)=>({flex:1,padding:"8px 0",borderRadius:8,border:"none",background:active?"#15803d":"#f1f5f9",color:active?"#fff":"#64748b",fontWeight:600,fontSize:13,cursor:"pointer",fontFamily:"inherit"});
   return(
     <div style={{padding:isDesktop?0:16}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
@@ -2245,48 +2261,106 @@ function AdminPanel({onClose,bp}){
         <Btn variant="secondary" onClick={onClose} style={{height:36,minHeight:36,fontSize:13}}>← Back to Settings</Btn>
       </div>
       {msg&&<div style={{background:"#dcfce7",borderRadius:8,padding:"8px 14px",marginBottom:10,fontSize:13,color:"#166534",fontWeight:600}}>{msg}</div>}
-      <Inp value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search by email..." style={{marginBottom:14}}/>
+      <div style={{display:"flex",gap:8,marginBottom:16}}>
+        <button onClick={()=>setAdminTab("users")} style={tabStyle(adminTab==="users")}>👥 Users</button>
+        <button onClick={()=>setAdminTab("revenue")} style={tabStyle(adminTab==="revenue")}>💰 Revenue</button>
+      </div>
       {loading?(
-        <div style={{textAlign:"center",padding:40,color:"#64748b"}}>Loading users...</div>
+        <div style={{textAlign:"center",padding:40,color:"#64748b"}}>Loading...</div>
+      ):adminTab==="users"?(
+        <>
+          <Inp value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search by email..." style={{marginBottom:14}}/>
+          <Card style={{padding:0,overflow:"hidden"}}>
+            <div style={{overflowX:"auto"}}>
+              <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+                <thead>
+                  <tr style={{background:"#f8fafc",borderBottom:"2px solid #e2e8f0"}}>
+                    <th style={{padding:"10px 14px",textAlign:"left",fontWeight:700,color:"#334155"}}>Email</th>
+                    <th style={{padding:"10px 14px",textAlign:"left",fontWeight:700,color:"#334155"}}>Plan</th>
+                    <th style={{padding:"10px 14px",textAlign:"left",fontWeight:700,color:"#334155"}}>Signed Up</th>
+                    <th style={{padding:"10px 14px",textAlign:"left",fontWeight:700,color:"#334155"}}>Last Login</th>
+                    <th style={{padding:"10px 14px",textAlign:"center",fontWeight:700,color:"#334155"}}></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {shown.map(u=>{
+                    const edited=planEdits[u.user_id]&&planEdits[u.user_id]!==u.plan;
+                    return(
+                      <tr key={u.user_id} style={{borderBottom:"1px solid #f1f5f9"}}>
+                        <td style={{padding:"10px 14px",fontWeight:500,color:"#0f172a",maxWidth:200,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{u.email||"—"}</td>
+                        <td style={{padding:"10px 14px"}}>
+                          <select value={planEdits[u.user_id]||u.plan||"free"} onChange={e=>setPlanEdits(p=>({...p,[u.user_id]:e.target.value}))} style={{height:32,padding:"0 8px",border:"1.5px solid #e2e8f0",borderRadius:8,fontSize:13,fontFamily:"inherit",background:edited?"#dcfce7":"#fff",fontWeight:edited?700:500,color:edited?"#15803d":"#0f172a"}}>
+                            <option value="free">Free</option>
+                            <option value="pro">Pro</option>
+                            <option value="team">Team</option>
+                          </select>
+                        </td>
+                        <td style={{padding:"10px 14px",fontSize:12,color:"#64748b"}}>{u.signed_up?fmtD(u.signed_up):"—"}</td>
+                        <td style={{padding:"10px 14px",fontSize:12,color:"#64748b"}}>{u.last_sign_in_at?fmtD(u.last_sign_in_at):"Never"}</td>
+                        <td style={{padding:"10px 14px",textAlign:"center"}}>
+                          {edited&&<button onClick={()=>handleSave(u.user_id)} disabled={savingId===u.user_id} style={{height:30,padding:"0 12px",borderRadius:6,border:"none",background:"#15803d",color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit",opacity:savingId===u.user_id?.6:1}}>{savingId===u.user_id?"...":"Save"}</button>}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <div style={{padding:"10px 14px",fontSize:12,color:"#94a3b8",borderTop:"1px solid #e2e8f0"}}>{shown.length} of {users.length} users</div>
+          </Card>
+        </>
       ):(
-        <Card style={{padding:0,overflow:"hidden"}}>
-          <div style={{overflowX:"auto"}}>
-            <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
-              <thead>
-                <tr style={{background:"#f8fafc",borderBottom:"2px solid #e2e8f0"}}>
-                  <th style={{padding:"10px 14px",textAlign:"left",fontWeight:700,color:"#334155"}}>Email</th>
-                  <th style={{padding:"10px 14px",textAlign:"left",fontWeight:700,color:"#334155"}}>Plan</th>
-                  <th style={{padding:"10px 14px",textAlign:"left",fontWeight:700,color:"#334155"}}>Signed Up</th>
-                  <th style={{padding:"10px 14px",textAlign:"left",fontWeight:700,color:"#334155"}}>Last Login</th>
-                  <th style={{padding:"10px 14px",textAlign:"center",fontWeight:700,color:"#334155"}}></th>
-                </tr>
-              </thead>
-              <tbody>
-                {shown.map(u=>{
-                  const edited=planEdits[u.user_id]&&planEdits[u.user_id]!==u.plan;
-                  return(
-                    <tr key={u.user_id} style={{borderBottom:"1px solid #f1f5f9"}}>
-                      <td style={{padding:"10px 14px",fontWeight:500,color:"#0f172a",maxWidth:200,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{u.email||"—"}</td>
-                      <td style={{padding:"10px 14px"}}>
-                        <select value={planEdits[u.user_id]||u.plan||"free"} onChange={e=>setPlanEdits(p=>({...p,[u.user_id]:e.target.value}))} style={{height:32,padding:"0 8px",border:"1.5px solid #e2e8f0",borderRadius:8,fontSize:13,fontFamily:"inherit",background:edited?"#dcfce7":"#fff",fontWeight:edited?700:500,color:edited?"#15803d":"#0f172a"}}>
-                          <option value="free">Free</option>
-                          <option value="pro">Pro</option>
-                          <option value="team">Team</option>
-                        </select>
-                      </td>
-                      <td style={{padding:"10px 14px",fontSize:12,color:"#64748b"}}>{u.signed_up?fmtD(u.signed_up):"—"}</td>
-                      <td style={{padding:"10px 14px",fontSize:12,color:"#64748b"}}>{u.last_sign_in_at?fmtD(u.last_sign_in_at):"Never"}</td>
-                      <td style={{padding:"10px 14px",textAlign:"center"}}>
-                        {edited&&<button onClick={()=>handleSave(u.user_id)} disabled={savingId===u.user_id} style={{height:30,padding:"0 12px",borderRadius:6,border:"none",background:"#15803d",color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit",opacity:savingId===u.user_id?.6:1}}>{savingId===u.user_id?"...":"Save"}</button>}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+        <div style={{fontSize:13}}>
+          <div style={{background:"#f0fdf4",borderRadius:10,padding:16,marginBottom:12,border:"1px solid #bbf7d0"}}>
+            <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
+              <span style={{color:"#64748b",fontWeight:600}}>MRR</span>
+              <span style={{color:"#15803d",fontWeight:800,fontSize:20}}>${mrr.toFixed(2)}</span>
+            </div>
+            <div style={{display:"flex",justifyContent:"space-between"}}>
+              <span style={{color:"#64748b",fontWeight:600}}>ARR</span>
+              <span style={{color:"#15803d",fontWeight:700,fontSize:15}}>${arr.toFixed(2)}</span>
+            </div>
           </div>
-          <div style={{padding:"10px 14px",fontSize:12,color:"#94a3b8",borderTop:"1px solid #e2e8f0"}}>{shown.length} of {users.length} users</div>
-        </Card>
+          <div style={{background:"#fff",borderRadius:10,padding:"12px 16px",marginBottom:12,border:"1px solid #e2e8f0"}}>
+            <div style={{fontWeight:700,marginBottom:8,color:"#0f172a"}}>💳 Paying Subscribers</div>
+            <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
+              <span style={{color:"#64748b"}}>Pro ({payingPro.length} × $19)</span>
+              <span style={{fontWeight:600}}>${(payingPro.length*PRO_PRICE).toFixed(2)}/mo</span>
+            </div>
+            <div style={{display:"flex",justifyContent:"space-between"}}>
+              <span style={{color:"#64748b"}}>Team ({payingTeam.length} × $39)</span>
+              <span style={{fontWeight:600}}>${(payingTeam.length*TEAM_PRICE).toFixed(2)}/mo</span>
+            </div>
+          </div>
+          <div style={{background:"#fff",borderRadius:10,padding:"12px 16px",marginBottom:12,border:"1px solid #e2e8f0"}}>
+            <div style={{fontWeight:700,marginBottom:8,color:"#0f172a"}}>🧪 Beta / Manual</div>
+            {betaPro.length===0&&betaTeam.length===0?(
+              <div style={{color:"#94a3b8"}}>None</div>
+            ):(
+              <>
+                {betaPro.map(u=><div key={u.user_id} style={{color:"#64748b",fontSize:12,marginBottom:2}}>Pro · {u.email}</div>)}
+                {betaTeam.map(u=><div key={u.user_id} style={{color:"#64748b",fontSize:12,marginBottom:2}}>Team · {u.email}</div>)}
+              </>
+            )}
+          </div>
+          <div style={{background:"#fff",borderRadius:10,padding:"12px 16px",marginBottom:12,border:"1px solid #e2e8f0"}}>
+            <div style={{fontWeight:700,marginBottom:8,color:"#0f172a"}}>👥 All Users</div>
+            {[["Total",users.length],["Free",freeUsers.length],["Pro (paying)",payingPro.length],["Pro (beta)",betaPro.length],["Team (paying)",payingTeam.length],["Cancelled",cancelledUsers.length]].map(([label,count])=>(
+              <div key={label} style={{display:"flex",justifyContent:"space-between",marginBottom:4,color:"#475569"}}>
+                <span>{label}</span><span style={{fontWeight:600}}>{count}</span>
+              </div>
+            ))}
+          </div>
+          <div style={{background:"#fff",borderRadius:10,padding:"12px 16px",border:"1px solid #e2e8f0"}}>
+            <div style={{fontWeight:700,marginBottom:8,color:"#0f172a"}}>📈 New Signups</div>
+            <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
+              <span style={{color:"#64748b"}}>Last 7 days</span><span style={{fontWeight:600}}>{signups7}</span>
+            </div>
+            <div style={{display:"flex",justifyContent:"space-between"}}>
+              <span style={{color:"#64748b"}}>Last 30 days</span><span style={{fontWeight:600}}>{signups30}</span>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -2451,7 +2525,7 @@ function AuthScreen(){
         {mode!=="verify" && (
         <div style={{marginBottom:12}}>
           <div style={{fontSize:13,fontWeight:600,color:"#334155",marginBottom:4}}>{t("email",lang)}</div>
-          <Inp tabIndex={1} type="email" value={email} onChange={e=>{setEmail(e.target.value);setEmailBlurred(false);}} onBlur={()=>setEmailBlurred(true)} placeholder={t("ph_company_email",lang)} autoComplete="email"/>
+          <Inp tabIndex={1} type="email" name="email" value={email} onChange={e=>{setEmail(e.target.value);setEmailBlurred(false);}} onBlur={()=>setEmailBlurred(true)} placeholder={t("ph_company_email",lang)} autoComplete="email"/>
           {mode==="signup" && emailBlurred && emailLooksValid && (
             <div style={{fontSize:12,color:"#64748b",marginTop:6}}>If you already have an account, <button type="button" tabIndex={-1} onClick={()=>{clearMsgs();setMode("login");}} style={{background:"none",border:"none",color:"#15803d",fontSize:12,fontWeight:600,cursor:"pointer",textDecoration:"underline",padding:0,fontFamily:"inherit"}}>log in instead →</button></div>
           )}
@@ -2462,7 +2536,7 @@ function AuthScreen(){
             <div style={{marginBottom:4}}>
               <div style={{fontSize:13,fontWeight:600,color:"#334155",marginBottom:4}}>{t("password",lang)}</div>
               <div style={{position:"relative"}}>
-                <Inp tabIndex={2} type={showPw?"text":"password"} value={password} onChange={e=>setPassword(e.target.value)} placeholder="••••••••" autoComplete="current-password" style={{paddingRight:44}}/>
+                <Inp tabIndex={2} type={showPw?"text":"password"} name="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="••••••••" autoComplete="current-password" style={{paddingRight:44}}/>
                 <button type="button" tabIndex={-1} onClick={()=>setShowPw(v=>!v)} aria-label={showPw?"Hide password":"Show password"} style={{position:"absolute",right:12,top:"50%",transform:"translateY(-50%)",width:24,height:24,minHeight:24,padding:0,border:"none",background:"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
                   {showPw ? <EyeOpen color="#15803d"/> : <EyeOff color="#94a3b8"/>}
                 </button>
@@ -2483,7 +2557,7 @@ function AuthScreen(){
             <div style={{marginBottom:12}}>
               <div style={{fontSize:13,fontWeight:600,color:"#334155",marginBottom:4}}>{t("password",lang)}</div>
               <div style={{position:"relative"}}>
-                <Inp tabIndex={2} type={showPw?"text":"password"} value={password} onChange={e=>setPassword(e.target.value)} placeholder={t("ph_password_min",lang)} autoComplete="new-password" style={{paddingRight:44}}/>
+                <Inp tabIndex={2} type={showPw?"text":"password"} name="new-password" value={password} onChange={e=>setPassword(e.target.value)} placeholder={t("ph_password_min",lang)} autoComplete="new-password" style={{paddingRight:44}}/>
                 <button type="button" tabIndex={-1} onClick={()=>setShowPw(v=>!v)} aria-label={showPw?"Hide password":"Show password"} style={{position:"absolute",right:12,top:"50%",transform:"translateY(-50%)",width:24,height:24,minHeight:24,padding:0,border:"none",background:"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
                   {showPw ? <EyeOpen color="#15803d"/> : <EyeOff color="#94a3b8"/>}
                 </button>
@@ -2492,7 +2566,7 @@ function AuthScreen(){
             <div style={{marginBottom:12}}>
               <div style={{fontSize:13,fontWeight:600,color:"#334155",marginBottom:4}}>{t("confirm_password",lang)}</div>
               <div style={{position:"relative"}}>
-                <Inp tabIndex={3} type={showPw2?"text":"password"} value={password2} onChange={e=>setPassword2(e.target.value)} placeholder={t("ph_password_retype",lang)} autoComplete="new-password" style={{paddingRight:72}}/>
+                <Inp tabIndex={3} type={showPw2?"text":"password"} name="confirm-password" value={password2} onChange={e=>setPassword2(e.target.value)} placeholder={t("ph_password_retype",lang)} autoComplete="new-password" style={{paddingRight:72}}/>
                 {password2.length>0 && (
                   <span style={{position:"absolute",right:44,top:"50%",transform:"translateY(-50%)",display:"flex",alignItems:"center",justifyContent:"center",pointerEvents:"none"}}>
                     {pwMatch
@@ -2614,7 +2688,7 @@ function ResetPasswordScreen({onDone}){
         <div style={{marginBottom:12}}>
           <div style={{fontSize:13,fontWeight:600,color:"#334155",marginBottom:4}}>{t("new_pw",lang)}</div>
           <div style={{position:"relative"}}>
-            <Inp tabIndex={1} type={showPw?"text":"password"} value={pw} onChange={e=>setPw(e.target.value)} placeholder="••••••••" autoComplete="new-password" style={{paddingRight:44}}/>
+            <Inp tabIndex={1} type={showPw?"text":"password"} name="new-password" value={pw} onChange={e=>setPw(e.target.value)} placeholder="••••••••" autoComplete="new-password" style={{paddingRight:44}}/>
             <button type="button" tabIndex={-1} onClick={()=>setShowPw(v=>!v)} aria-label={showPw?"Hide password":"Show password"} style={{position:"absolute",right:12,top:"50%",transform:"translateY(-50%)",width:24,height:24,minHeight:24,padding:0,border:"none",background:"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
               {showPw ? <EyeOpen color="#15803d"/> : <EyeOff color="#94a3b8"/>}
             </button>
@@ -2623,7 +2697,7 @@ function ResetPasswordScreen({onDone}){
         <div style={{marginBottom:12}}>
           <div style={{fontSize:13,fontWeight:600,color:"#334155",marginBottom:4}}>{t("confirm_new_pw",lang)}</div>
           <div style={{position:"relative"}}>
-            <Inp tabIndex={2} type={showPw2?"text":"password"} value={pw2} onChange={e=>setPw2(e.target.value)} placeholder="••••••••" autoComplete="new-password" style={{paddingRight:44}}/>
+            <Inp tabIndex={2} type={showPw2?"text":"password"} name="confirm-password" value={pw2} onChange={e=>setPw2(e.target.value)} placeholder="••••••••" autoComplete="new-password" style={{paddingRight:44}}/>
             <button type="button" tabIndex={-1} onClick={()=>setShowPw2(v=>!v)} aria-label={showPw2?"Hide password":"Show password"} style={{position:"absolute",right:12,top:"50%",transform:"translateY(-50%)",width:24,height:24,minHeight:24,padding:0,border:"none",background:"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
               {showPw2 ? <EyeOpen color="#15803d"/> : <EyeOff color="#94a3b8"/>}
             </button>
