@@ -2222,15 +2222,23 @@ function AdminPanel({onClose,bp}){
 
   const handleSave=async(userId)=>{
     const newPlan=planEdits[userId];
-    if(!newPlan)return;
+    console.log('[handleAdminSave] userId:', userId, 'newPlan:', newPlan);
+    if(!newPlan){console.error('[handleAdminSave] No plan change for:', userId);return;}
     setSavingId(userId);
     try{
       await adminUpdatePlan(userId,newPlan);
+      // Only update local state AFTER confirmed database write
       setUsers(prev=>prev.map(u=>u.user_id===userId?{...u,plan:newPlan}:u));
-      setMsg(`Updated to ${newPlan}`);
-      setTimeout(()=>setMsg(""),2000);
-    }catch(e){setMsg("Error: "+e.message);}
-    setSavingId(null);
+      setPlanEdits(prev=>{const n={...prev};delete n[userId];return n;});
+      setMsg(`✓ Updated to ${newPlan}`);
+      setTimeout(()=>setMsg(""),3000);
+    }catch(e){
+      console.error('[handleAdminSave] FAILED:', e);
+      setMsg("Error: "+e.message);
+      setTimeout(()=>setMsg(""),5000);
+    }finally{
+      setSavingId(null);
+    }
   };
 
   const shown=users.filter(u=>{

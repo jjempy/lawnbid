@@ -496,11 +496,27 @@ export async function adminFetchAllUsers() {
 }
 
 export async function adminUpdatePlan(userId, plan) {
-  const { error } = await supabase
+  console.log('[adminUpdatePlan] START - userId:', userId, 'plan:', plan)
+  if (!userId || !plan) {
+    console.error('[adminUpdatePlan] MISSING userId or plan - aborting')
+    throw new Error('Missing userId or plan')
+  }
+  const { data, error } = await supabase
     .from('settings')
     .update({ plan })
     .eq('user_id', userId)
-  if (error) { console.error('[LawnBid] adminUpdatePlan error:', error); throw error }
+    .select('user_id, plan')
+  console.log('[adminUpdatePlan] RESULT - data:', data, 'error:', error)
+  if (error) {
+    console.error('[adminUpdatePlan] ERROR:', error)
+    throw error
+  }
+  if (!data || data.length === 0) {
+    console.error('[adminUpdatePlan] NO ROWS UPDATED - userId may not exist in settings')
+    throw new Error('No rows updated - user may not have a settings row')
+  }
+  console.log('[adminUpdatePlan] SUCCESS - updated to:', data[0].plan)
+  return data
 }
 
 // ─── Add-on services library ──────────────────────────────────────────────────
