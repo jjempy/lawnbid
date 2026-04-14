@@ -2321,55 +2321,57 @@ function AdminPanel({onClose,bp}){
         </>
       ):(
         <div style={{fontSize:13}}>
+          {(()=>{const rw={display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 0",borderBottom:"1px solid #f1f5f9"};const rwLast={...rw,borderBottom:"none"};return(<>
           <div style={{background:"#f0fdf4",borderRadius:10,padding:16,marginBottom:12,border:"1px solid #bbf7d0"}}>
-            <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
+            <div style={rw}>
               <span style={{color:"#64748b",fontWeight:600}}>MRR</span>
               <span style={{color:"#15803d",fontWeight:800,fontSize:20}}>${mrr.toFixed(2)}</span>
             </div>
-            <div style={{display:"flex",justifyContent:"space-between"}}>
+            <div style={rwLast}>
               <span style={{color:"#64748b",fontWeight:600}}>ARR</span>
               <span style={{color:"#15803d",fontWeight:700,fontSize:15}}>${arr.toFixed(2)}</span>
             </div>
           </div>
           <div style={{background:"#fff",borderRadius:10,padding:"12px 16px",marginBottom:12,border:"1px solid #e2e8f0"}}>
-            <div style={{fontWeight:700,marginBottom:8,color:"#0f172a"}}>💳 Paying Subscribers</div>
-            <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
+            <div style={{fontWeight:700,marginBottom:4,color:"#0f172a"}}>💳 Paying Subscribers</div>
+            <div style={rw}>
               <span style={{color:"#64748b"}}>Pro ({payingPro.length} × $19)</span>
               <span style={{fontWeight:600}}>${(payingPro.length*PRO_PRICE).toFixed(2)}/mo</span>
             </div>
-            <div style={{display:"flex",justifyContent:"space-between"}}>
+            <div style={rwLast}>
               <span style={{color:"#64748b"}}>Team ({payingTeam.length} × $39)</span>
               <span style={{fontWeight:600}}>${(payingTeam.length*TEAM_PRICE).toFixed(2)}/mo</span>
             </div>
           </div>
           <div style={{background:"#fff",borderRadius:10,padding:"12px 16px",marginBottom:12,border:"1px solid #e2e8f0"}}>
-            <div style={{fontWeight:700,marginBottom:8,color:"#0f172a"}}>🧪 Beta / Manual</div>
+            <div style={{fontWeight:700,marginBottom:4,color:"#0f172a"}}>🧪 Beta / Manual</div>
             {betaPro.length===0&&betaTeam.length===0?(
-              <div style={{color:"#94a3b8"}}>None</div>
+              <div style={{color:"#94a3b8",padding:"6px 0"}}>None</div>
             ):(
               <>
-                {betaPro.map(u=><div key={u.user_id} style={{color:"#64748b",fontSize:12,marginBottom:2}}>Pro · {u.email}</div>)}
-                {betaTeam.map(u=><div key={u.user_id} style={{color:"#64748b",fontSize:12,marginBottom:2}}>Team · {u.email}</div>)}
+                {betaPro.map((u,i)=><div key={u.user_id} style={i===betaPro.length-1&&betaTeam.length===0?rwLast:rw}><span style={{color:"#64748b",fontSize:12}}>Pro</span><span style={{fontSize:12}}>{u.email}</span></div>)}
+                {betaTeam.map((u,i)=><div key={u.user_id} style={i===betaTeam.length-1?rwLast:rw}><span style={{color:"#64748b",fontSize:12}}>Team</span><span style={{fontSize:12}}>{u.email}</span></div>)}
               </>
             )}
           </div>
           <div style={{background:"#fff",borderRadius:10,padding:"12px 16px",marginBottom:12,border:"1px solid #e2e8f0"}}>
-            <div style={{fontWeight:700,marginBottom:8,color:"#0f172a"}}>👥 All Users</div>
-            {[["Total (excl. admin)",nonAdmin.length],["Free",freeUsers.length],["Pro (paying)",payingPro.length],["Pro (beta)",betaPro.length],["Team (paying)",payingTeam.length],["Cancelled",cancelledUsers.length]].map(([label,count])=>(
-              <div key={label} style={{display:"flex",justifyContent:"space-between",marginBottom:4,color:"#475569"}}>
-                <span>{label}</span><span style={{fontWeight:600}}>{count}</span>
+            <div style={{fontWeight:700,marginBottom:4,color:"#0f172a"}}>👥 All Users</div>
+            {[["Total (excl. admin)",nonAdmin.length],["Free",freeUsers.length],["Pro (paying)",payingPro.length],["Pro (beta)",betaPro.length],["Team (paying)",payingTeam.length],["Cancelled",cancelledUsers.length]].map(([label,count],i,arr)=>(
+              <div key={label} style={i===arr.length-1?rwLast:rw}>
+                <span style={{color:"#475569"}}>{label}</span><span style={{fontWeight:600}}>{count}</span>
               </div>
             ))}
           </div>
           <div style={{background:"#fff",borderRadius:10,padding:"12px 16px",border:"1px solid #e2e8f0"}}>
-            <div style={{fontWeight:700,marginBottom:8,color:"#0f172a"}}>📈 New Signups</div>
-            <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
+            <div style={{fontWeight:700,marginBottom:4,color:"#0f172a"}}>📈 New Signups</div>
+            <div style={rw}>
               <span style={{color:"#64748b"}}>Last 7 days</span><span style={{fontWeight:600}}>{signups7}</span>
             </div>
-            <div style={{display:"flex",justifyContent:"space-between"}}>
+            <div style={rwLast}>
               <span style={{color:"#64748b"}}>Last 30 days</span><span style={{fontWeight:600}}>{signups30}</span>
             </div>
           </div>
+          </>);})()}
         </div>
       )}
     </div>
