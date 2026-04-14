@@ -527,11 +527,11 @@ export async function adminUpdatePlan(userId, plan) {
 
 export async function fetchUserQuoteCounts() {
   const { data, error } = await supabase
-    .from('quotes')
-    .select('user_id')
+    .from('user_quote_counts')
+    .select('user_id, quote_count')
   if (error) { console.error('[LawnBid] fetchUserQuoteCounts error:', error); return {} }
   const counts = {};
-  (data || []).forEach(q => { counts[q.user_id] = (counts[q.user_id] || 0) + 1 })
+  (data || []).forEach(r => { counts[r.user_id] = r.quote_count })
   return counts
 }
 
