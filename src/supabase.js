@@ -497,26 +497,32 @@ export async function adminFetchAllUsers() {
 
 export async function adminUpdatePlan(userId, plan) {
   console.log('[adminUpdatePlan] START - userId:', userId, 'plan:', plan)
-  if (!userId || !plan) {
-    console.error('[adminUpdatePlan] MISSING userId or plan - aborting')
-    throw new Error('Missing userId or plan')
+  if (!userId || !plan) throw new Error('Missing userId or plan')
+
+  const { data: { session } } = await supabase.auth.getSession()
+  if (!session) throw new Error('No active session')
+
+  const response = await fetch(
+    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-update-plan`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ userId, plan }),
+    }
+  )
+
+  const result = await response.json()
+  console.log('[adminUpdatePlan] RESULT:', result)
+
+  if (!response.ok || result.error) {
+    throw new Error(result.error || 'Update failed')
   }
-  const { data, error } = await supabase
-    .from('settings')
-    .update({ plan })
-    .eq('user_id', userId)
-    .select('user_id, plan')
-  console.log('[adminUpdatePlan] RESULT - data:', data, 'error:', error)
-  if (error) {
-    console.error('[adminUpdatePlan] ERROR:', error)
-    throw error
-  }
-  if (!data || data.length === 0) {
-    console.error('[adminUpdatePlan] NO ROWS UPDATED - userId may not exist in settings')
-    throw new Error('No rows updated - user may not have a settings row')
-  }
-  console.log('[adminUpdatePlan] SUCCESS - updated to:', data[0].plan)
-  return data
+
+  console.log('[adminUpdatePlan] SUCCESS')
+  return result.data
 }
 
 // ─── Add-on services library ──────────────────────────────────────────────────
