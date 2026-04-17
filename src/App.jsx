@@ -232,9 +232,11 @@ function calcQ(area, perim, cx, risk, disc, s, ov=null) {
 function calcTime(area, perim, crew, cx) {
   if(!area||!perim||area<=0||perim<=0) return null;
   const mh=area/20000, th=perim/3000;
-  const wall=crew>=2?Math.max(mh,th):mh+th, adj=wall*cx, pct=Math.min(100,(adj/8)*100);
+  const par=Math.max(mh,th), seq=mh+th;
+  const crewWall=n=>n===1?seq:n===2?par:n===3?par*0.85:par*0.75;
+  const wall=crewWall(Number(crew)||1), adj=wall*cx, pct=Math.min(100,(adj/8)*100);
   return { mh, th, wall, adj, pct,
-    crew_times:[1,2,3,4].map(n=>({n, t:(n>=2?Math.max(mh,th):mh+th)*cx})) };
+    crew_times:[1,2,3,4].map(n=>({n, t:crewWall(n)*cx})) };
 }
 
 async function generateQuotePDF(quote, settings, calc, time, quoteLang) {
