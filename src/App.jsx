@@ -1928,7 +1928,7 @@ function SettingsScreen({bp,settings,onSave,onLogout,onLangChange,addonLibrary,r
     try { await onSave(loc); setSaved(true); setTimeout(()=>setSaved(false),2000); }
     catch(e) { console.error("[LawnBid] Settings save failed:", e); alert("Could not save settings. Check your connection and try again."); }
   };
-  const reset=async()=>{if(confirm("Reset formula settings to defaults?")){const ns={...loc,...DEFAULT_SETTINGS};setLoc(ns);try{await onSave(ns);}catch(e){console.error("[LawnBid] Settings reset failed:",e);}}};
+  const reset=async()=>{if(confirm("Reset formula settings to defaults?")){const ns={...loc,mow_rate:110,trim_rate:18,equipment_cost:12.35,hourly_rate:22.80,minimum_bid:55,complexity_default:1.0,risk_default:1.0,profit_margin:0.30,quote_validity_days:30,follow_up_days:3,follow_up_enabled:true};setLoc(ns);try{await onSave(ns);}catch(e){console.error("[LawnBid] Settings reset failed:",e);}}};
   const TIPS={
     mow_rate:t("tip_mow_rate",lang),
     trim_rate:t("tip_trim_rate",lang),
