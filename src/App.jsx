@@ -3040,10 +3040,9 @@ function S2({bp,flow,set,errors,area,perim,onAdvance,bumpFeatureUse}){
   const lang = useLang();
   const twoCol = bp !== "mobile";
   const {canUseMap,showUpgrade,plan,mapLimit,mapUsed,mapLimitReached} = usePlan();
-  const [mTab,setMTab] = useState(canUseMap?"map":"manual");
+  const [mTab,setMTab] = useState(canUseMap&&!mapLimitReached?"map":"manual");
   const [mapConfirmed,setMapConfirmed] = useState(false);
   const applyMapMeasurements = ({areaSqft, perimFt, polygons}) => {
-    if (mapLimitReached) { showUpgrade("map"); return; }
     set("areaVal", String(areaSqft));
     set("areaUnit", "sqft");
     set("perimVal", String(perimFt));
@@ -3089,10 +3088,11 @@ function S2({bp,flow,set,errors,area,perim,onAdvance,bumpFeatureUse}){
         {[["map","🗺 "+t("map_tab",lang),true],["manual","✏️ "+t("manual_tab",lang),true]].map(([k,lbl])=>{
           const active = mTab===k;
           const locked = k==="map" && !canUseMap;
+          const limited = k==="map" && canUseMap && mapLimitReached;
           return (
-            <button key={k} onClick={()=>{ if(locked){ setMTab("map"); } else setMTab(k); }} style={{flex:1,height:40,minHeight:40,border:"none",borderRadius:9,background:active?"#ffffff":"transparent",color:active?"#0f172a":"#64748b",fontWeight:active?700:600,fontSize:13,cursor:"pointer",fontFamily:"inherit",boxShadow:active?"0 1px 3px rgba(0,0,0,.08)":"none",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:6}}>
-              {locked && <LockIcon size={13} color={active?"#94a3b8":"#94a3b8"}/>}{lbl}
-              {k==="map"&&mapLimit!==null&&!locked&&<span style={{fontSize:10,color:"#94a3b8",marginLeft:2}}>({t("map_uses_left",lang).replace("{{n}}",Math.max(0,mapLimit-mapUsed))})</span>}
+            <button key={k} onClick={()=>{ if(locked){ setMTab("map"); } else if(limited){ showUpgrade("map"); } else setMTab(k); }} style={{flex:1,height:40,minHeight:40,border:"none",borderRadius:9,background:active?"#ffffff":"transparent",color:active?"#0f172a":"#64748b",fontWeight:active?700:600,fontSize:13,cursor:"pointer",fontFamily:"inherit",boxShadow:active?"0 1px 3px rgba(0,0,0,.08)":"none",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:6}}>
+              {(locked||limited) && <LockIcon size={13} color={active?"#94a3b8":"#94a3b8"}/>}{lbl}
+              {k==="map"&&mapLimit!==null&&!locked&&<span style={{fontSize:10,color:limited?"#dc2626":"#94a3b8",marginLeft:2}}>({limited?t("map_uses_left",lang).replace("{{n}}","0"):t("map_uses_left",lang).replace("{{n}}",Math.max(0,mapLimit-mapUsed))})</span>}
             </button>
           );
         })}
