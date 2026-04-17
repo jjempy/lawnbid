@@ -82,7 +82,7 @@ const DEFAULT_SETTINGS = {
   plan: "free", quote_count_this_month: 0, quote_count_reset_at: new Date().toISOString(),
 };
 const PLANS = {
-  free: { name:"Free", quote_limit:10, map:true, pdf:true, photos:true, map_limit:3, pdf_limit:3, photo_limit:3 },
+  free: { name:"Free", quote_limit:null, map:true, pdf:true, photos:true, map_limit:3, pdf_limit:3, photo_limit:3 },
   pro:  { name:"Pro",  quote_limit:null, map:true, pdf:true, photos:true, map_limit:null, pdf_limit:null, photo_limit:null },
   team: { name:"Team", quote_limit:null, map:true, pdf:true, photos:true, map_limit:null, pdf_limit:null, photo_limit:null },
 };
