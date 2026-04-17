@@ -2225,6 +2225,7 @@ function SettingsScreen({bp,settings,onSave,onLogout,onLangChange,addonLibrary,r
 }
 
 // ─── Admin Panel (hidden, owner only) ─────────────────────────────────────────
+const planBadgeStyle=(plan)=>{const base={padding:"2px 8px",borderRadius:10,fontSize:11,fontWeight:700,display:"inline-block"};switch(plan){case"pro":return{...base,background:"#f0fdf4",color:"#15803d",border:"1px solid #bbf7d0"};case"team":return{...base,background:"#eff6ff",color:"#1d4ed8",border:"1px solid #bfdbfe"};default:return{...base,background:"#f8fafc",color:"#64748b",border:"1px solid #e2e8f0"};}};
 function AdminPanel({onClose,bp}){
   const [users,setUsers]=useState([]);
   const [loading,setLoading]=useState(true);
@@ -2330,11 +2331,14 @@ function AdminPanel({onClose,bp}){
                           </div>
                         </td>
                         <td style={{padding:"10px 14px"}}>
-                          <select value={planEdits[u.user_id]||u.plan||"free"} onChange={e=>setPlanEdits(p=>({...p,[u.user_id]:e.target.value}))} style={{height:32,padding:"0 8px",border:"1.5px solid #e2e8f0",borderRadius:8,fontSize:13,fontFamily:"inherit",background:edited?"#dcfce7":"#fff",fontWeight:edited?700:500,color:edited?"#15803d":"#0f172a"}}>
-                            <option value="free">Free</option>
-                            <option value="pro">Pro</option>
-                            <option value="team">Team</option>
-                          </select>
+                          <div style={{display:"flex",alignItems:"center",gap:8}}>
+                            <span style={planBadgeStyle(planEdits[u.user_id]||u.plan||"free")}>{(planEdits[u.user_id]||u.plan||"free").charAt(0).toUpperCase()+(planEdits[u.user_id]||u.plan||"free").slice(1)}</span>
+                            <select value={planEdits[u.user_id]||u.plan||"free"} onChange={e=>setPlanEdits(p=>({...p,[u.user_id]:e.target.value}))} style={{height:32,padding:"0 8px",border:"1.5px solid #e2e8f0",borderRadius:8,fontSize:13,fontFamily:"inherit",background:edited?"#dcfce7":"#fff",fontWeight:edited?700:500,color:edited?"#15803d":"#0f172a"}}>
+                              <option value="free">Free</option>
+                              <option value="pro">Pro</option>
+                              <option value="team">Team</option>
+                            </select>
+                          </div>
                         </td>
                         <td style={{padding:"10px 14px",fontSize:12,color:"#64748b"}}>{u.signed_up?fmtD(u.signed_up):"—"}</td>
                         <td style={{padding:"10px 14px",fontSize:12,color:"#64748b"}}>{u.last_sign_in_at?fmtD(u.last_sign_in_at):"Never"}</td>
