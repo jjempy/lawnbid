@@ -104,6 +104,9 @@
 // ALTER TABLE settings ADD COLUMN IF NOT EXISTS quote_count_this_month integer DEFAULT 0;
 // ALTER TABLE settings ADD COLUMN IF NOT EXISTS quote_count_reset_at timestamptz DEFAULT NOW();
 // ALTER TABLE settings ADD COLUMN IF NOT EXISTS quote_validity_days integer DEFAULT 30;
+// ALTER TABLE settings ADD COLUMN IF NOT EXISTS map_uses_this_month integer DEFAULT 0;
+// ALTER TABLE settings ADD COLUMN IF NOT EXISTS pdf_uses_this_month integer DEFAULT 0;
+// ALTER TABLE settings ADD COLUMN IF NOT EXISTS photo_uses_this_month integer DEFAULT 0;
 //
 // Storage bucket: create `quote-attachments` in Supabase Dashboard → Storage.
 //
@@ -303,6 +306,7 @@ const SETTINGS_COLUMNS = [
   'company_name','company_phone','company_email','company_logo_base64',
   'plan','plan_cancelled','plan_expires_at',
   'quote_count_this_month','quote_count_reset_at',
+  'map_uses_this_month','pdf_uses_this_month','photo_uses_this_month',
 ]
 export async function saveSettings(settings) {
   const userId = await currentUserId()

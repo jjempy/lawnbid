@@ -436,6 +436,16 @@ export const translations = {
     sms_weekly: 'Weekly',
     sms_biweekly: 'Biweekly',
     sms_monthly: 'Monthly',
+    // Free tier usage limits
+    map_uses_left: '{{n}} left this month',
+    pdf_uses_left: '{{n}} left',
+    photo_uses_left: '{{n}} left',
+    upgrade_map_title: "You've used your 3 free measurements",
+    upgrade_map_desc: 'Upgrade to Pro for unlimited satellite measurements every month.',
+    upgrade_pdf_title: "You've used your 3 free PDF downloads",
+    upgrade_pdf_desc: 'Upgrade to Pro for unlimited professional PDF quotes.',
+    upgrade_photo_title: "You've used your 3 free photo uploads",
+    upgrade_photo_desc: 'Upgrade to Pro for unlimited photo attachments on every quote.',
     // OTP verification
     verify_email: 'Check your email',
     verify_desc: 'We sent a verification code to',
@@ -971,6 +981,16 @@ export const translations = {
     sms_weekly: 'Semanal',
     sms_biweekly: 'Quincenal',
     sms_monthly: 'Mensual',
+    // Free tier usage limits
+    map_uses_left: '{{n}} restantes este mes',
+    pdf_uses_left: '{{n}} restantes',
+    photo_uses_left: '{{n}} restantes',
+    upgrade_map_title: 'Usaste tus 3 mediciones gratis',
+    upgrade_map_desc: 'Mejora a Pro para mediciones satelitales ilimitadas cada mes.',
+    upgrade_pdf_title: 'Usaste tus 3 descargas PDF gratis',
+    upgrade_pdf_desc: 'Mejora a Pro para precios en PDF ilimitados.',
+    upgrade_photo_title: 'Usaste tus 3 subidas de fotos gratis',
+    upgrade_photo_desc: 'Mejora a Pro para fotos ilimitadas en cada precio.',
     // OTP verification
     verify_email: 'Revisa tu correo',
     verify_desc: 'Enviamos un código de verificación a',

@@ -82,9 +82,9 @@ const DEFAULT_SETTINGS = {
   plan: "free", quote_count_this_month: 0, quote_count_reset_at: new Date().toISOString(),
 };
 const PLANS = {
-  free: { name:"Free", quote_limit:10,   map:false, pdf:false, photos:false },
-  pro:  { name:"Pro",  quote_limit:null, map:true,  pdf:true,  photos:true  },
-  team: { name:"Team", quote_limit:null, map:true,  pdf:true,  photos:true  },
+  free: { name:"Free", quote_limit:10, map:true, pdf:true, photos:true, map_limit:3, pdf_limit:3, photo_limit:3 },
+  pro:  { name:"Pro",  quote_limit:null, map:true, pdf:true, photos:true, map_limit:null, pdf_limit:null, photo_limit:null },
+  team: { name:"Team", quote_limit:null, map:true, pdf:true, photos:true, map_limit:null, pdf_limit:null, photo_limit:null },
 };
 const PLAN_PRICE = "$19/month";
 const PlanContext = createContext(null);
@@ -557,6 +557,9 @@ export default function LawnBid() {
   const planValue = useMemo(() => {
     const key = settings?.plan || "free";
     const cfg = PLANS[key] || PLANS.free;
+    const mapUsed = settings?.map_uses_this_month || 0;
+    const pdfUsed = settings?.pdf_uses_this_month || 0;
+    const photoUsed = settings?.photo_uses_this_month || 0;
     return {
       plan: key,
       planName: cfg.name,
@@ -567,9 +570,12 @@ export default function LawnBid() {
       quotesUsed: quotesUsedLive,
       quotesRemaining: cfg.quote_limit !== null ? Math.max(0, cfg.quote_limit - quotesUsedLive) : null,
       isAtLimit: cfg.quote_limit !== null && quotesUsedLive >= cfg.quote_limit,
+      mapLimit: cfg.map_limit, mapUsed, mapLimitReached: cfg.map_limit !== null && mapUsed >= cfg.map_limit,
+      pdfLimit: cfg.pdf_limit, pdfUsed, pdfLimitReached: cfg.pdf_limit !== null && pdfUsed >= cfg.pdf_limit,
+      photoLimit: cfg.photo_limit, photoUsed, photoLimitReached: cfg.photo_limit !== null && photoUsed >= cfg.photo_limit,
       showUpgrade: (feature) => setUpgradeFor(feature),
     };
-  }, [settings?.plan, quotesUsedLive]);
+  }, [settings?.plan, quotesUsedLive, settings?.map_uses_this_month, settings?.pdf_uses_this_month, settings?.photo_uses_this_month]);
 
   // Language: useState for reliable reactivity across the component tree
   const [lang, setLang] = useState(()=>{try{return localStorage.getItem("lb_language")||"en";}catch{return"en";}});
@@ -861,7 +867,9 @@ export default function LawnBid() {
   const screenContent = screen==="flow" ? (
     <QuoteFlow bp={bp} step={step} setStep={setStep} flow={flow} setFlow={setFlow}
       errors={errors} setErrors={setErrors} settings={settings}
-      clients={clients} quotes={quotes} addonLibrary={addonLibrary} onSave={handleSave} onCancel={goHome} saving={saving}/>
+      clients={clients} quotes={quotes} addonLibrary={addonLibrary} onSave={handleSave} onCancel={goHome} saving={saving}
+      bumpFeatureUse={async(key)=>{const k=key+"_uses_this_month";const nv=(settings[k]||0)+1;const ns={...settings,[k]:nv};setSettings(ns);try{await dbSaveSettings(ns);}catch(e){console.error("[LawnBid] bump feature failed:",e);}}}
+    />
   ):screen==="quote-detail"&&activeQ ? (
     <QuoteDetail bp={bp} quote={activeQ} allQuotes={quotes} settings={settings} clients={clients}
       onBack={()=>setScreen(selC&&tab==="clients"?"client-detail":"home")}
@@ -870,6 +878,7 @@ export default function LawnBid() {
       onDelete={()=>handleDeleteQuote(activeQ.quote_id)}
       onAccepted={()=>handleAccepted(activeQ.quote_id)}
       onViewClient={()=>{ if(activeQ.client_id){ setSelC(activeQ.client_id); setClientDetailFrom("quote"); setTab("clients"); setScreen("client-detail"); } }}
+      bumpFeatureUse={async(key)=>{const k=key+"_uses_this_month";const nv=(settings[k]||0)+1;const ns={...settings,[k]:nv};setSettings(ns);try{await dbSaveSettings(ns);}catch(e){console.error("[LawnBid] bump feature failed:",e);}}}
       onSend={async()=>{
         const now=new Date().toISOString();
         try{
@@ -1064,6 +1073,10 @@ function BottomNav({tab,screen,setTab,setScreen,bp,maxW}){
 // ─── Upgrade modal (plan gate) ───
 function UpgradeModal({feature,onClose}){
   const lang = useLang();
+  const reasonMap = {map:["upgrade_map_title","upgrade_map_desc"],pdf:["upgrade_pdf_title","upgrade_pdf_desc"],photo:["upgrade_photo_title","upgrade_photo_desc"]};
+  const rm = reasonMap[feature];
+  const title = rm ? t(rm[0],lang) : feature;
+  const desc = rm ? t(rm[1],lang) : t("upgrade_desc",lang);
   return (
     <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.6)",zIndex:450,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
       <div onClick={e=>e.stopPropagation()} style={{background:"#ffffff",borderRadius:16,padding:24,width:"100%",maxWidth:400,boxSizing:"border-box",boxShadow:"0 10px 40px rgba(0,0,0,.25)"}}>
@@ -1072,8 +1085,8 @@ function UpgradeModal({feature,onClose}){
             <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#15803d" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="12 3 20 8 20 16 12 21 4 16 4 8 12 3"/><line x1="12" y1="12" x2="12" y2="21"/><polyline points="4 8 12 12 20 8"/></svg>
           </div>
         </div>
-        <div style={{fontSize:18,fontWeight:800,color:"#0f172a",textAlign:"center",marginBottom:4,letterSpacing:-.2}}>{feature}</div>
-        <div style={{fontSize:13,color:"#64748b",textAlign:"center",lineHeight:1.5,marginBottom:16}}>{t("upgrade_desc",lang)}</div>
+        <div style={{fontSize:18,fontWeight:800,color:"#0f172a",textAlign:"center",marginBottom:4,letterSpacing:-.2}}>{title}</div>
+        <div style={{fontSize:13,color:"#64748b",textAlign:"center",lineHeight:1.5,marginBottom:16}}>{desc}</div>
         <div style={{display:"flex",alignItems:"baseline",justifyContent:"center",gap:4,marginBottom:18}}>
           <span style={{fontSize:28,fontWeight:900,color:"#0f172a",letterSpacing:-.5}}>$19</span>
           <span style={{fontSize:13,color:"#64748b",fontWeight:500}}>{t("per_month",lang)}</span>
@@ -1520,7 +1533,7 @@ function ClientDetail({bp,client,quotes,onBack,onViewQuote,onUpdateClient,onDele
 }
 
 // ─── Quote Detail ─────────────────────────────────────────────────────────────
-function QuoteDetail({bp,quote,allQuotes,settings,clients,onBack,onEdit,onDuplicate,onDelete,onAccepted,onDecline,onVisitComplete,onSend,onViewClient}){
+function QuoteDetail({bp,quote,allQuotes,settings,clients,onBack,onEdit,onDuplicate,onDelete,onAccepted,onDecline,onVisitComplete,onSend,onViewClient,bumpFeatureUse}){
   const {canExportPDF,showUpgrade} = usePlan();
   const lang = useLang();
   const [declineOpen,setDeclineOpen]=useState(false);
@@ -1581,11 +1594,14 @@ function QuoteDetail({bp,quote,allQuotes,settings,clients,onBack,onEdit,onDuplic
       setSendingState(false);
     }
   };
+  const {pdfLimitReached,pdfLimit,pdfUsed} = usePlan();
   const downloadPDF=async()=>{
+    if(pdfLimitReached){ showUpgrade("pdf"); return; }
     setDownloadingPDF(true);
     try {
       await generateQuotePDF(quote, settings, calc, time, settings?.quote_language);
       track("pdf_downloaded");
+      if(pdfLimit!==null&&bumpFeatureUse) bumpFeatureUse("pdf");
       setDownloadingPDF('done');
       setTimeout(()=>setDownloadingPDF(false),3000);
     } catch(e) {
@@ -1702,7 +1718,7 @@ function QuoteDetail({bp,quote,allQuotes,settings,clients,onBack,onEdit,onDuplic
         : <Btn onClick={handleResend} disabled={sendingState===true} style={{width:"100%",opacity:sendingState===true?.7:1,background:sendingState==='done'?"#15803d":undefined,color:sendingState==='done'?"#fff":undefined}}>{sendingState===true?"⏳ "+t("sending",lang):sendingState==='done'?"✓ "+t("sent_short",lang):copied?"✓ Copied!":"📤 "+t("resend_quote",lang)}</Btn>
       }
       {canExportPDF
-        ? <Btn variant="outline" onClick={downloadPDF} disabled={downloadingPDF===true} style={{width:"100%",opacity:downloadingPDF===true?.7:1,background:downloadingPDF==='done'?"#15803d":undefined,color:downloadingPDF==='done'?"#fff":undefined,borderColor:downloadingPDF==='done'?"#15803d":undefined}}>{downloadingPDF===true?"⏳ "+t("generating_pdf",lang):downloadingPDF==='done'?"✓ "+t("pdf_downloaded",lang):"⬇ "+t("download_pdf",lang)}</Btn>
+        ? <Btn variant="outline" onClick={downloadPDF} disabled={downloadingPDF===true} style={{width:"100%",opacity:downloadingPDF===true?.7:1,background:downloadingPDF==='done'?"#15803d":undefined,color:downloadingPDF==='done'?"#fff":undefined,borderColor:downloadingPDF==='done'?"#15803d":undefined}}>{downloadingPDF===true?"⏳ "+t("generating_pdf",lang):downloadingPDF==='done'?"✓ "+t("pdf_downloaded",lang):`⬇ ${t("download_pdf",lang)}${pdfLimit!==null?" ("+t("pdf_uses_left",lang).replace("{{n}}",Math.max(0,pdfLimit-pdfUsed))+")":""}`}</Btn>
         : <Btn variant="outline" onClick={()=>showUpgrade("PDF Quote Export")} style={{width:"100%",opacity:.7,display:"inline-flex",alignItems:"center",justifyContent:"center",gap:8}}><LockIcon size={14} color="#15803d"/>{t("download_pdf",lang)} — Pro</Btn>
       }
       {quote.status==="sent"&&<Btn variant="outline" onClick={onAccepted} style={{width:"100%"}}>✅ {t("mark_accepted",lang)}</Btn>}
@@ -2846,7 +2862,7 @@ function ResetPasswordScreen({onDone}){
 }
 
 // ─── Quote Flow ────────────────────────────────────────────────────────────────
-function QuoteFlow({bp,step,setStep,flow,setFlow,errors,setErrors,settings,clients,quotes,addonLibrary,onSave,onCancel,saving}){
+function QuoteFlow({bp,step,setStep,flow,setFlow,errors,setErrors,settings,clients,quotes,addonLibrary,onSave,onCancel,saving,bumpFeatureUse}){
   const lang = useLang();
   const isDesktop = bp==="desktop";
   const [sharePay,setSharePay]=useState(null);
@@ -2943,9 +2959,9 @@ function QuoteFlow({bp,step,setStep,flow,setFlow,errors,setErrors,settings,clien
       )}
       <div style={{padding:isDesktop?0:16}}>
         {step===1&&<S1 flow={flow} set={set} errors={errors} clients={clients}/>}
-        {step===2&&<S2 bp={bp} flow={flow} set={set} errors={errors} area={area} perim={perim} onAdvance={()=>setStep(3)}/>}
+        {step===2&&<S2 bp={bp} flow={flow} set={set} errors={errors} area={area} perim={perim} onAdvance={()=>setStep(3)} bumpFeatureUse={bumpFeatureUse}/>}
         {step===3&&<S3 bp={bp} flow={flow} setFlow={setFlow} set={set} area={area} perim={perim} calc={calc} time={time} settings={settings} addonLibrary={addonLibrary}/>}
-        {step===4&&<S4 bp={bp} flow={flow} set={set} setFlow={setFlow} area={area} perim={perim} calc={calc} time={time} onSend={handleSend} saving={saving}/>}
+        {step===4&&<S4 bp={bp} flow={flow} set={set} setFlow={setFlow} area={area} perim={perim} calc={calc} time={time} onSend={handleSend} saving={saving} bumpFeatureUse={bumpFeatureUse}/>}
         {step<4&&<Btn onClick={next} style={{width:"100%",marginTop:8}}>{t("next_btn",lang)}</Btn>}
         {isDesktop&&step>1&&<Btn variant="secondary" onClick={()=>setStep(s=>s-1)} style={{width:"100%",marginTop:8}}>{t("back_btn",lang)}</Btn>}
       </div>
@@ -3015,18 +3031,20 @@ function S1({flow,set,errors,clients}){
   );
 }
 
-function S2({bp,flow,set,errors,area,perim,onAdvance}){
+function S2({bp,flow,set,errors,area,perim,onAdvance,bumpFeatureUse}){
   const lang = useLang();
   const twoCol = bp !== "mobile";
-  const {canUseMap,showUpgrade} = usePlan();
+  const {canUseMap,showUpgrade,plan,mapLimit,mapUsed,mapLimitReached} = usePlan();
   const [mTab,setMTab] = useState(canUseMap?"map":"manual");
   const [mapConfirmed,setMapConfirmed] = useState(false);
   const applyMapMeasurements = ({areaSqft, perimFt, polygons}) => {
+    if (mapLimitReached) { showUpgrade("map"); return; }
     set("areaVal", String(areaSqft));
     set("areaUnit", "sqft");
     set("perimVal", String(perimFt));
     set("perimUnit", "ft");
     if (polygons) set("map_polygons", polygons);
+    if (mapLimit !== null && bumpFeatureUse) bumpFeatureUse("map");
   };
   const areaCard = (
     <Card>
@@ -3069,6 +3087,7 @@ function S2({bp,flow,set,errors,area,perim,onAdvance}){
           return (
             <button key={k} onClick={()=>{ if(locked){ setMTab("map"); } else setMTab(k); }} style={{flex:1,height:40,minHeight:40,border:"none",borderRadius:9,background:active?"#ffffff":"transparent",color:active?"#0f172a":"#64748b",fontWeight:active?700:600,fontSize:13,cursor:"pointer",fontFamily:"inherit",boxShadow:active?"0 1px 3px rgba(0,0,0,.08)":"none",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:6}}>
               {locked && <LockIcon size={13} color={active?"#94a3b8":"#94a3b8"}/>}{lbl}
+              {k==="map"&&mapLimit!==null&&!locked&&<span style={{fontSize:10,color:"#94a3b8",marginLeft:2}}>({t("map_uses_left",lang).replace("{{n}}",Math.max(0,mapLimit-mapUsed))})</span>}
             </button>
           );
         })}
@@ -3613,8 +3632,8 @@ function S3({bp,flow,setFlow,set,area,perim,calc,time,settings,addonLibrary}){
   );
 }
 
-function S4({bp,flow,set,setFlow,area,perim,calc,time,onSend,saving}){
-  const {canAttachPhotos} = usePlan();
+function S4({bp,flow,set,setFlow,area,perim,calc,time,onSend,saving,bumpFeatureUse}){
+  const {canAttachPhotos,photoLimit,photoUsed,photoLimitReached,showUpgrade} = usePlan();
   const lang = useLang();
   const [uploading,setUploading]=useState(false);
   const attachments = flow.attachments || [];
@@ -3622,6 +3641,7 @@ function S4({bp,flow,set,setFlow,area,perim,calc,time,onSend,saving}){
   const addFiles = async (fileList) => {
     const files = Array.from(fileList || []);
     if (!files.length) return;
+    if (photoLimitReached) { showUpgrade("photo"); return; }
     const remaining = MAX_ATTACHMENTS - attachments.length;
     if (remaining <= 0) { alert(`Maximum ${MAX_ATTACHMENTS} attachments per quote.`); return; }
     const toAdd = files.slice(0, remaining);
@@ -3646,6 +3666,7 @@ function S4({bp,flow,set,setFlow,area,perim,calc,time,onSend,saving}){
         });
       }
       setFlow(fl => ({ ...fl, existingId: qid, attachments: [...(fl.attachments||[]), ...uploaded] }));
+      if(photoLimit!==null&&bumpFeatureUse) bumpFeatureUse("photo");
     } catch(e) {
       alert(e?.message?.includes("Photo storage") || e?.message?.includes("Not authenticated") ? e.message : dbErrorMessage(e));
     } finally {
@@ -3703,14 +3724,9 @@ function S4({bp,flow,set,setFlow,area,perim,calc,time,onSend,saving}){
         <Lbl>{t("notes",lang)}<span style={{fontSize:11,color:"#94a3b8",fontWeight:400,marginLeft:6,textTransform:"none",letterSpacing:0}}>· {t("internal_only",lang)}</span></Lbl>
         <textarea value={flow.notes} onChange={e=>set("notes",e.target.value)} placeholder={t("ph_notes",lang)} style={{width:"100%",minHeight:80,border:"1.5px solid #e2e8f0",borderRadius:12,padding:"12px 14px",fontSize:14,fontFamily:"inherit",resize:"vertical",boxSizing:"border-box",outline:"none",color:"#0f172a"}}/>
       </Card>
-      {!canAttachPhotos && (
-        <div style={{fontSize:12,color:"#64748b",fontWeight:500,marginBottom:12,display:"flex",alignItems:"center",gap:6,padding:"0 4px"}}>
-          <LockIcon size={12} color="#94a3b8"/> Photo attachments available on Pro
-        </div>
-      )}
-      {canAttachPhotos && <Card>
+      <Card>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-          <Lbl style={{marginBottom:0}}>Attachments</Lbl>
+          <Lbl style={{marginBottom:0}}>{t("attachments",lang)}{photoLimit!==null&&<span style={{fontSize:10,color:"#94a3b8",fontWeight:400,marginLeft:6,textTransform:"none",letterSpacing:0}}>({t("photo_uses_left",lang).replace("{{n}}",Math.max(0,photoLimit-photoUsed))})</span>}</Lbl>
           <div style={{fontSize:11,color:"#94a3b8",fontWeight:600}}>{attachments.length} / {MAX_ATTACHMENTS}</div>
         </div>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:attachments.length?12:0}}>
@@ -3744,7 +3760,7 @@ function S4({bp,flow,set,setFlow,area,perim,calc,time,onSend,saving}){
             })}
           </div>
         )}
-      </Card>}
+      </Card>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",background:"#ffffff",borderRadius:16,padding:"14px 18px",marginBottom:12,boxShadow:CARD_SHADOW}}>
         <div><div style={{fontWeight:600,fontSize:14,color:"#0f172a"}}>{t("save_to_client",lang)}</div><div style={{fontSize:12,color:"#64748b",marginTop:2}}>{t("save_to_client_desc",lang)}</div></div>
         <div onClick={()=>set("saveClient",!flow.saveClient)} style={{width:44,height:26,borderRadius:13,background:flow.saveClient?"#15803d":"#cbd5e1",cursor:"pointer",position:"relative",transition:"background .2s",flexShrink:0}}>
